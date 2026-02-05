@@ -30,6 +30,7 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - RUN_DB_INIT=true
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
@@ -53,26 +54,6 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
-
-  # ===========================================
-  # Database Initialization & Seeding
-  # ===========================================
-  db-init:
-    image: james474789/astrocat-backend:latest
-    #container_name: AstroCat-db-init
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
-      - SECRET_KEY=${SECRET_KEY}
-    command: >
-      sh -c " echo 'Initializing database schema...' && python -m app.scripts.initialize_db && echo 'Seeding Messier and NGC catalogs...' && python -m app.data.seed && echo 'Seeding Named Stars...' && python -m app.scripts.seed_named_stars && echo 'Database initialization complete!' "
-    depends_on:
-      db:
         condition: service_healthy
 
   db-backup:
@@ -114,8 +95,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
 
   celery_beat:
     image: james474789/astrocat-backend:latest
@@ -134,8 +115,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
 
   frontend:
     image: james474789/astrocat-frontend:latest
