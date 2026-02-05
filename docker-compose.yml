@@ -167,7 +167,7 @@ services:
       dockerfile: Dockerfile
     container_name: AstroCat-beat
     restart: unless-stopped
-    command: celery -A app.worker beat --loglevel=info
+    command: celery -A app.worker beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
@@ -176,6 +176,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
     volumes:
       - ./backend:/app
+      - celery_beat_schedule:/tmp
     depends_on:
       db:
         condition: service_healthy
@@ -212,6 +213,7 @@ volumes:
   redis_data:
     name: astrocat_redis_data
     external: true
+  celery_beat_schedule:
   astro_finals:
     driver: local
     driver_opts:

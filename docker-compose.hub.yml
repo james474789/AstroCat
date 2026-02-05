@@ -120,13 +120,15 @@ services:
   celery_beat:
     image: james474789/astrocat-backend:latest
     restart: unless-stopped
-    command: celery -A app.worker beat --loglevel=info
+    command: celery -A app.worker beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
       - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - celery_beat_schedule:/tmp
     depends_on:
       db:
         condition: service_healthy
@@ -151,3 +153,4 @@ volumes:
   redis_data:
     name: astrocat_test_redis_data
     external: false
+  celery_beat_schedule:

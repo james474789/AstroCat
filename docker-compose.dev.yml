@@ -17,8 +17,8 @@ services:
       - "8089:8089"
     volumes:
       - ./backend:/app
-      - ${IMAGE_PATH_1}:/data/images:ro
-      - ${IMAGE_PATH_2}:/data/mount2:ro
+      - ${IMAGE_PATH_1:-./data/images}:/data/images:ro
+      - ${IMAGE_PATH_2:-./data/mount2}:/data/mount2:ro
       - thumbnail_cache:/data/thumbnails
     environment:
       - DEBUG=true
@@ -34,8 +34,8 @@ services:
     command: watchfiles --filter python 'celery -A app.worker worker --loglevel=info --concurrency=1 -Q indexer,thumbnails,celery' /app
     volumes:
       - ./backend:/app
-      - ${IMAGE_PATH_1}:/data/images:ro
-      - ${IMAGE_PATH_2}:/data/mount2:ro
+      - ${IMAGE_PATH_1:-./data/images}:/data/images:ro
+      - ${IMAGE_PATH_2:-./data/mount2}:/data/mount2:ro
       - thumbnail_cache:/data/thumbnails
     environment:
       - DEBUG=true
