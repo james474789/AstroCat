@@ -92,10 +92,38 @@ services:
       - astro_finals:/data/mount2
       - astro_source:/data/mount3
       - ./library/thumbnails:/data/thumbnails
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8089/api/health\")'" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+
+  # ===========================================
+  # Database Initialization & Seeding
+  # ===========================================
+  db-init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: AstroCat-db-init
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - SECRET_KEY=${SECRET_KEY}
+    command: >
+      sh -c " echo 'Running database migrations...' && alembic upgrade head && echo 'Seeding Messier and NGC catalogs...' && python -m app.data.seed && echo 'Seeding Named Stars...' && python -m app.scripts.seed_named_stars && echo 'Database initialization complete!' "
+    depends_on:
+      db:
         condition: service_healthy
 
   # ===========================================
@@ -117,7 +145,6 @@ services:
       - THUMBNAIL_CACHE_PATH=${THUMBNAIL_CACHE_PATH:-/data/thumbnails}
       - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS}
-
       - ASTROMETRY_API_KEY=${ASTROMETRY_API_KEY}
       - LOCAL_ASTROMETRY_URL=${LOCAL_ASTROMETRY_URL}
       - LOCAL_ASTROMETRY_API_KEY=${LOCAL_ASTROMETRY_API_KEY}
@@ -135,6 +162,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
 
   celery_beat:
     build:
@@ -156,6 +185,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
 
   # ===========================================
   # Frontend (React/Vite)
@@ -175,7 +206,8 @@ services:
     volumes:
       - ./library/logs/frontend:/var/log/nginx
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -113,27 +113,27 @@ Recommended if you want to modify the code or contribute.
    docker compose -f docker-compose.yml -f docker-compose.dev.yml up
    ```
 
-### 3. Seed the Database (First-Time Setup)
+### 3. Database Initialization (Automatic)
 
-After the containers are running for the first time, seed the database with astronomical catalogs:
+AstroCat now handles database migrations and astronomical catalog seeding automatically on first run via the `db-init` service. You don't need to run any manual scripts.
 
-#### 🪟 Windows (PowerShell)
-```powershell
-.\rebuild_and_seed.ps1
-```
-
-#### 🐧 Linux / 🍎 macOS
-```bash
-docker compose exec -T backend python -m app.data.seed
-docker compose exec -T backend python -m app.scripts.seed_named_stars
-```
-
-This script populates the database with:
+The automatic process populates:
 - **Messier Catalog** - 110 deep-sky objects
 - **NGC Catalog** - 7,840+ objects from the New General Catalogue
 - **Named Stars** - Common star names for reference
 
-> **Note**: The script waits for the backend to start before seeding. If you encounter errors, ensure the backend container is fully running (`docker-compose logs backend`).
+#### 🔄 Manual Reseed (Optional)
+If you ever need to manually force a reseed or refresh the catalogs, you can use:
+
+**Windows (PowerShell)**:
+```powershell
+.\rebuild_and_seed.ps1
+```
+
+**Linux / macOS**:
+```bash
+docker compose run --rm db-init
+```
 
 ### 4. Access the Application
 
