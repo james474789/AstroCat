@@ -27,7 +27,7 @@ const Setup = () => {
         try {
             await signupAdmin(email, password);
             setSetupComplete(true);
-            navigate('/login');
+            navigate('/');
         } catch (err) {
             setError(err.message || 'Failed to create administrator account');
         } finally {

@@ -146,8 +146,8 @@ services:
 
 volumes:
   postgres_data:
-    name: astrocat_postgres_data
+    name: astrocat_test_postgres_data
     external: false
   redis_data:
-    name: astrocat_redis_data
+    name: astrocat_test_redis_data
     external: false

@@ -30,7 +30,7 @@ const queryClient = new QueryClient({
 });
 
 const AppRoutes = () => {
-  const { setupComplete, loading } = useAuth();
+  const { setupComplete, loading, isAuthenticated } = useAuth();
 
   if (loading) {
     return (
@@ -42,11 +42,16 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      <Route path="/setup" element={setupComplete ? <Navigate to="/login" replace /> : <Setup />} />
-      <Route path="/login" element={<Login />} />
+      <Route path="/setup" element={setupComplete ? <Navigate to="/" replace /> : <Setup />} />
+      <Route path="/login" element={
+        !setupComplete ? <Navigate to="/setup" replace /> : 
+        isAuthenticated ? <Navigate to="/" replace /> : 
+        <Login />
+      } />
       <Route
         path="/*"
         element={
+          !setupComplete ? <Navigate to="/setup" replace /> :
           <ProtectedRoute>
             <Layout>
               <Routes>
