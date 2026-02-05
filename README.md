@@ -43,14 +43,15 @@ There are two ways to get AstroCat up and running: using pre-built images from D
 This method uses pre-built production images and doesn't require clones of the entire source code.
 
 1. **Download required files**:
-   ```bash
+   ```powershell
    # Create a directory for your installation
-   mkdir AstroCat && cd AstroCat
+   mkdir AstroCat; cd AstroCat
    
-   # Download the production compose file and environment template
-   curl -O https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml
-   curl -O https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example
-   mv .env.example .env
+# Download the compose file
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml" -OutFile "docker-compose.hub.yml"
+
+# Download the environment template
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example" -OutFile ".env"
    ```
 
 2. **Configure Environment**:
