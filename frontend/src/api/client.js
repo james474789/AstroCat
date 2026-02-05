@@ -1,8 +1,11 @@
 // API Client connecting to the FastAPI backend
 export const API_BASE_URL = (() => {
+    // Get the Vite environment variable if available
     const envUrl = import.meta.env.VITE_API_URL;
-    const defaultUrl = 'http://localhost:8089/api';
-    const baseUrl = (envUrl && !envUrl.includes(':8000')) ? envUrl : defaultUrl;
+    
+    // Use env variable, fallback to /api (which works better with Docker proxies)
+    // Only use localhost:8089 if in development mode
+    let baseUrl = envUrl || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8089/api' : '/api');
 
     // If we're on a remote machine but the API is pointing to localhost, 
     // try to use the same hostname as the frontend

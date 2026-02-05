@@ -34,6 +34,9 @@ WORKDIR /app
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
+# Debug: Print the VITE_API_URL value
+RUN echo "Building with VITE_API_URL=${VITE_API_URL}"
+
 # Install dependencies
 # Install dependencies
 COPY package.json package-lock.json ./
@@ -41,6 +44,10 @@ RUN npm ci --legacy-peer-deps
 
 # Copy source and build
 COPY . .
+
+# Create .env.production file so Vite picks up the variable
+RUN echo "VITE_API_URL=${VITE_API_URL}" > .env.production && cat .env.production
+
 RUN npm run build
 
 # -------------------------------------------
