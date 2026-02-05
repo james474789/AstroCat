@@ -93,75 +93,14 @@ services:
       - ./library/thumbnails:/data/thumbnails
     healthcheck:
       test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8089/api/health\")'" ]
-      interval: 15s
+      interval: 10s
       timeout: 10s
-      retries: 5
-      start_period: 20s
+      retries: 10
+      start_period: 120s
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_healthy
-
-  # ===========================================
-  # Celery Worker for Background Tasks
-  # ===========================================
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: AstroCat-celery
-    restart: unless-stopped
-    command: celery -A app.worker worker --loglevel=info --concurrency=24 -Q indexer,thumbnails,celery
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
-      - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}
-      - THUMBNAIL_CACHE_PATH=${THUMBNAIL_CACHE_PATH:-/data/thumbnails}
-      - SECRET_KEY=${SECRET_KEY}
-      - CORS_ORIGINS=${CORS_ORIGINS}
-      - ASTROMETRY_API_KEY=${ASTROMETRY_API_KEY}
-      - LOCAL_ASTROMETRY_URL=${LOCAL_ASTROMETRY_URL}
-      - LOCAL_ASTROMETRY_API_KEY=${LOCAL_ASTROMETRY_API_KEY}
-      - LOG_DIR=/var/log/astrocat
-    volumes:
-      - ./backend:/app
-      - ./library/logs:/var/log/astrocat
-      - ./library/temp:/tmp/astrocat
-      - ${IMAGE_PATH_1}:/data/images
-      - ./library/thumbnails:/data/thumbnails
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-
-  celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: AstroCat-beat
-    restart: unless-stopped
-    command: celery -A app.worker beat --loglevel=info --schedule=/tmp/celerybeat-schedule
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
-      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
-      - SECRET_KEY=${SECRET_KEY}
-    volumes:
-      - ./backend:/app
-      - celery_beat_schedule:/tmp
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      backend:
         condition: service_healthy
 
   # ===========================================
@@ -192,7 +131,7 @@ volumes:
   redis_data:
     name: astrocat_redis_data
     external: true
-  celery_beat_schedule:
+
   astro_finals:
     driver: local
     driver_opts:

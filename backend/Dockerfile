@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     libffi-dev \
     libraw-dev \
+    supervisor \
     && mkdir -p /data/thumbnails /data/images /data/mount2 /data/mount3 \
     && chown -R 1000:1000 /data/thumbnails /data/images /data/mount2 /data/mount3 \
     && rm -rf /var/lib/apt/lists/*
@@ -26,6 +27,7 @@ RUN pip install --no-cache-dir watchfiles
 
 # Copy application code
 COPY . .
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN chmod +x /app/scripts/start_backend.sh
 ENTRYPOINT ["/app/scripts/start_backend.sh"]
 
@@ -33,7 +35,7 @@ ENTRYPOINT ["/app/scripts/start_backend.sh"]
 EXPOSE 8089
 
 # Development command (can be overridden)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8089", "--reload"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
 
 # -------------------------------------------
 # Production Stage
@@ -45,6 +47,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -60,6 +63,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY --chown=AstroCat:AstroCat . .
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN chmod +x /app/scripts/start_backend.sh
 
 # Switch to non-root user
@@ -70,4 +74,4 @@ ENTRYPOINT ["/app/scripts/start_backend.sh"]
 EXPOSE 8089
 
 # Production command
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8089", "--workers", "4"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
