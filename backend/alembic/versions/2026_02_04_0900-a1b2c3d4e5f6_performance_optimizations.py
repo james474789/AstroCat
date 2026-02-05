@@ -44,6 +44,10 @@ def upgrade() -> None:
         op.create_index('ix_images_gain', 'images', ['gain'], unique=False)
     if not index_exists('ix_images_file_name'):
         op.create_index('ix_images_file_name', 'images', ['file_name'], unique=False)
+    if not index_exists('ix_images_pixel_scale'):
+        op.create_index('ix_images_pixel_scale', 'images', ['pixel_scale_arcsec'], unique=False)
+    if not index_exists('ix_images_rotation'):
+        op.create_index('ix_images_rotation', 'images', ['rotation_degrees'], unique=False)
 
     # 3. Add Trigram GIN indexes for ILIKE searches (using native IF NOT EXISTS)
     op.execute("CREATE INDEX IF NOT EXISTS ix_images_file_name_trgm ON images USING gin (file_name gin_trgm_ops)")
@@ -103,6 +107,8 @@ def downgrade() -> None:
     op.drop_index('ix_images_filter_name', table_name='images')
     op.drop_index('ix_images_telescope_name', table_name='images')
     op.drop_index('ix_images_camera_name', table_name='images')
+    op.drop_index('ix_images_rotation', table_name='images')
+    op.drop_index('ix_images_pixel_scale', table_name='images')
 
     # We generally don't drop pg_trgm in case other apps use it
     # op.execute("DROP EXTENSION IF EXISTS pg_trgm")

@@ -30,17 +30,17 @@ async def initialize_db():
     """
     logger.info("🚀 Starting database initialization...")
 
-    # 1. Enable PostGIS extension
+    # 1. Enable PostGIS extension and create tables if missing
+    is_fresh_install = False
     async with engine.begin() as conn:
         logger.info("Ensuring PostGIS extension is enabled...")
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         
-        # 2. Check for existing application tables (exclude system/PostGIS tables)
+        # 2. Check for existing application tables
         def get_app_tables(sync_conn):
             inspector = inspect(sync_conn)
             all_tables = inspector.get_table_names()
-            # Filter out PostGIS and other system tables
-            app_tables = [t for t in all_tables if t not in [
+            return [t for t in all_tables if t not in [
                 'spatial_ref_sys', 'topology', 'layer', 'featnames',
                 'geocode_settings', 'geocode_settings_default', 'direction_lookup',
                 'secondary_unit_lookup', 'state_lookup', 'street_type_lookup',
@@ -51,53 +51,39 @@ async def initialize_db():
                 'loader_lookuptables', 'tract', 'tabblock', 'bg', 'pagc_gaz',
                 'pagc_lex', 'pagc_rules'
             ]]
-            return app_tables
         
         app_tables = await conn.run_sync(get_app_tables)
         logger.info(f"Found application tables: {app_tables}")
 
         if not app_tables:
-            logger.info("No tables detected. Performing fresh install setup...")
-            
-            # Create all tables from SQLAlchemy models
-            # This ensures the schema is complete for a fresh install
+            logger.info("No tables detected. Creating baseline schema...")
             def create_tables(sync_conn):
                 Base.metadata.create_all(sync_conn)
-            
             await conn.run_sync(create_tables)
             logger.info("✅ All tables created successfully.")
-            
-            # We must stamp the migration history so Alembic knows we are at 'head'
-            # since the tables already reflect the latest models.
-            logger.info("Stamping database with Alembic 'head'...")
-            
-            # Run python -m alembic stamp head
-            try:
-                subprocess.run([sys.executable, "-m", "alembic", "stamp", "head"], check=True)
-                logger.info("✅ Alembic stamped to head.")
-            except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                logger.warning(f"⚠️ Failed to stamp Alembic via subprocess: {e}")
-                logger.info("Falling back to internal alembic command...")
-                alembic_cfg = Config("alembic.ini")
-                command.stamp(alembic_cfg, "head")
-                logger.info("✅ Alembic stamped (fallback).")
+            is_fresh_install = True
 
-        else:
-            logger.info("Existing tables detected. Running any pending migrations...")
-            # Run migrations to bring the database up to date
-            try:
-                subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True)
-                logger.info("✅ Migrations completed successfully.")
-            except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                logger.warning(f"⚠️ Failed to run migrations via subprocess: {e}")
-                logger.info("Falling back to internal alembic command...")
-                alembic_cfg = Config("alembic.ini")
-                try:
-                    command.upgrade(alembic_cfg, "head")
-                    logger.info("✅ Migrations completed (fallback).")
-                except Exception as ex:
-                    logger.error(f"❌ Internal Alembic upgrade failed: {ex}")
-                    raise ex
+    # 3. Perform Alembic operations outside the transaction block
+    # so they can see the committed tables.
+    PRE_OPTIMIZATION_REVISION = 'eff1c1ee4206'
+    if is_fresh_install:
+        logger.info(f"Stamping database with baseline revision '{PRE_OPTIMIZATION_REVISION}'...")
+        try:
+            subprocess.run([sys.executable, "-m", "alembic", "stamp", PRE_OPTIMIZATION_REVISION], check=True)
+            logger.info(f"✅ Alembic stamped to {PRE_OPTIMIZATION_REVISION}.")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            logger.warning(f"⚠️ Failed to stamp via subprocess, trying internal: {e}")
+            alembic_cfg = Config("alembic.ini")
+            await asyncio.to_thread(command.stamp, alembic_cfg, PRE_OPTIMIZATION_REVISION)
+
+    logger.info("Running migrations to reach latest 'head'...")
+    try:
+        subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True)
+        logger.info("✅ Head revision reached.")
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        logger.warning(f"⚠️ Failed to upgrade via subprocess, trying internal: {e}")
+        alembic_cfg = Config("alembic.ini")
+        await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
 
     logger.info("🎉 Database initialization complete!")
 

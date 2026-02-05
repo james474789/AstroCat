@@ -6,7 +6,7 @@ Junction table linking images to catalog objects they contain.
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, Float, String, Boolean, Enum, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, Float, String, Boolean, Enum, DateTime, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -61,6 +61,7 @@ class ImageCatalogMatch(Base):
             'image_id', 'catalog_type', 'catalog_designation',
             name='uq_image_catalog_match'
         ),
+        Index('ix_image_catalog_matches_type', 'catalog_type'),
     )
     
     def __repr__(self):

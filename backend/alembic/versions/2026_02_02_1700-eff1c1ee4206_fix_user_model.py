@@ -25,7 +25,7 @@ def upgrade() -> None:
     op.alter_column('users', 'email', nullable=False)
     op.drop_index('ix_users_username', table_name='users')
     op.drop_column('users', 'username')
-    op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
+    op.create_index('ix_users_username', 'users', ['email'], unique=True)
     op.add_column('users', sa.Column('is_admin', sa.Boolean(), server_default='false', nullable=False))
 
 

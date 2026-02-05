@@ -208,8 +208,19 @@ services:
 volumes:
   postgres_data:
     name: astrocat_postgres_data
-    external: false
+    external: true
   redis_data:
     name: astrocat_redis_data
-    external: false
-
+    external: true
+  astro_finals:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${NAS_USERNAME},password=${NAS_PASSWORD},vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "${NAS_ASTRO_FINALS_PATH}"
+  astro_source:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${NAS_USERNAME},password=${NAS_PASSWORD},vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "${NAS_ASTRO_SOURCE_PATH}"
