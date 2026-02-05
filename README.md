@@ -34,26 +34,40 @@
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose (v2.0+)
+  - **Windows**: [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL 2 backend is recommended.
 - (Optional) Python 3.12+ for helper scripts
 
 There are two ways to get AstroCat up and running: using pre-built images from Docker Hub (recommended for most users) or building from source.
 
 ### Option 1: Pull from Docker Hub (Fastest)
 
-This method uses pre-built production images and doesn't require clones of the entire source code.
+This method uses pre-built production images and doesn't require cloning the entire source code.
 
+#### 🪟 Windows (PowerShell)
 1. **Download required files**:
    ```powershell
    # Create a directory for your installation
-   mkdir AstroCat; cd AstroCat```
+   mkdir AstroCat; cd AstroCat
 
-```
-# Download the compose file
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml" -OutFile "docker-compose.hub.yml"
+   # Download the compose file
+   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml" -OutFile "docker-compose.hub.yml"
 
-# Download the environment template
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example" -OutFile ".env"
-```
+   # Download the environment template
+   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example" -OutFile ".env"
+   ```
+
+#### 🐧 Linux / 🍎 macOS
+1. **Download required files**:
+   ```bash
+   # Create a directory for your installation
+   mkdir AstroCat; cd AstroCat
+
+   # Download the compose file
+   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml -o docker-compose.hub.yml
+
+   # Download the environment template
+   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example -o .env
+   ```
 
 2. **Configure Environment**:
    - Generate a `SECRET_KEY`: `python -c "import secrets; print(secrets.token_hex(32))"`
@@ -70,6 +84,15 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/m
 
 Recommended if you want to modify the code or contribute.
 
+#### 🪟 Windows (PowerShell)
+1. **Clone and Configure**:
+   ```powershell
+   git clone https://github.com/james474789/AstroCat.git
+   cd AstroCat
+   copy .env.example .env
+   ```
+
+#### 🐧 Linux / 🍎 macOS
 1. **Clone and Configure**:
    ```bash
    git clone https://github.com/james474789/AstroCat.git
@@ -94,9 +117,15 @@ Recommended if you want to modify the code or contribute.
 
 After the containers are running for the first time, seed the database with astronomical catalogs:
 
+#### 🪟 Windows (PowerShell)
 ```powershell
-# Windows PowerShell
 .\rebuild_and_seed.ps1
+```
+
+#### 🐧 Linux / 🍎 macOS
+```bash
+docker compose exec -T backend python -m app.data.seed
+docker compose exec -T backend python -m app.scripts.seed_named_stars
 ```
 
 This script populates the database with:
@@ -155,8 +184,10 @@ cd backend
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
+
+# Activate virtual environment
+source venv/bin/activate  # Linux / macOS
+.\venv\Scripts\Activate.ps1   # Windows (PowerShell)
 
 # Install dependencies
 pip install -r requirements.txt
@@ -193,13 +224,13 @@ alembic upgrade head
 
 Detailed documentation is available in the `docs/` directory:
 
-- [**Architecture Overview**](docs/ARCHITECTURE.md): System design and technology stack.
-- [**Backend Guide**](docs/BACKEND.md): FastAPI structure, extraction pipeline, and background tasks.
-- [**Frontend Guide**](docs/FRONTEND.md): React components, design system, and state management.
-- [**Database Schema**](docs/DATABASE_SCHEMA.md): Detailed table definitions and spatial query logic.
-- [**Development Guide**](docs/DEVELOPMENT_GUIDE.md): Setup instructions and common development workflows.
-- [**Synology Setup**](docs/SYNOLOGY_SETUP.md): Instructions for deploying on Synology NAS.
-- [**Backup & Restore**](docs/BACKUP_RESTORE.md): Database backup and recovery procedures.
+- [**Architecture Overview**](docs/core/ARCHITECTURE.md): System design and technology stack.
+- [**Backend Guide**](docs/development/BACKEND.md): FastAPI structure, extraction pipeline, and background tasks.
+- [**Frontend Guide**](docs/development/FRONTEND.md): React components, design system, and state management.
+- [**Database Schema**](docs/core/DATABASE_SCHEMA.md): Detailed table definitions and spatial query logic.
+- [**Development Guide**](docs/development/DEVELOPMENT_GUIDE.md): Setup instructions and common development workflows.
+- [**Backup & Restore**](docs/infrastructure/BACKUP_RESTORE.md): Database backup and recovery procedures.
+- [**Security Audit**](docs/infrastructure/SECURITY_AUDIT.md): Findings from recent security audits.
 
 ## 🗄️ Database Schema
 
