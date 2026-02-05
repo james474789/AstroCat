@@ -11,4 +11,7 @@ env
 library/logs
 library/temp
 library/thumbnails
-data
+# data skipped here because backend/data contains catalog seed files
+# Large data usually goes in library/ or via volumes
+# data
+

@@ -90,6 +90,16 @@ async def seed_named_stars():
         return
 
     async with AsyncSessionLocal() as session:
+        # Check if already seeded
+        try:
+            r = await session.execute(text("SELECT count(*) FROM named_star_catalog"))
+            current_count = r.scalar() or 0
+            if current_count >= 3600:
+                log(f"⏩ Named stars already seeded ({current_count}). Skipping.")
+                return
+        except Exception:
+            pass # Table might not exist yet
+
         try:
             log("Truncating table...")
             await session.execute(text("TRUNCATE TABLE named_star_catalog RESTART IDENTITY"))
