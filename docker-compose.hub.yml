@@ -42,8 +42,6 @@ services:
       - ./library/logs:/var/log/astrocat
       - ./library/temp:/tmp/astrocat
       - ${IMAGE_PATH_1}:/data/images
-      - astro_finals:/data/mount2
-      - astro_source:/data/mount3
       - ./library/thumbnails:/data/thumbnails
 
   db-backup:
@@ -78,8 +76,6 @@ services:
       - ./library/logs:/var/log/astrocat
       - ./library/temp:/tmp/astrocat
       - ${IMAGE_PATH_1}:/data/images
-      - astro_finals:/data/mount2
-      - astro_source:/data/mount3
       - ./library/thumbnails:/data/thumbnails
     depends_on:
       db:
@@ -114,19 +110,7 @@ services:
 volumes:
   postgres_data:
     name: astrocat_postgres_data
-    external: true
+    external: false
   redis_data:
     name: astrocat_redis_data
-    external: true
-  astro_finals:
-    driver: local
-    driver_opts:
-      type: cifs
-      o: "username=${NAS_USERNAME},password=${NAS_PASSWORD},vers=3.0"
-      device: "${NAS_ASTRO_FINALS_PATH}"
-  astro_source:
-    driver: local
-    driver_opts:
-      type: cifs
-      o: "username=${NAS_USERNAME},password=${NAS_PASSWORD},vers=3.0"
-      device: "${NAS_ASTRO_SOURCE_PATH}"
+    external: false
