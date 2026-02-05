@@ -124,6 +124,5 @@ postgres/
 /docs/reports/performance/perfcon_*.md
 scripts/push-to-dockerhub.ps1
 docker-compose.yml
-docker-compose.hub.yml
 
 build_and_push.ps1
