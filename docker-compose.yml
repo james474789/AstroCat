@@ -82,7 +82,6 @@ services:
       - LOCAL_ASTROMETRY_URL=${LOCAL_ASTROMETRY_URL}
       - LOCAL_ASTROMETRY_API_KEY=${LOCAL_ASTROMETRY_API_KEY}
       - LOG_DIR=/var/log/astrocat
-      - TMPDIR=/tmp/astrocat
     ports:
       - "8089:8089"
     volumes:
