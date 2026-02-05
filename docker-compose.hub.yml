@@ -70,7 +70,7 @@ services:
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
       - SECRET_KEY=${SECRET_KEY}
     command: >
-      sh -c " echo 'Running database migrations...' && alembic upgrade head && echo 'Seeding Messier and NGC catalogs...' && python -m app.data.seed && echo 'Seeding Named Stars...' && python -m app.scripts.seed_named_stars && echo 'Database initialization complete!' "
+      sh -c " echo 'Initializing database schema...' && python -m app.scripts.initialize_db && echo 'Seeding Messier and NGC catalogs...' && python -m app.data.seed && echo 'Seeding Named Stars...' && python -m app.scripts.seed_named_stars && echo 'Database initialization complete!' "
     depends_on:
       db:
         condition: service_healthy
