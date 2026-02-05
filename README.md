@@ -45,14 +45,15 @@ This method uses pre-built production images and doesn't require clones of the e
 1. **Download required files**:
    ```powershell
    # Create a directory for your installation
-   mkdir AstroCat; cd AstroCat
-   
+   mkdir AstroCat; cd AstroCat```
+
+```
 # Download the compose file
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml" -OutFile "docker-compose.hub.yml"
 
 # Download the environment template
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example" -OutFile ".env"
-   ```
+```
 
 2. **Configure Environment**:
    - Generate a `SECRET_KEY`: `python -c "import secrets; print(secrets.token_hex(32))"`
