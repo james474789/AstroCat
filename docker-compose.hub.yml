@@ -62,7 +62,7 @@ services:
   # ===========================================
   db-init:
     image: james474789/astrocat-backend:latest
-    container_name: AstroCat-db-init
+    #container_name: AstroCat-db-init
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
