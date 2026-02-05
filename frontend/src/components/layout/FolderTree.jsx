@@ -45,10 +45,16 @@ function FolderNode({ item, level, selectedPath, onSelect, onContextMenu }) {
         }
 
         setLoading(true);
+        setError(null);
         try {
             const data = await fetchDirectoryListing(item.path);
-            setChildren(data.filter(i => i.type === 'directory'));
-            setIsExpanded(true);
+            if (Array.isArray(data)) {
+                setChildren(data.filter(i => i.type === 'directory'));
+                setIsExpanded(true);
+            } else {
+                console.error('Invalid directory listing:', data);
+                setError(data?.detail || 'Invalid data received');
+            }
         } catch (err) {
             setError('Failed to load');
             console.error(err);
@@ -135,9 +141,19 @@ export default function FolderTree({ selectedPath, onSelect }) {
 
     async function loadRoots() {
         setLoading(true);
+        setError(null);
         try {
             const data = await fetchDirectoryListing();
-            setRoots(data);
+            if (Array.isArray(data)) {
+                setRoots(data);
+            } else {
+                console.error('Invalid roots data:', data);
+                setRoots([]);
+                // If it's an object with detail, it might be an error from backend
+                if (data && data.detail) {
+                    setError(data.detail);
+                }
+            }
         } catch (err) {
             setError(err.message || 'Failed to load mount points');
             console.error(err);
@@ -174,8 +190,8 @@ export default function FolderTree({ selectedPath, onSelect }) {
         }
     };
 
-    if (loading && roots.length === 0) return <div className="p-4 text-muted">Loading structure...</div>;
-    if (error) return <div className="p-4 text-error">{error}</div>;
+    if (loading && roots.length === 0) return <div className="p-md text-muted">Loading structure...</div>;
+    if (error) return <div className="p-md" style={{ color: 'var(--color-error)' }}>{error}</div>;
 
     return (
         <div className="folder-tree">
@@ -196,6 +212,11 @@ export default function FolderTree({ selectedPath, onSelect }) {
                     onContextMenu={handleContextMenu}
                 />
             ))}
+            {!loading && roots.length === 0 && (
+                <div className="p-md text-muted" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                    No directories found. Check your IMAGE_PATHS configuration.
+                </div>
+            )}
 
             {contextMenu && (
                 <div

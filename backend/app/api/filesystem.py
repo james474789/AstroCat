@@ -29,7 +29,13 @@ async def list_directory(
     List contents of a directory. 
     Restricted to configured image_paths.
     """
-    allowed_paths = [Path(p).resolve() for p in settings.image_paths_list]
+    allowed_paths = []
+    for p in settings.image_paths_list:
+        try:
+            resolved = Path(p).resolve()
+            allowed_paths.append(resolved)
+        except Exception as e:
+            print(f"⚠️ Error resolving path {p}: {e}")
     
     if not path:
         # Return mount points
@@ -43,11 +49,29 @@ async def list_directory(
 
         entries = []
         for p in allowed_paths:
-            if p.exists() and p.is_dir():
-                p_str = str(p)
+            p_str = str(p)
+            exists = False
+            is_dir = False
+            try:
+                exists = p.exists()
+                if exists:
+                    is_dir = p.is_dir()
+            except Exception as e:
+                print(f"⚠️ Error checking path {p_str}: {e}")
+
+            if exists and is_dir:
                 # Count images in this mount point
-                prefix = p_str if p_str.endswith('/') else p_str + '/'
-                count_stmt = select(func.count()).where(Image.file_path.startswith(prefix))
+                # Make prefix matching more robust (handle path separators)
+                prefix = p_str if p_str.endswith('/') or p_str.endswith('\\') else p_str + os.sep
+                
+                # Check for images starting with this path
+                # We handle both / and \ in the database if necessary
+                alt_prefix = prefix.replace('/', '\\') if '/' in prefix else prefix.replace('\\', '/')
+                
+                count_stmt = select(func.count()).where(
+                    Image.file_path.startswith(prefix) | 
+                    Image.file_path.startswith(alt_prefix)
+                )
                 count = await db.scalar(count_stmt) or 0
                 
                 # Use friendly name if available
@@ -60,6 +84,9 @@ async def list_directory(
                     has_children=True,
                     image_count=count
                 ))
+            else:
+                print(f"ℹ️ Path skipped (exists={exists}, is_dir={is_dir}): {p_str}")
+        
         return entries
 
     # Validate path using secure path validation

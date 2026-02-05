@@ -89,6 +89,8 @@ services:
       - ./library/logs:/var/log/astrocat
       - ./library/temp:/tmp/astrocat
       - ${IMAGE_PATH_1}:/data/images
+      - astro_finals:/data/mount2
+      - astro_source:/data/mount3
       - ./library/thumbnails:/data/thumbnails
     healthcheck:
       test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8089/api/health\")'" ]
