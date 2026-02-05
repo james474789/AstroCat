@@ -33,38 +33,60 @@
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- (Optional) Node.js 20+ and Python 3.12+ for local development
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose (v2.0+)
+- (Optional) Python 3.12+ for helper scripts
 
-### 1. Clone and Configure
+There are two ways to get AstroCat up and running: using pre-built images from Docker Hub (recommended for most users) or building from source.
 
-```bash
-git clone https://github.com/james474789/AstroCat.git
-cd AstroCat
+### Option 1: Pull from Docker Hub (Fastest)
 
-# Copy environment template
-cp .env.example .env
+This method uses pre-built production images and doesn't require clones of the entire source code.
 
-# Generate a secure SECRET_KEY
-python -c "import secrets; print(secrets.token_hex(32))"
-# Or using openssl:
-# openssl rand -hex 32
+1. **Download required files**:
+   ```bash
+   # Create a directory for your installation
+   mkdir AstroCat && cd AstroCat
+   
+   # Download the production compose file and environment template
+   curl -O https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml
+   curl -O https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example
+   mv .env.example .env
+   ```
 
-# Edit .env with your settings
-# - Replace SECRET_KEY with the generated value
-# - Update IMAGE_PATHS to point to your images
-# - Change database passwords for production
-```
+2. **Configure Environment**:
+   - Generate a `SECRET_KEY`: `python -c "import secrets; print(secrets.token_hex(32))"`
+   - Edit `.env` and set your `IMAGE_PATHS`, `NAS_USERNAME`, `NAS_PASSWORD`, etc.
 
-### 2. Start with Docker Compose
+3. **Start the Application**:
+   ```bash
+   docker compose -f docker-compose.hub.yml up -d
+   ```
 
-```bash
-# Production mode
-docker-compose up -d
+---
 
-# Development mode (with hot reload)
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
-```
+### Option 2: Build from Source
+
+Recommended if you want to modify the code or contribute.
+
+1. **Clone and Configure**:
+   ```bash
+   git clone https://github.com/james474789/AstroCat.git
+   cd AstroCat
+   cp .env.example .env
+   ```
+
+2. **Configure Environment**:
+   - Generate a `SECRET_KEY` as shown above.
+   - Edit `.env` with your settings.
+
+3. **Start with Docker Compose**:
+   ```bash
+   # Production mode (builds local images)
+   docker compose up -d
+
+   # Development mode (with hot reload)
+   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+   ```
 
 ### 3. Seed the Database (First-Time Setup)
 
