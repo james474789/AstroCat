@@ -1,0 +1,75 @@
+version: '3.8'
+
+# Development overrides - use with:
+# docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # ===========================================
+  # Backend with hot reload
+  # ===========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8089 --reload
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./backend:/app
+      - ${IMAGE_PATH_1}:/data/images:ro
+      - ${IMAGE_PATH_2}:/data/mount2:ro
+      - thumbnail_cache:/data/thumbnails
+    environment:
+      - DEBUG=true
+
+  # ===========================================
+  # Celery Worker with auto-reload
+  # ===========================================
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    command: watchfiles --filter python 'celery -A app.worker worker --loglevel=info --concurrency=1 -Q indexer,thumbnails,celery' /app
+    volumes:
+      - ./backend:/app
+      - ${IMAGE_PATH_1}:/data/images:ro
+      - ${IMAGE_PATH_2}:/data/mount2:ro
+      - thumbnail_cache:/data/thumbnails
+    environment:
+      - DEBUG=true
+
+  # ===========================================
+  # Frontend with Vite dev server
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    command: npm run dev -- --host 0.0.0.0 --port 8090
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8089/api
+
+  # ===========================================
+  # Database with exposed port for debugging
+  # ===========================================
+  db:
+    ports:
+      - "8088:5432"
+
+  # ===========================================
+  # Redis with exposed port for debugging
+  # ===========================================
+  redis:
+    ports:
+      - "6379:6379"
+
+volumes:
+  thumbnail_cache:

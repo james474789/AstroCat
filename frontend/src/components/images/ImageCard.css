@@ -1,0 +1,200 @@
+.image-card {
+    display: block;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+    text-decoration: none;
+    transition: all var(--transition-base);
+}
+
+.image-card:hover {
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-glow);
+    transform: translateY(-2px);
+}
+
+/* Thumbnail Container */
+.image-card-thumbnail {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: var(--color-background);
+}
+
+.image-card-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.image-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.image-placeholder::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+.image-placeholder-icon {
+    font-size: 3rem;
+    opacity: 0.6;
+    z-index: 1;
+}
+
+/* Overlay */
+.image-card-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: var(--spacing-sm);
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.image-card-badges {
+    display: flex;
+    gap: var(--spacing-xs);
+    flex-wrap: wrap;
+}
+
+.image-badge {
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: var(--border-radius-sm);
+}
+
+.badge-sub {
+    background: rgba(139, 92, 246, 0.8);
+    color: white;
+}
+
+.badge-master {
+    background: rgba(34, 197, 94, 0.8);
+    color: white;
+}
+
+.badge-deprecated {
+    background: rgba(239, 68, 68, 0.6);
+    color: white;
+}
+
+.badge-planetary {
+    background: rgba(234, 179, 8, 0.8);
+    color: white;
+}
+
+.badge-solved {
+    background: rgba(34, 211, 238, 0.2);
+    color: var(--color-accent);
+    border: 1px solid rgba(34, 211, 238, 0.4);
+}
+
+/* Rating Stars */
+.rating-stars {
+    position: absolute;
+    bottom: var(--spacing-sm);
+    left: var(--spacing-sm);
+    display: flex;
+    gap: 2px;
+}
+
+.rating-stars .star {
+    font-size: 14px;
+    color: #fbbf24;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+/* Content */
+.image-card-content {
+    padding: var(--spacing-md);
+}
+
+.image-card-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: var(--spacing-sm);
+}
+
+.image-card-meta {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+.meta-icon {
+    font-size: 12px;
+}
+
+/* Objects Tags */
+.image-card-objects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-sm);
+}
+
+.object-tag {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--color-primary-glow);
+    color: var(--color-primary);
+    border-radius: var(--border-radius-full);
+}
+
+.object-tag-more {
+    background: var(--color-surface-elevated);
+    color: var(--color-text-muted);
+}
+
+/* Footer */
+.image-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--color-border);
+}
+
+.meta-date {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.meta-format {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    background: var(--color-surface-elevated);
+    color: var(--color-text-secondary);
+    border-radius: var(--border-radius-sm);
+    text-transform: uppercase;
+}

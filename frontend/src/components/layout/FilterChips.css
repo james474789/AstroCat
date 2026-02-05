@@ -1,0 +1,107 @@
+.filter-chips-container {
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: var(--border-radius-md);
+}
+
+.filter-chips-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: var(--spacing-sm);
+    display: block;
+}
+
+.filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: linear-gradient(135deg, var(--color-primary) 0%, rgba(59, 130, 246, 0.8) 100%);
+    color: white;
+    border-radius: var(--border-radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    animation: chipSlideIn 0.2s ease;
+}
+
+@keyframes chipSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.filter-chip-text {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.filter-chip-label {
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.filter-chip-value {
+    font-weight: 500;
+}
+
+.filter-chip-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin-left: 2px;
+    background: rgba(255, 255, 255, 0.3);
+    border: none;
+    border-radius: var(--border-radius-full);
+    color: white;
+    cursor: pointer;
+    font-size: 0.7em;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.filter-chip-remove:hover {
+    background: rgba(255, 255, 255, 0.6);
+    transform: scale(1.15);
+}
+
+.filter-chip-remove:active {
+    transform: scale(0.95);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .filter-chips-container {
+        margin-bottom: var(--spacing-md);
+        padding: var(--spacing-sm);
+    }
+
+    .filter-chips {
+        gap: var(--spacing-xs);
+    }
+
+    .filter-chip {
+        font-size: var(--font-size-xs);
+        padding: 4px var(--spacing-xs);
+    }
+}

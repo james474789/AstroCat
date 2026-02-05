@@ -1,0 +1,178 @@
+services:
+  # ===========================================
+  # PostgreSQL with PostGIS Extension
+  # ===========================================
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: AstroCat-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # Automated Database Backup
+  # ===========================================
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    container_name: AstroCat-db-backup
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - SCHEDULE=${BACKUP_SCHEDULE:-@daily}
+      - BACKUP_KEEP_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      - BACKUP_SUFFIX=${BACKUP_SUFFIX:-.sql.gz}
+    volumes:
+      - ./library/backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ===========================================
+  # Redis for Celery Task Queue
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: AstroCat-redis
+    restart: unless-stopped
+    # Ports removed for security (only accessible within docker network in production)
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # FastAPI Backend
+  # ===========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: AstroCat-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - COOKIE_MAX_AGE=${COOKIE_MAX_AGE:-172800}
+      - COOKIE_SAMESITE=${COOKIE_SAMESITE:-lax}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - DEBUG=${DEBUG:-false}
+      - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}
+      - THUMBNAIL_CACHE_PATH=${THUMBNAIL_CACHE_PATH:-/data/thumbnails}
+      - ASTROMETRY_API_KEY=${ASTROMETRY_API_KEY}
+      - LOCAL_ASTROMETRY_URL=${LOCAL_ASTROMETRY_URL}
+      - LOCAL_ASTROMETRY_API_KEY=${LOCAL_ASTROMETRY_API_KEY}
+      - LOG_DIR=/var/log/astrocat
+      - TMPDIR=/tmp/astrocat
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./library/logs:/var/log/astrocat
+      - ./library/temp:/tmp/astrocat
+      - ${IMAGE_PATH_1}:/data/images
+      - ./library/thumbnails:/data/thumbnails
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ===========================================
+  # Celery Worker for Background Tasks
+  # ===========================================
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: AstroCat-celery
+    restart: unless-stopped
+    command: celery -A app.worker worker --loglevel=info --concurrency=24 -Q indexer,thumbnails,celery
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}
+      - THUMBNAIL_CACHE_PATH=${THUMBNAIL_CACHE_PATH:-/data/thumbnails}
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - ASTROMETRY_API_KEY=${ASTROMETRY_API_KEY}
+      - LOCAL_ASTROMETRY_URL=${LOCAL_ASTROMETRY_URL}
+      - LOCAL_ASTROMETRY_API_KEY=${LOCAL_ASTROMETRY_API_KEY}
+      - LOG_DIR=/var/log/astrocat
+    volumes:
+      - ./library/logs:/var/log/astrocat
+      - ./library/temp:/tmp/astrocat
+      - ${IMAGE_PATH_1}:/data/images
+      - ./library/thumbnails:/data/thumbnails
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: AstroCat-beat
+    restart: unless-stopped
+    command: celery -A app.worker beat --loglevel=info
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ===========================================
+  # Frontend (React/Vite)
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8089/api}
+    container_name: AstroCat-frontend
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8089/api}
+    volumes:
+      - ./library/logs/frontend:/var/log/nginx
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
