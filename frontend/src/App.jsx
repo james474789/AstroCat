@@ -43,31 +43,34 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/setup" element={setupComplete ? <Navigate to="/" replace /> : <Setup />} />
-      <Route path="/login" element={
-        !setupComplete ? <Navigate to="/setup" replace /> : 
-        isAuthenticated ? <Navigate to="/" replace /> : 
-        <Login />
-      } />
+      <Route
+        path="/login"
+        element={
+          !setupComplete ? <Navigate to="/setup" replace /> :
+            isAuthenticated ? <Navigate to="/" replace /> :
+              <Login />
+        }
+      />
       <Route
         path="/*"
         element={
           !setupComplete ? <Navigate to="/setup" replace /> :
-          <ProtectedRoute>
-            <Layout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/search" element={<Search />} />
-                <Route path="/images/:id" element={<ImageDetail />} />
-                <Route path="/images/:id/metadata" element={<MetadataViewer />} />
-                <Route path="/metadata-search" element={<MetadataSearch />} />
-                <Route path="/catalogs" element={<Catalogs />} />
-                <Route path="/catalogs/:type/:designation" element={<Catalogs />} />
-                <Route path="/stats" element={<Stats />} />
-                <Route path="/stats/fits" element={<FitsStats />} />
-                <Route path="/admin" element={<ErrorBoundary><Admin /></ErrorBoundary>} />
-              </Routes>
-            </Layout>
-          </ProtectedRoute>
+            <ProtectedRoute>
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/search" element={<Search />} />
+                  <Route path="/images/:id" element={<ImageDetail />} />
+                  <Route path="/images/:id/metadata" element={<MetadataViewer />} />
+                  <Route path="/metadata-search" element={<MetadataSearch />} />
+                  <Route path="/catalogs" element={<Catalogs />} />
+                  <Route path="/catalogs/:type/:designation" element={<Catalogs />} />
+                  <Route path="/stats" element={<Stats />} />
+                  <Route path="/stats/fits" element={<FitsStats />} />
+                  <Route path="/admin" element={<ErrorBoundary><Admin /></ErrorBoundary>} />
+                </Routes>
+              </Layout>
+            </ProtectedRoute>
         }
       />
     </Routes>

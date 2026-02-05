@@ -1,75 +1,91 @@
-version: '3.8'
-
-# Development overrides - use with:
-# docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
-
 services:
-  # ===========================================
-  # Backend with hot reload
-  # ===========================================
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: development
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8089 --reload
+    image: james474789/astrocat-backend:latest
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - RUN_DB_INIT=true
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - SECRET_KEY=${SECRET_KEY}
+      - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}
+      - THUMBNAIL_CACHE_PATH=${THUMBNAIL_CACHE_PATH:-/data/thumbnails}
     ports:
       - "8089:8089"
     volumes:
-      - ./backend:/app
-      - ${IMAGE_PATH_1:-./data/images}:/data/images:ro
-      - ${IMAGE_PATH_2:-./data/mount2}:/data/mount2:ro
-      - thumbnail_cache:/data/thumbnails
-    environment:
-      - DEBUG=true
+      - ./library/logs:/var/log/astrocat
+      - ./library/temp:/tmp/astrocat
+      - ${IMAGE_PATH_1}:/data/images
+      - ./library/thumbnails:/data/thumbnails
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8089/api/health\")'" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
-  # ===========================================
-  # Celery Worker with auto-reload
-  # ===========================================
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: development
-    command: watchfiles --filter python 'celery -A app.worker worker --loglevel=info --concurrency=1 -Q indexer,thumbnails,celery' /app
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - SCHEDULE=${BACKUP_SCHEDULE:-@daily}
+      - BACKUP_KEEP_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      - BACKUP_SUFFIX=${BACKUP_SUFFIX:-.sql.gz}
     volumes:
-      - ./backend:/app
-      - ${IMAGE_PATH_1:-./data/images}:/data/images:ro
-      - ${IMAGE_PATH_2:-./data/mount2}:/data/mount2:ro
-      - thumbnail_cache:/data/thumbnails
-    environment:
-      - DEBUG=true
+      - ./library/backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
 
-  # ===========================================
-  # Frontend with Vite dev server
-  # ===========================================
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: development
-    command: npm run dev -- --host 0.0.0.0 --port 8090
+    image: james474789/astrocat-frontend:latest
+    restart: unless-stopped
     ports:
       - "8090:8090"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - VITE_API_URL=http://localhost:8089/api
-
-  # ===========================================
-  # Database with exposed port for debugging
-  # ===========================================
-  db:
-    ports:
-      - "8088:5432"
-
-  # ===========================================
-  # Redis with exposed port for debugging
-  # ===========================================
-  redis:
-    ports:
-      - "6379:6379"
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
-  thumbnail_cache:
+  postgres_data:
+    name: astrocat_dev_postgres_data
+    external: false
+  redis_data:
+    name: astrocat_dev_redis_data
+    external: false

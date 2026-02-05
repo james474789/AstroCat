@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { fetchCurrentUser, loginUser, logoutUser, fetchSetupStatus } from '../api/client';
+import { fetchCurrentUser, loginUser, logoutUser, fetchSetupStatus, signupAdmin } from '../api/client';
 
 const AuthContext = createContext();
 
@@ -14,7 +14,7 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [setupComplete, setSetupComplete] = useState(true); // Default to true to avoid flicker
+    const [setupComplete, setSetupComplete] = useState(false); // Default to false for first boot safety
     const [error, setError] = useState(null);
 
     const checkAuth = async () => {
@@ -28,7 +28,10 @@ export const AuthProvider = ({ children }) => {
                 setUser(userData);
             }
         } catch (err) {
+            console.error('Initial auth check failed:', err);
             setUser(null);
+            // If setup status check fails, assume not complete for safety
+            setSetupComplete(false);
         } finally {
             setLoading(false);
         }
@@ -58,6 +61,19 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const registerAdmin = async (email, password) => {
+        setError(null);
+        try {
+            const userData = await signupAdmin(email, password);
+            setUser(userData);
+            setSetupComplete(true);
+            return userData;
+        } catch (err) {
+            setError(err.message);
+            throw err;
+        }
+    };
+
     const logout = async () => {
         try {
             await logoutUser();
@@ -75,6 +91,7 @@ export const AuthProvider = ({ children }) => {
         setSetupComplete,
         error,
         login,
+        registerAdmin,
         logout,
         isAuthenticated: !!user
     };

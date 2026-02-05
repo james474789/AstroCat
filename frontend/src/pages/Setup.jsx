@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { signupAdmin } from '../api/client';
 import { UserPlus, Loader2 } from 'lucide-react';
 import './Login.css'; // Reuse Login styles
 
@@ -11,7 +10,7 @@ const Setup = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState(null);
-    const { setSetupComplete } = useAuth();
+    const { registerAdmin } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
@@ -25,8 +24,7 @@ const Setup = () => {
 
         setIsSubmitting(true);
         try {
-            await signupAdmin(email, password);
-            setSetupComplete(true);
+            await registerAdmin(email, password);
             navigate('/');
         } catch (err) {
             setError(err.message || 'Failed to create administrator account');
