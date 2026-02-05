@@ -2,18 +2,34 @@
 export const API_BASE_URL = (() => {
     // Get the Vite environment variable if available
     const envUrl = import.meta.env.VITE_API_URL;
-    
+
     // Use env variable, fallback to /api (which works better with Docker proxies)
     // Only use localhost:8089 if in development mode
-    let baseUrl = envUrl || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8089/api' : '/api');
+    let baseUrl = envUrl;
 
-    // If we're on a remote machine but the API is pointing to localhost, 
+    if (!baseUrl && typeof window !== 'undefined') {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        baseUrl = isLocal ? `http://${window.location.hostname}:8089/api` : '/api';
+    }
+
+    // Default fallback
+    if (!baseUrl) baseUrl = '/api';
+
+    // If we're on a remote machine but the API is pointing to a local address,
     // try to use the same hostname as the frontend
     if (typeof window !== 'undefined' &&
         window.location.hostname !== 'localhost' &&
         window.location.hostname !== '127.0.0.1' &&
-        baseUrl.includes('localhost')) {
-        return baseUrl.replace('localhost', window.location.hostname);
+        (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1'))) {
+
+        // Preserve protocol and port if possible, or just swap hostname
+        try {
+            const url = new URL(baseUrl);
+            url.hostname = window.location.hostname;
+            return url.toString().replace(/\/$/, ""); // Remove trailing slash
+        } catch (e) {
+            return baseUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname);
+        }
     }
     return baseUrl;
 })();

@@ -37,31 +37,20 @@ async def initialize_db():
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
         
         # 2. Check for existing application tables
-        def get_app_tables(sync_conn):
+        # Use 'images' table as a marker for a previous install
+        def check_if_fresh(sync_conn):
             inspector = inspect(sync_conn)
-            all_tables = inspector.get_table_names()
-            return [t for t in all_tables if t not in [
-                'spatial_ref_sys', 'topology', 'layer', 'featnames',
-                'geocode_settings', 'geocode_settings_default', 'direction_lookup',
-                'secondary_unit_lookup', 'state_lookup', 'street_type_lookup',
-                'place_lookup', 'county_lookup', 'countysub_lookup', 'zip_lookup_all',
-                'zip_lookup_base', 'zip_lookup', 'county', 'state', 'place',
-                'zip_state', 'zip_state_loc', 'cousub', 'edges', 'addrfeat', 'addr',
-                'zcta5', 'tabblock20', 'faces', 'loader_platform', 'loader_variables',
-                'loader_lookuptables', 'tract', 'tabblock', 'bg', 'pagc_gaz',
-                'pagc_lex', 'pagc_rules'
-            ]]
+            return 'images' not in inspector.get_table_names()
         
-        app_tables = await conn.run_sync(get_app_tables)
-        logger.info(f"Found application tables: {app_tables}")
+        is_fresh_install = await conn.run_sync(check_if_fresh)
+        logger.info(f"Is fresh install? {is_fresh_install}")
 
-        if not app_tables:
-            logger.info("No tables detected. Creating baseline schema...")
+        if is_fresh_install:
+            logger.info("Baseline tables ('images') not detected. Creating baseline schema...")
             def create_tables(sync_conn):
                 Base.metadata.create_all(sync_conn)
             await conn.run_sync(create_tables)
             logger.info("✅ All tables created successfully.")
-            is_fresh_install = True
 
     # 3. Perform Alembic operations outside the transaction block
     # so they can see the committed tables.

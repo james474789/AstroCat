@@ -125,6 +125,7 @@ async def get_setup_status(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         # If table doesn't exist (ProgrammingError) or other DB issues during init, 
         # setup is definitively not complete.
+        await db.rollback()
         return {"setup_complete": False}
 
 @router.post("/admin-sign-up", response_model=UserResponse)
