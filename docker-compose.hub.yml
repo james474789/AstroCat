@@ -1,0 +1,118 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  backend:
+    image: james474789/astrocat-backend:latest
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - SECRET_KEY=${SECRET_KEY}
+      - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}
+      - THUMBNAIL_CACHE_PATH=${THUMBNAIL_CACHE_PATH:-/data/thumbnails}
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./library/logs:/var/log/astrocat
+      - ./library/temp:/tmp/astrocat
+      - ${IMAGE_PATH_1}:/data/images
+      - astro_finals:/data/mount2
+      - astro_source:/data/mount3
+      - ./library/thumbnails:/data/thumbnails
+
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - SCHEDULE=${BACKUP_SCHEDULE:-@daily}
+      - BACKUP_KEEP_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      - BACKUP_SUFFIX=${BACKUP_SUFFIX:-.sql.gz}
+    volumes:
+      - ./library/backups:/backups
+    depends_on:
+      - db
+
+  celery_worker:
+    image: james474789/astrocat-backend:latest
+    restart: unless-stopped
+    command: celery -A app.worker worker --loglevel=info --concurrency=24 -Q indexer,thumbnails,celery
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}
+      - THUMBNAIL_CACHE_PATH=${THUMBNAIL_CACHE_PATH:-/data/thumbnails}
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - ./library/logs:/var/log/astrocat
+      - ./library/temp:/tmp/astrocat
+      - ${IMAGE_PATH_1}:/data/images
+      - astro_finals:/data/mount2
+      - astro_source:/data/mount3
+      - ./library/thumbnails:/data/thumbnails
+    depends_on:
+      - db
+      - redis
+
+  celery_beat:
+    image: james474789/astrocat-backend:latest
+    restart: unless-stopped
+    command: celery -A app.worker beat --loglevel=info
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    image: james474789/astrocat-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    name: astrocat_postgres_data
+    external: true
+  redis_data:
+    name: astrocat_redis_data
+    external: true
+  astro_finals:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${NAS_USERNAME},password=${NAS_PASSWORD},vers=3.0"
+      device: "${NAS_ASTRO_FINALS_PATH}"
+  astro_source:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${NAS_USERNAME},password=${NAS_PASSWORD},vers=3.0"
+      device: "${NAS_ASTRO_SOURCE_PATH}"
