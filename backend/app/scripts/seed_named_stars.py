@@ -3,6 +3,7 @@ import os
 import sys
 import asyncio
 import traceback
+from pathlib import Path
 from sqlalchemy import text, insert
 from app.database import AsyncSessionLocal, engine, Base
 from app.models.catalog import NamedStarCatalog
@@ -14,10 +15,13 @@ def log(msg):
 async def seed_named_stars():
     log("Starting seed_named_stars REVISED...")
     
-    csv_path = "/app/data/NamedStars.csv"
-    if not os.path.exists(csv_path):
-        log(f"CSV not found at {csv_path}. Trying relative...")
-        csv_path = "backend/data/NamedStars.csv"
+    # Path to the data directory
+    script_dir = Path(__file__).parent
+    csv_path = script_dir.parent.parent / "data" / "NamedStars.csv"
+    
+    if not csv_path.exists():
+        log(f"CSV not found at {csv_path}. Trying absolute container path...")
+        csv_path = Path("/app/data/NamedStars.csv")
     
     if not os.path.exists(csv_path):
         log(f"ERROR: CSV not found at {csv_path}")

@@ -22,7 +22,7 @@ async def seed_messier_catalog(session: AsyncSession) -> int:
     
     # 1. Load JSON data for metadata (type, constellation) fallback
     # We use this because Messier.csv is missing these fields
-    json_path = Path(__file__).parent / "messier_catalog.json"
+    json_path = Path(__file__).parent.parent.parent / "data" / "messier_catalog.json"
     metadata_map = {}
     if json_path.exists():
         try:
@@ -39,8 +39,8 @@ async def seed_messier_catalog(session: AsyncSession) -> int:
             print(f"⚠️ Error reading JSON metadata: {e}")
 
     # 2. Load CSV data
-    # Messier.csv is located in the same directory as this script (app/data)
-    csv_path = Path(__file__).parent / "Messier.csv"
+    # Messier.csv is located in backend/data/
+    csv_path = Path(__file__).parent.parent.parent / \"data\" / \"Messier.csv\"
     
     if not csv_path.exists():
         print(f"⚠️ Messier.csv not found at {csv_path}")
@@ -336,9 +336,9 @@ async def seed_all():
         
         # 2. Seed NGC catalog
         ngc_count = 0
-        ngc_csv = "/app/NGC.csv"
+        ngc_csv = Path(__file__).parent.parent.parent / \"data\" / \"NGC.csv\"
         if os.path.exists(ngc_csv):
-            ngc_count = await seed_ngc_from_csv(session, ngc_csv)
+            ngc_count = await seed_ngc_from_csv(session, str(ngc_csv))
             print(f"✅ Imported {ngc_count} NGC objects from CSV")
         else:
             ngc_count = await seed_ngc_catalog_sample(session)
