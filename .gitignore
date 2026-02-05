@@ -125,3 +125,5 @@ postgres/
 scripts/push-to-dockerhub.ps1
 docker-compose.yml
 docker-compose.hub.yml
+.env.example
+.gitignore
