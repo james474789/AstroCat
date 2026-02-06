@@ -317,8 +317,8 @@ export default function FitsStats() {
         const point = data?.payload || data;
 
         if (point && point.x !== undefined && point.y !== undefined) {
-            // Default search radius 1.0 degree
-            navigate(`/search?ra=${point.x}&dec=${point.y}&radius=1.0`);
+            // Default search radius 5.0 degrees
+            navigate(`/search?ra=${point.x}&dec=${point.y}&radius=5.0`);
         }
     };
 
