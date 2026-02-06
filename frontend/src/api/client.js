@@ -9,7 +9,11 @@ export const API_BASE_URL = (() => {
 
     if (!baseUrl && typeof window !== 'undefined') {
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        baseUrl = isLocal ? `http://${window.location.hostname}:8089/api` : '/api';
+        // If local, try to use the port from the URL if it's the expected dev port,
+        // otherwise default to the standard backend port if we can't determine it.
+        const port = window.location.port;
+        const backendPort = port === '8090' ? '8089' : (port || '8089');
+        baseUrl = isLocal ? `http://${window.location.hostname}:${backendPort}/api` : '/api';
     }
 
     // Default fallback

@@ -137,8 +137,8 @@ docker compose run --rm db-init
 
 ### 4. Access the Application
 
-- **Frontend**: http://localhost:8090
-- **API Docs**: http://localhost:8089/api/docs
+- **Frontend**: http://localhost:8090 (Default, configurable via `FRONTEND_PORT`)
+- **API Docs**: http://localhost:8089/api/docs (Default, configurable via `BACKEND_PORT`)
 - **Health Check**: http://localhost:8089/api/health
 
 ## 📁 Project Structure
@@ -192,7 +192,7 @@ source venv/bin/activate  # Linux / macOS
 # Install dependencies
 pip install -r requirements.txt
 
-# Run development server
+# Run development server (using default port)
 uvicorn app.main:app --reload --port 8089
 ```
 

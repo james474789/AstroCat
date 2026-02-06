@@ -80,7 +80,7 @@ services:
       - CELERY_WORKERS=8
       - UVICORN_WORKERS=2
     ports:
-      - "8089:8089"
+      - "${BACKEND_PORT:-8089}:8089"
     volumes:
       - ./backend:/app
       - ./library/logs:/var/log/astrocat
@@ -117,7 +117,7 @@ services:
         - VITE_API_URL=${VITE_API_URL:-http://localhost:8089/api}
     restart: unless-stopped
     ports:
-      - "8090:8090"
+      - "${FRONTEND_PORT:-8090}:8090"
     environment:
       - VITE_API_URL=${VITE_API_URL:-http://localhost:8089/api}
     volumes:

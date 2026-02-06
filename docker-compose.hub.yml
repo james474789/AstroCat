@@ -39,7 +39,7 @@ services:
       - CELERY_WORKERS=2
       - UVICORN_WORKERS=2
     ports:
-      - "8089:8089"
+      - "${BACKEND_PORT:-8089}:8089"
     volumes:
       - ./library/logs:/var/log/astrocat
       - ./library/temp:/tmp/astrocat
@@ -83,7 +83,7 @@ services:
     image: james474789/astrocat-frontend:latest
     restart: unless-stopped
     ports:
-      - "8090:8090"
+      - "${FRONTEND_PORT:-8090}:8090"
     depends_on:
       backend:
         condition: service_healthy

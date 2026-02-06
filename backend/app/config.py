@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     # API Settings
     api_prefix: str = "/api"
-    cors_origins_raw: str = Field("http://localhost:8090,http://127.0.0.1:8090", alias="CORS_ORIGINS")
+    cors_origins_raw: str = Field("", alias="CORS_ORIGINS")
     
     @field_validator('secret_key')
     @classmethod

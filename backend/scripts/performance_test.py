@@ -2,11 +2,13 @@ import time
 import httpx
 import statistics
 import json
+import os
 from typing import List, Dict, Optional
 
-BASE_URL = "http://localhost:8089"
-EMAIL = "perf_test@astrocat.com"
-PASSWORD = "perf_test_123"
+# Try to get backend URL from env, else use standard docker name or localhost
+BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8089")
+EMAIL = os.getenv("PERF_TEST_EMAIL", "perf_test@astrocat.com")
+PASSWORD = os.getenv("PERF_TEST_PASSWORD", "perf_test_123")
 
 class UserJourneyTester:
     def __init__(self):

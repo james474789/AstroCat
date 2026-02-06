@@ -86,7 +86,7 @@ services:
       - LOG_DIR=/var/log/astrocat
       - TMPDIR=/tmp/astrocat
     ports:
-      - "8089:8089"
+      - "${BACKEND_PORT:-8089}:8089"
     volumes:
       - ./library/logs:/var/log/astrocat
       - ./library/temp:/tmp/astrocat
@@ -165,7 +165,7 @@ services:
     container_name: AstroCat-frontend
     restart: unless-stopped
     ports:
-      - "8090:8090"
+      - "${FRONTEND_PORT:-8090}:8090"
     environment:
       - VITE_API_URL=${VITE_API_URL:-http://localhost:8089/api}
     volumes:
