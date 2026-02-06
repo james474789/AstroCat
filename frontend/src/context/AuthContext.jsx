@@ -18,22 +18,46 @@ export const AuthProvider = ({ children }) => {
     const [error, setError] = useState(null);
 
     const checkAuth = async () => {
-        try {
-            // Check setup status first
-            const setupData = await fetchSetupStatus();
-            setSetupComplete(setupData.setup_complete);
+        let attempts = 0;
+        const maxAttempts = 10;
+        const delay = 1000; // 1 second
 
-            if (setupData.setup_complete) {
-                const userData = await fetchCurrentUser();
-                setUser(userData);
+        while (attempts < maxAttempts) {
+            try {
+                // Check setup status first
+                const setupData = await fetchSetupStatus();
+                setSetupComplete(setupData.setup_complete);
+
+                // If setup is complete, try to fetch user
+                if (setupData.setup_complete) {
+                    try {
+                        const userData = await fetchCurrentUser();
+                        setUser(userData);
+                    } catch (err) {
+                        // Token might be invalid or expired, but setup is complete
+                        // Just clear user state
+                        setUser(null);
+                    }
+                }
+
+                // Success!
+                setLoading(false);
+                return;
+            } catch (err) {
+                attempts++;
+                console.warn(`Auth check attempt ${attempts}/${maxAttempts} failed:`, err);
+
+                if (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                } else {
+                    console.error('All auth check attempts failed.');
+                    setError('Unable to connect to the AstroCat server. Please ensure the backend container is running.');
+                    // Do NOT force setupComplete to false here as default is false.
+                    // The App component should handle the error state.
+                    setUser(null);
+                    setLoading(false);
+                }
             }
-        } catch (err) {
-            console.error('Initial auth check failed:', err);
-            setUser(null);
-            // If setup status check fails, assume not complete for safety
-            setSetupComplete(false);
-        } finally {
-            setLoading(false);
         }
     };
 

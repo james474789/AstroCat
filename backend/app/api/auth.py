@@ -118,15 +118,9 @@ async def get_setup_status(db: AsyncSession = Depends(get_db)):
     Check if at least one admin exists.
     Used by frontend to decide whether to show setup page.
     """
-    try:
-        result = await db.execute(select(User).where(User.is_admin == True))
-        admin_exists = result.scalars().first() is not None
-        return {"setup_complete": admin_exists}
-    except Exception as e:
-        # If table doesn't exist (ProgrammingError) or other DB issues during init, 
-        # setup is definitively not complete.
-        await db.rollback()
-        return {"setup_complete": False}
+    result = await db.execute(select(User).where(User.is_admin == True))
+    admin_exists = result.scalars().first() is not None
+    return {"setup_complete": admin_exists}
 
 @router.post("/admin-sign-up", response_model=UserResponse)
 @limiter.limit("3/hour")

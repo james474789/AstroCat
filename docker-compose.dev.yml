@@ -39,6 +39,7 @@ services:
     ports:
       - "8089:8089"
     volumes:
+      - ./backend:/app
       - ./library/logs:/var/log/astrocat
       - ./library/temp:/tmp/astrocat
       - ${IMAGE_PATH_1}:/data/images
