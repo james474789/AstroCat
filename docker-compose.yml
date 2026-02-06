@@ -81,6 +81,8 @@ services:
       - LOCAL_ASTROMETRY_URL=${LOCAL_ASTROMETRY_URL}
       - LOCAL_ASTROMETRY_API_KEY=${LOCAL_ASTROMETRY_API_KEY}
       - LOG_DIR=/var/log/astrocat
+      - CELERY_WORKERS=8
+      - UVICORN_WORKERS=2
     ports:
       - "8089:8089"
     volumes:
@@ -101,7 +103,7 @@ services:
       sh -c "python -m app.scripts.initialize_db && 
                   python -m app.data.seed && 
                   python -m app.scripts.seed_named_stars && 
-                  python -m uvicorn app.main:app --host 0.0.0.0 --port 8089"
+                  /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"
     depends_on:
       db:
         condition: service_healthy

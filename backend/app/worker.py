@@ -47,6 +47,9 @@ celery_app.conf.update(
     # Worker settings
     worker_prefetch_multiplier=1,  # Process one task at a time
     worker_max_tasks_per_child=100,  # Restart worker after 100 tasks
+    
+    # Fix for Celery 6.0 deprecation warning
+    broker_connection_retry_on_startup=True,
 )
 
 # Beat schedule for periodic tasks
