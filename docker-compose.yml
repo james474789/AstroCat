@@ -4,7 +4,6 @@ services:
   # ===========================================
   db:
     image: postgis/postgis:16-3.4
-    container_name: AstroCat-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -23,7 +22,6 @@ services:
   # ===========================================
   db-backup:
     image: prodrigestivill/postgres-backup-local:16
-    container_name: AstroCat-db-backup
     restart: unless-stopped
     environment:
       - POSTGRES_HOST=db
@@ -44,7 +42,6 @@ services:
   # ===========================================
   redis:
     image: redis:7-alpine
-    container_name: AstroCat-redis
     restart: unless-stopped
     # Ports removed for security (only accessible within docker network)
     volumes:
@@ -62,7 +59,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: AstroCat-backend
     restart: unless-stopped
     environment:
       - DATABASE_URL=${DATABASE_URL}
@@ -119,7 +115,6 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_API_URL=${VITE_API_URL:-http://localhost:8089/api}
-    container_name: AstroCat-frontend
     restart: unless-stopped
     ports:
       - "8090:8090"
