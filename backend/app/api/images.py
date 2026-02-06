@@ -23,6 +23,7 @@ from app.utils.path_security import validate_path_safety, sanitize_filename
 
 import io
 from fastapi.responses import StreamingResponse
+from PIL import Image as PILImage
 
 router = APIRouter()
 
@@ -813,15 +814,59 @@ async def update_image(
 
 
 @router.get("/{image_id}/thumbnail")
-async def get_thumbnail(image_id: int, db: AsyncSession = Depends(get_db)):
-    """Get the thumbnail file for an image."""
+async def get_thumbnail(
+    image_id: int, 
+    stretched: bool = Query(False, description="Apply STF stretch for better visibility"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get the thumbnail file for an image. 
+    If stretched=True, generates a temporary preview with STF applied (streams response).
+    """
     from app.config import settings
     
     image = await db.get(Image, image_id)
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
     
+    # 1. Stretched Preview (On-Demand, Streaming)
+    if stretched:
+        if not os.path.exists(image.file_path):
+             raise HTTPException(status_code=404, detail="Source file missing, cannot stretch")
+             
+        try:
+            # Check for subframe status to enable linear extraction for proper STF
+            is_subframe = (image.subtype == ImageSubtype.SUB_FRAME)
+            
+            # Load with STF enabled
+            img = ThumbnailGenerator.load_source_image(image.file_path, is_subframe=is_subframe, apply_stf=True)
+            
+            if not img:
+                 raise HTTPException(status_code=500, detail="Failed to generate preview")
+                 
+            # Resize for web view (similar to thumbnail size but maybe slightly larger dynamic?)
+            # Standard thumbnail size is usually fine (800x800 max)
+            max_size = (1024, 1024) 
+            img.thumbnail(max_size, PILImage.Resampling.LANCZOS)
+            
+            # Stream response
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            buf.seek(0)
+            
+            return StreamingResponse(
+                buf, 
+                media_type="image/jpeg"
+            )
+            
+        except Exception as e:
+            print(f"Error generating stretched preview: {e}")
+            raise HTTPException(status_code=500, detail="Error generating preview")
+
+    # 2. Standard Cached Thumbnail (Linear/Default)
     if not image.thumbnail_path or not os.path.exists(image.thumbnail_path):
+        # Optional: Auto-generate if missing? 
+        # For now, stick to existing behavior (404 if missing, rely on background task)
         raise HTTPException(status_code=404, detail="Thumbnail not available")
     
     # Validate thumbnail path is within allowed cache directory
@@ -830,6 +875,21 @@ async def get_thumbnail(image_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Access denied: Invalid thumbnail path")
         
     return FileResponse(image.thumbnail_path)
+
+
+@router.post("/{image_id}/thumbnail/regenerate")
+async def regenerate_thumbnail_endpoint(image_id: int, db: AsyncSession = Depends(get_db)):
+    """Force regenerate the thumbnail for an image."""
+    image = await db.get(Image, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    from app.tasks.thumbnails import generate_thumbnail
+    # We trigger the background task with force=True
+    # (Although the task doesn't explicitly check it yet, ThumbnailGenerator.generate will overwrite the file)
+    generate_thumbnail.delay(image_id, force=True)
+    
+    return {"status": "queued", "message": "Thumbnail regeneration task queued"}
 
 
 @router.get("/{image_id}/annotated")

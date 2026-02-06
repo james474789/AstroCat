@@ -101,14 +101,15 @@ class ThumbnailGenerator:
         return (data * 255).astype(np.uint8)
 
     @staticmethod
-    def load_source_image(source_path: str, is_subframe: bool = True) -> Image.Image:
+    def load_source_image(source_path: str, is_subframe: bool = True, apply_stf: bool = False) -> Image.Image:
         """
         Loads a source image (FITS, RAW, Standard) and returns a PIL Image object (RGB).
         
         Args:
             source_path: Path to file
-            is_subframe: If True, applies STF Auto Stretch for linear data. 
-                         If False, logic assumes pre-stretched/master and attempts simple loading.
+            is_subframe: If True, uses linear extraction for RAWs suitable for processing.
+            apply_stf: If True, applies PixInsight-style STF Auto Stretch.
+                       If False, applies simple normalization or uses default gamma.
         """
         source = Path(source_path)
         if not source.exists():
@@ -117,7 +118,7 @@ class ThumbnailGenerator:
             
         img = None
         ext = source.suffix.lower()
-        logger.debug(f"Loading image: {source_path} | Ext: '{ext}' | Subframe: {is_subframe}")
+        logger.debug(f"Loading image: {source_path} | Ext: '{ext}' | Subframe: {is_subframe} | STF: {apply_stf}")
         
         try:
             # --- 1. RAW files (.cr2, .nef, etc) ---
@@ -125,19 +126,34 @@ class ThumbnailGenerator:
                 try:
                     with rawpy.imread(source_path) as raw:
                         if is_subframe:
-                            # Linear extraction for STF
+                            # Linear extraction
                             rgb = raw.postprocess(
                                 gamma=(1, 1),
                                 no_auto_bright=True,
                                 output_bps=16,
-                                use_camera_wb=True # Use WB if available, but keep linear
+                                use_camera_wb=True
                             )
-                            # Apply STF
-                            rgb_stf = ThumbnailGenerator.apply_stf_stretch(rgb)
-                            img = Image.fromarray(rgb_stf)
+                            if apply_stf:
+                                rgb = ThumbnailGenerator.apply_stf_stretch(rgb)
+                            else:
+                                # Simple normalize for visualization if linear
+                                # Or just simple scale to 8-bit?
+                                # If we return raw linear 16-bit without STF, it will be very dark.
+                                # Simple min-max scan to view it?
+                                # User asked for "linear images".
+                                # Let's do a simple 16->8 bit scaling or min/max normalize?
+                                # Let's do Min-Max Standard implementation for consistency
+                                low, high = np.percentile(rgb, (1, 99))
+                                if high > low:
+                                    rgb = (rgb - low) / (high - low)
+                                else:
+                                    rgb = rgb - low
+                                rgb = np.clip(rgb, 0, 1) * 255
+                                rgb = rgb.astype(np.uint8)
+                                
+                            img = Image.fromarray(rgb)
                         else:
-                            # Legacy/Default behavior for non-subframes (e.g. DSLR raw that shouldn't be stretched?)
-                            # Usually RAWs are subframes, but if instructed otherwise:
+                            # Standard processing (Gamma corrected)
                             rgb = raw.postprocess(use_camera_wb=True, bright=1.0)
                             img = Image.fromarray(rgb)
                             
@@ -165,19 +181,10 @@ class ThumbnailGenerator:
                             data = data.astype(float)
                             data = np.nan_to_num(data)
                             
-                            if is_subframe:
+                            if apply_stf:
                                 data = ThumbnailGenerator.apply_stf_stretch(data)
                             else:
-                                # Simple Linear Stretch (Percentile) -> Only if not subframe?
-                                # User said "for all other image types no stretch should be applied".
-                                # But FITS data is often float/int32/uint16. 
-                                # If we don't normalize, it might display black.
-                                # Assuming "no stretch" means "Standard Normalization" without "Auto Stretch curve".
-                                # Let's keep the existing simple normalization logic for non-subframes 
-                                # to ensure visibility, OR respect "no stretch" strictly.
-                                # "No stretch" strictly implies linear scaling min-max?
-                                # I'll use simple min-max scaling to 0-255 if it's not a subframe
-                                # to ensure it's viewable.
+                                # Standard Normalize (Linear Stretch)
                                 low, high = np.percentile(data, (1, 99))
                                 if high > low:
                                     data = (data - low) / (high - low)
@@ -203,7 +210,7 @@ class ThumbnailGenerator:
                 try:
                     data = xisf.XISF.read(source_path)
                     if data is not None:
-                        # Shape handling... same as before
+                        # Shape handling
                         if len(data.shape) == 3:
                             if data.shape[2] in [3, 4]: pass
                             elif data.shape[0] in [3, 4]: data = np.transpose(data, (1, 2, 0))
@@ -215,9 +222,8 @@ class ThumbnailGenerator:
                         data = data.astype(float)
                         data = np.nan_to_num(data)
                         
-                        if is_subframe:
+                        if apply_stf:
                             data = ThumbnailGenerator.apply_stf_stretch(data)
-                            img = Image.fromarray(data)
                         else:
                             # Standard Normalize
                             low, high = np.percentile(data, (1, 99))
@@ -225,9 +231,8 @@ class ThumbnailGenerator:
                             else: data = data - low
                             data = np.clip(data, 0, 1) * 255
                             data = data.astype(np.uint8)
-                            img = Image.fromarray(data)
                             
-                        # XISF flip
+                        img = Image.fromarray(data)
                         img = ImageOps.flip(img)
                     else:
                         return None
@@ -240,25 +245,20 @@ class ThumbnailGenerator:
                 try:
                     img = Image.open(source_path)
                     img.load()
-                    # Standard images usually don't need STF (already gamma corrected)
+                    # Standard images don't usually use STF, but if requested:
+                    # (Usually only relevant for 16-bit TIFFs which we act on below in try-except fallback or high-bit check)
                 except Exception as e:
-                    # Fallback for TIFFs that Pillow might not handle (e.g. 32-bit float)
+                    # Fallback for TIFFs
                     if ext in ['.tif', '.tiff'] and tifffile:
                         try:
-                            logger.debug(f"Pillow failed for {ext}, trying tifffile...")
                             data = tifffile.imread(source_path)
                             if data is not None:
-                                # Data scaling/handling
                                 data = data.astype(float)
                                 data = np.nan_to_num(data)
                                 
-                                # DeepSkyStacker TIFFs are often in [0, 1] for float32 or [0, 65535] for uint16
-                                # If it's a subframe, we should use STF. 
-                                # If not, we still need to normalize to uint8 for Image.fromarray
-                                if is_subframe:
+                                if apply_stf:
                                     data = ThumbnailGenerator.apply_stf_stretch(data)
                                 else:
-                                    # Simple normalize
                                     d_min = np.min(data)
                                     d_max = np.max(data)
                                     if d_max > d_min:
@@ -267,30 +267,41 @@ class ThumbnailGenerator:
                                     
                                 img = Image.fromarray(data)
                         except Exception as te:
-                            logger.error(f"tifffile fallback failed for {source_path}: {te}")
                             img = None
                     else:
                         img = None
             
-            # --- 5. Validating and ensuring RGB ---
-            # If img is still None, try fallbacks (omitted for brevity, relying on specialized above)
-            
             if img:
-                # High bit depth standard images (TIFF 16-bit)
+                # Post-processing for loaded images (STF and high-bit normalization)
+                # Specialized loaders (Fits, Xisf, Raw) already handle STF internally.
+                SpecialExtensions = ['.fits', '.fit', '.xisf', '.cr2', '.nef', '.arw', '.dng', '.raf', '.cr3']
+                was_handled = ext in SpecialExtensions
+                
+                # Check for high bit depth modes
                 high_bit_modes = ('I', 'I;16', 'I;16L', 'I;16B', 'I;16S', 'F', 'I;32', 'I;32L', 'I;32B')
-                if img.mode in high_bit_modes:
+                is_high_bit = img.mode in high_bit_modes
+
+                if (apply_stf and not was_handled) or is_high_bit:
                     arr = np.array(img).astype(float)
                     arr = np.nan_to_num(arr)
-                    if is_subframe:
-                        arr = ThumbnailGenerator.apply_stf_stretch(arr)
-                        img = Image.fromarray(arr, mode='L') # Greyscale result
+                    
+                    if apply_stf and not was_handled:
+                        # STF Stretch (Auto-Stretch)
+                        processed_arr = ThumbnailGenerator.apply_stf_stretch(arr)
                     else:
-                        # Simple normalize
+                        # Simple Linear Normalization for high-bit files
                         low, high = np.percentile(arr, (1, 99))
-                        if high > low: arr = (arr - low) / (high - low)
-                        else: arr = arr - low
-                        arr = np.clip(arr, 0, 1) * 255
-                        img = Image.fromarray(arr.astype(np.uint8), mode='L')
+                        if high > low: 
+                            arr = (arr - low) / (high - low)
+                        else: 
+                            arr = arr - low
+                        processed_arr = (np.clip(arr, 0, 1) * 255).astype(np.uint8)
+                    
+                    # Create new image from processed array
+                    if len(processed_arr.shape) == 3:
+                        img = Image.fromarray(processed_arr, mode='RGB')
+                    else:
+                        img = Image.fromarray(processed_arr, mode='L')
 
                 if img.mode != 'RGB':
                     img = img.convert('RGB')
@@ -302,7 +313,7 @@ class ThumbnailGenerator:
             return None
 
     @staticmethod
-    def generate(source_path: str, output_dir: str, max_size=(800, 800), is_subframe: bool = True) -> str:
+    def generate(source_path: str, output_dir: str, max_size=(800, 800), is_subframe: bool = True, apply_stf: bool = False) -> str:
         """
         Generates a JPEG thumbnail for the given image file.
         
@@ -310,7 +321,8 @@ class ThumbnailGenerator:
             source_path: Absolute path to source file
             output_dir: Directory to save thumbnail
             max_size: Tuple of (width, height)
-            is_subframe: Whether to apply STF Auto Stretch (default True for safety, caller should specify)
+            is_subframe: Whether to interpret as subframe (linear extraction for RAWs)
+            apply_stf: Whether to apply STF Auto Stretch
         """
         import hashlib
         source = Path(source_path)
@@ -321,7 +333,7 @@ class ThumbnailGenerator:
         thumb_path = os.path.join(output_dir, thumb_filename)
         
         try:
-            img = ThumbnailGenerator.load_source_image(source_path, is_subframe=is_subframe)
+            img = ThumbnailGenerator.load_source_image(source_path, is_subframe=is_subframe, apply_stf=apply_stf)
             
             if img:
                 img.thumbnail(max_size, Image.Resampling.LANCZOS)

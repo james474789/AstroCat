@@ -1,41 +1,30 @@
 // API Client connecting to the FastAPI backend
 export const API_BASE_URL = (() => {
-    // Get the Vite environment variable if available
+    // 1. Check for Vite environment variable (highly recommended for production)
     const envUrl = import.meta.env.VITE_API_URL;
+    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+        return envUrl.replace(/\/$/, "");
+    }
 
-    // Use env variable, fallback to /api (which works better with Docker proxies)
-    // Only use localhost:8089 if in development mode
-    let baseUrl = envUrl;
+    // 2. If we are in a browser, use the current window location to derive the API path
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        const protocol = window.location.protocol;
 
-    if (!baseUrl && typeof window !== 'undefined') {
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        // If local, try to use the port from the URL if it's the expected dev port,
-        // otherwise default to the standard backend port if we can't determine it.
+        // If the frontend is on port 8090, the backend is likely on 8089 (standard dev setup)
+        // Otherwise, if they are served on the same port (proxy/prod), just use /api
         const port = window.location.port;
-        const backendPort = port === '8090' ? '8089' : (port || '8089');
-        baseUrl = isLocal ? `http://${window.location.hostname}:${backendPort}/api` : '/api';
-    }
 
-    // Default fallback
-    if (!baseUrl) baseUrl = '/api';
-
-    // If we're on a remote machine but the API is pointing to a local address,
-    // try to use the same hostname as the frontend
-    if (typeof window !== 'undefined' &&
-        window.location.hostname !== 'localhost' &&
-        window.location.hostname !== '127.0.0.1' &&
-        (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1'))) {
-
-        // Preserve protocol and port if possible, or just swap hostname
-        try {
-            const url = new URL(baseUrl);
-            url.hostname = window.location.hostname;
-            return url.toString().replace(/\/$/, ""); // Remove trailing slash
-        } catch (e) {
-            return baseUrl.replace('localhost', window.location.hostname).replace('127.0.0.1', window.location.hostname);
+        if (port === '8090') {
+            return `${protocol}//${hostname}:8089/api`;
         }
+
+        // Fallback for production or when port handles themselves
+        return '/api';
     }
-    return baseUrl;
+
+    // 3. Fallback for non-browser environments or default
+    return envUrl || '/api';
 })();
 
 const CSRF_COOKIE_NAME = 'csrf_token';
@@ -170,6 +159,14 @@ export async function rescanImage(id) {
 
 export async function fetchAnnotation(id) {
     return handleResponse(await fetch(`${API_BASE_URL}/images/${id}/fetch_annotation`, {
+        method: 'POST',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
+export async function regenerateImageThumbnail(id) {
+    return handleResponse(await fetch(`${API_BASE_URL}/images/${id}/thumbnail/regenerate`, {
         method: 'POST',
         headers: withCsrfHeaders(),
         credentials: 'include'

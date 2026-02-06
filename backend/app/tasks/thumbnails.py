@@ -41,11 +41,12 @@ def generate_thumbnail(self, image_id: int, force: bool = False):
             thumb_cache_dir = os.environ.get("THUMBNAIL_CACHE_PATH", "/data/thumbnails")
             
             # Generate (this now includes the hash fix)
-            # Check for subframe status to enable STF stretching
+            # Check for subframe status to enable STF stretching -- NOW DISABLED BY DEFAULT
             from app.models.image import ImageSubtype
             is_subframe = (image.subtype == ImageSubtype.SUB_FRAME)
             
-            thumb_path = ThumbnailGenerator.generate(image.file_path, thumb_cache_dir, is_subframe=is_subframe)
+            # Default to Linear (apply_stf=False) as requested
+            thumb_path = ThumbnailGenerator.generate(image.file_path, thumb_cache_dir, is_subframe=is_subframe, apply_stf=False)
             
             if thumb_path:
                 image.thumbnail_path = thumb_path

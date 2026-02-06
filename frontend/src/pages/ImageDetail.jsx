@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { fetchImage, updateImage, rescanImage, fetchAnnotation, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
+import { fetchImage, updateImage, rescanImage, fetchAnnotation, regenerateImageThumbnail, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
 import './ImageDetail.css';
 
@@ -26,6 +26,8 @@ export default function ImageDetail() {
 
     // Annotations Toggle
     const [showAnnotations, setShowAnnotations] = useState(true);
+    // Stretch Toggle
+    const [isStretched, setIsStretched] = useState(false);
     // Crosshair State
     const [cursorPos, setCursorPos] = useState(null);
     const imageRef = useRef(null);
@@ -42,8 +44,10 @@ export default function ImageDetail() {
             setImgError(false);
             const data = await fetchImage(id);
             setImage(data);
-            // Initialize the manually edited state from the API response
+            // Initialize states
             setRatingManuallyEdited(data.rating_manually_edited || false);
+            // Reset stretch state on new image load
+            setIsStretched(false);
         } catch (err) {
             setError('Image not found');
         } finally {
@@ -140,6 +144,20 @@ export default function ImageDetail() {
         }
     }
 
+    async function handleRegenerateThumbnail() {
+        try {
+            setSaving(true);
+            await regenerateImageThumbnail(id);
+            alert("Thumbnail regeneration queued. It may take a few seconds to update.");
+            // Reload after short delay
+            setTimeout(() => loadImage(), 3000);
+        } catch (e) {
+            alert("Error regenerating thumbnail: " + e.message);
+        } finally {
+            setSaving(false);
+        }
+    }
+
     // Polling for Astrometry Status
     useEffect(() => {
         let interval;
@@ -192,7 +210,7 @@ export default function ImageDetail() {
             } else if (e.key.toLowerCase() === 'g') {
                 e.preventDefault();
                 sessionStorage.setItem('lastClickedImageId', id);
-                
+
                 // RESTORE SEARCH CONTEXT
                 // Try to reconstruct the search URL from the stored context
                 const contextStr = sessionStorage.getItem('currentSearchContext');
@@ -464,12 +482,12 @@ export default function ImageDetail() {
                                 <div className="preview-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
                                     {/* 
                                      Hierarchy:
-                                     1. If solved + annotations ON -> try annotation URL
-                                     2. If that fails or loading -> show normal thumb + svg overlay (if annotations ON)
-                                     3. If annotations OFF -> show normal thumb
+                                     1. Stretched Overlay (Top Priority if enabled)
+                                     2. Annotated Overlay (If enabled)
+                                     3. Base Image (Always there)
                                     */}
 
-                                    {/* Base Image (Always Thumbnail) - serves as background if annotated fails or loading */}
+                                    {/* Base Image (Always Thumbnail - Linear/Default) */}
                                     <img
                                         src={`${API_BASE_URL}/images/${id}/thumbnail`}
                                         alt={image.file_name}
@@ -486,6 +504,24 @@ export default function ImageDetail() {
                                         onError={() => setImgError(true)}
                                     />
 
+                                    {/* Stretched Overlay Image (On Demand) */}
+                                    {isStretched && (
+                                        <img
+                                            src={`${API_BASE_URL}/images/${id}/thumbnail?stretched=true`}
+                                            alt="Stretched Overlay"
+                                            className="real-preview-image stretched-layer"
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'contain',
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                zIndex: 2 // Explicitly above base image (Z=1)
+                                            }}
+                                        />
+                                    )}
+
                                     {/* Annotated Overlay Image */}
                                     {showAnnotations && image.is_plate_solved && !annotatedImageError && (
                                         <img
@@ -499,7 +535,7 @@ export default function ImageDetail() {
                                                 position: 'absolute',
                                                 top: 0,
                                                 left: 0,
-                                                zIndex: 2
+                                                zIndex: 3 // Above base and stretched layers
                                             }}
                                             onError={(e) => {
                                                 e.target.style.display = 'none';
@@ -508,18 +544,12 @@ export default function ImageDetail() {
                                         />
                                     )}
 
-                                    {/* SVG Annotation Layer 
-                                        Fallback logic:
-                                        Show if:
-                                        1. Image is NOT solved OR
-                                        2. Annotated image failed to load (annotatedImageError is true)
-                                    */}
-                                    {((!image.is_plate_solved && image.subtype !== 'PLANETARY') || annotatedImageError) && annotationLayer}
-
-                                    {/* ... But wait, maybe the user wants the SVG labels even on top of the annotated image?
-                                        Probably not, the annotated image has labels.
-                                        Sticking to: If Solved -> Image Overlay. If Not Solved -> SVG Overlay.
-                                    */}
+                                    {/* SVG Annotation Layer */}
+                                    {((!image.is_plate_solved && image.subtype !== 'PLANETARY') || annotatedImageError) && (
+                                        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 4 }}>
+                                            {annotationLayer}
+                                        </div>
+                                    )}
 
                                     {/* Transparent interactive layer for crosshair (needs to be on top) */}
                                     <div
@@ -583,6 +613,21 @@ export default function ImageDetail() {
                                 onClick={() => setShowAnnotations(!showAnnotations)}
                             >
                                 {showAnnotations ? '👁️ Hide Annotations' : '👁️ Show Annotations'}
+                            </button>
+                            <button
+                                className={`btn ${isStretched ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setIsStretched(!isStretched)}
+                                title="Apply Auto-Stretch to reveal faint details"
+                            >
+                                {isStretched ? '✨ Unstretch' : '✨ Stretch'}
+                            </button>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={handleRegenerateThumbnail}
+                                disabled={saving}
+                                title="Force backend to regenerate the linear thumbnail"
+                            >
+                                🔄 Regenerate
                             </button>
                             <button
                                 className="btn btn-secondary"
