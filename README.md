@@ -54,6 +54,11 @@ This method uses pre-built production images and doesn't require cloning the ent
 
    # Download the environment template
    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example" -OutFile ".env"
+
+   # Download the backup and restore scripts
+   mkdir scripts
+   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/scripts/backup_db.ps1" -OutFile "scripts/backup_db.ps1"
+   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/scripts/restore_db.ps1" -OutFile "scripts/restore_db.ps1"
    ```
 
 #### 🐧 Linux / 🍎 macOS
@@ -67,6 +72,11 @@ This method uses pre-built production images and doesn't require cloning the ent
 
    # Download the environment template
    curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example -o .env
+
+   # Download the backup and restore scripts
+   mkdir -p scripts
+   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/scripts/backup_db.ps1 -o scripts/backup_db.ps1
+   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/scripts/restore_db.ps1 -o scripts/restore_db.ps1
    ```
 
 2. **Configure Environment**:
@@ -115,7 +125,7 @@ Recommended if you want to modify the code or contribute.
 
 ### 3. Database Initialization (Automatic)
 
-AstroCat now handles database migrations and astronomical catalog seeding automatically on first run via the `db-init` service. You don't need to run any manual scripts.
+AstroCat handles database migrations and astronomical catalog seeding automatically on first run within the `backend` service. You don't need to run any manual scripts.
 
 The automatic process populates:
 - **Messier Catalog** - 110 deep-sky objects
@@ -127,12 +137,18 @@ If you ever need to manually force a reseed or refresh the catalogs, you can use
 
 **Windows (PowerShell)**:
 ```powershell
+# If running from source:
 .\rebuild_and_seed.ps1
+
+# If running from Docker Hub:
+docker compose exec backend python -m app.data.seed
+docker compose exec backend python -m app.scripts.seed_named_stars
 ```
 
 **Linux / macOS**:
 ```bash
-docker compose run --rm db-init
+docker compose exec backend python -m app.data.seed
+docker compose exec backend python -m app.scripts.seed_named_stars
 ```
 
 ### 4. Access the Application
@@ -145,7 +161,7 @@ docker compose run --rm db-init
 
 ```
 AstroCat/
-├── backend/
+├── backend/               # FastAPI application
 │   ├── app/
 │   │   ├── api/           # REST API endpoints
 │   │   ├── data/          # Seed data and catalogs
@@ -154,25 +170,25 @@ AstroCat/
 │   │   ├── schemas/       # Pydantic schemas
 │   │   ├── services/      # Business logic
 │   │   ├── tasks/         # Celery background tasks
-│   │   ├── config.py      # Configuration
-│   │   ├── database.py    # Database setup
-│   │   ├── main.py        # FastAPI app
 │   │   └── worker.py      # Celery worker
 │   ├── alembic/           # Database migrations
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── api/           # API client
-│   │   ├── components/    # React components
-│   │   ├── pages/         # Page components
-│   │   ├── App.jsx
-│   │   └── index.css      # Styles
+│   └── Dockerfile
+├── frontend/              # React application
+│   ├── src/               # JSX components and logic
 │   ├── Dockerfile
 │   └── package.json
-├── docker-compose.yml
-├── docker-compose.dev.yml
-└── .env.example
+├── library/               # Persistent data and logs
+│   ├── backups/           # Database backups
+│   ├── logs/              # Application logs
+│   ├── temp/              # Temporary processing files
+│   └── thumbnails/        # Generated thumbnails
+├── scripts/               # Utility scripts
+│   ├── backup_db.ps1      # Manual backup script
+│   └── restore_db.ps1     # Database restore script
+├── docker-compose.yml     # Production (Build from source)
+├── docker-compose.hub.yml # Production (Pull from Docker Hub)
+├── docker-compose.dev.yml # Development override
+└── .env.example           # Environment template
 ```
 
 ## 🔧 Development
