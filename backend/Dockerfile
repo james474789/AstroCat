@@ -28,8 +28,6 @@ RUN pip install --no-cache-dir watchfiles
 # Copy application code
 COPY . .
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-RUN chmod +x /app/scripts/start_backend.sh
-ENTRYPOINT ["/app/scripts/start_backend.sh"]
 
 # Expose port
 EXPOSE 8089
@@ -64,11 +62,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=AstroCat:AstroCat . .
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-RUN chmod +x /app/scripts/start_backend.sh
 
 # Switch to non-root user
 USER AstroCat
-ENTRYPOINT ["/app/scripts/start_backend.sh"]
 
 # Expose port
 EXPOSE 8089

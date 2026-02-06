@@ -66,7 +66,6 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - RUN_DB_INIT=true
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
       - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
@@ -98,6 +97,11 @@ services:
       timeout: 10s
       retries: 10
       start_period: 120s
+    command: >
+      sh -c "python -m app.scripts.initialize_db && 
+                  python -m app.data.seed && 
+                  python -m app.scripts.seed_named_stars && 
+                  python -m uvicorn app.main:app --host 0.0.0.0 --port 8089"
     depends_on:
       db:
         condition: service_healthy
