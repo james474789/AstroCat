@@ -44,7 +44,7 @@ export default function ImageCard({ image, onContextMenu }) {
                 )}
 
                 <img
-                    src={`${API_BASE_URL}/images/${image.id}/thumbnail`}
+                    src={`${API_BASE_URL}/images/${image.id}/thumbnail?t=${image.thumbnail_generated_at ? new Date(image.thumbnail_generated_at).getTime() : ''}`}
                     alt={image.file_name}
                     className="image-card-img"
                     style={{

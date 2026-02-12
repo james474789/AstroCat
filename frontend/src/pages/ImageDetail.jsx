@@ -26,8 +26,6 @@ export default function ImageDetail() {
 
     // Annotations Toggle: 0=None, 1=Astrocat (SVG), 2=Nova (Image Overlay)
     const [annotationMode, setAnnotationMode] = useState(1);
-    // Stretch Toggle
-    const [isStretched, setIsStretched] = useState(false);
     // Crosshair State
     const [cursorPos, setCursorPos] = useState(null);
     const imageRef = useRef(null);
@@ -46,8 +44,6 @@ export default function ImageDetail() {
             setImage(data);
             // Initialize states
             setRatingManuallyEdited(data.rating_manually_edited || false);
-            // Reset stretch state on new image load
-            setIsStretched(false);
         } catch (err) {
             setError('Image not found');
         } finally {
@@ -489,7 +485,7 @@ export default function ImageDetail() {
 
                                     {/* Base Image (Always Thumbnail - Linear/Default) */}
                                     <img
-                                        src={`${API_BASE_URL}/images/${id}/thumbnail`}
+                                        src={`${API_BASE_URL}/images/${id}/thumbnail?t=${image.thumbnail_generated_at ? new Date(image.thumbnail_generated_at).getTime() : ''}`}
                                         alt={image.file_name}
                                         className="real-preview-image base-layer"
                                         style={{
@@ -503,24 +499,6 @@ export default function ImageDetail() {
                                         }}
                                         onError={() => setImgError(true)}
                                     />
-
-                                    {/* Stretched Overlay Image (On Demand) */}
-                                    {isStretched && (
-                                        <img
-                                            src={`${API_BASE_URL}/images/${id}/thumbnail?stretched=true`}
-                                            alt="Stretched Overlay"
-                                            className="real-preview-image stretched-layer"
-                                            style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                objectFit: 'contain',
-                                                position: 'absolute',
-                                                top: 0,
-                                                left: 0,
-                                                zIndex: 2 // Explicitly above base image (Z=1)
-                                            }}
-                                        />
-                                    )}
 
                                     {/* Annotated Overlay Image (Nova Mode) */}
                                     {annotationMode === 2 && image.is_plate_solved && !annotatedImageError && (
@@ -616,13 +594,6 @@ export default function ImageDetail() {
                                 {annotationMode === 0 ? '🚫 No Annotations' :
                                     annotationMode === 1 ? '🐱 Astrocat Annotations' :
                                         '🔭 Nova Annotations'}
-                            </button>
-                            <button
-                                className={`btn ${isStretched ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => setIsStretched(!isStretched)}
-                                title="Apply Auto-Stretch to reveal faint details"
-                            >
-                                {isStretched ? '✨ Unstretch' : '✨ Stretch'}
                             </button>
                             <button
                                 className="btn btn-secondary"

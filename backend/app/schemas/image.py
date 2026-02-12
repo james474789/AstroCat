@@ -128,6 +128,7 @@ class ImageList(ImageBase):
     id: int
     file_path: str
     thumbnail_path: Optional[str] = None
+    thumbnail_generated_at: Optional[datetime] = None
     pixel_scale_arcsec: Optional[float] = None
     rotation_degrees: Optional[float] = None
 

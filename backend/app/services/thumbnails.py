@@ -319,7 +319,7 @@ class ThumbnailGenerator:
             return None
 
     @staticmethod
-    def generate(source_path: str, output_dir: str, max_size=(800, 800), is_subframe: bool = True, apply_stf: bool = False) -> str:
+    def generate(source_path: str, output_dir: str, max_size=(800, 800), is_subframe: bool = True, apply_stf: bool = False, overwrite: bool = False) -> str:
         """
         Generates a JPEG thumbnail for the given image file.
         
@@ -329,6 +329,7 @@ class ThumbnailGenerator:
             max_size: Tuple of (width, height)
             is_subframe: Whether to interpret as subframe (linear extraction for RAWs)
             apply_stf: Whether to apply STF Auto Stretch
+            overwrite: Whether to overwrite existing thumbnail
         """
         import hashlib
         source = Path(source_path)
@@ -339,7 +340,7 @@ class ThumbnailGenerator:
         thumb_path = os.path.join(output_dir, thumb_filename)
         
         # Check if thumbnail already exists to avoid redundant processing
-        if os.path.exists(thumb_path):
+        if os.path.exists(thumb_path) and not overwrite:
             logger.debug(f"Thumbnail already exists: {thumb_path}")
             return thumb_path
             

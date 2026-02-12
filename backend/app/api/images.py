@@ -703,7 +703,11 @@ async def update_image(
     image.has_annotated_image = os.path.exists(annotated_path)
     
     # Update subtype if provided
+    subtype_changed = False
     if update_data.subtype is not None:
+        # If subtype changed, trigger thumbnail regeneration
+        if image.subtype != update_data.subtype:
+            subtype_changed = True
         image.subtype = update_data.subtype
     
     # Update rating if provided
@@ -720,6 +724,14 @@ async def update_image(
         
     await db.commit()
     await db.refresh(image)
+
+    # Trigger thumbnail regeneration if subtype changed (after commit so worker sees new value)
+    if subtype_changed:
+        try:
+            from app.tasks.thumbnails import generate_thumbnail
+            generate_thumbnail.delay(image.id, force=True)
+        except Exception as e:
+            print(f"Failed to trigger thumbnail regeneration: {e}")
     
     # Trigger background sync to filesystem
     try:
