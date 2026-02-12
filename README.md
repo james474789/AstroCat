@@ -93,18 +93,19 @@ This method uses pre-built production images and doesn't require cloning the ent
    IMAGE_PATH_2=D:/temp/astro
    ```
    
-   # Download the backup and restore scripts
-   mkdir -p scripts
-   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/scripts/backup_db.ps1 -o scripts/backup_db.ps1
-   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/scripts/restore_backup.ps1 -o scripts/restore_backup.ps1
-
-
 3. **Start the Application**:
    ```bash
    docker compose up -d
    ```
-
 ---
+
+### 4. Access the Application
+
+- **Frontend**: http://localhost:8090 (Default, configurable via `FRONTEND_PORT`)
+- **API Docs**: http://localhost:8089/api/docs (Default, configurable via `BACKEND_PORT`)
+- **Health Check**: http://localhost:8089/api/health
+
+
 
 ### Option 2: Build from Source
 
@@ -166,12 +167,6 @@ docker compose exec backend python -m app.scripts.seed_named_stars
 docker compose exec backend python -m app.data.seed
 docker compose exec backend python -m app.scripts.seed_named_stars
 ```
-
-### 4. Access the Application
-
-- **Frontend**: http://localhost:8090 (Default, configurable via `FRONTEND_PORT`)
-- **API Docs**: http://localhost:8089/api/docs (Default, configurable via `BACKEND_PORT`)
-- **Health Check**: http://localhost:8089/api/health
 
 ## 📁 Project Structure
 
