@@ -105,6 +105,7 @@ This method uses pre-built production images and doesn't require cloning the ent
 - **API Docs**: http://localhost:8089/api/docs (Default, configurable via `BACKEND_PORT`)
 - **Health Check**: http://localhost:8089/api/health
 
+Upon first launch you will need to create an admin user. After logging in navigate to the admin section and click 'Start Scan' in the indexer section. This will start the process of scanning your image paths for images.
 
 
 ### Option 2: Build from Source
