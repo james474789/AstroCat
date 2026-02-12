@@ -63,7 +63,6 @@ services:
       - COOKIE_SECURE=${COOKIE_SECURE:-true}
       - COOKIE_MAX_AGE=${COOKIE_MAX_AGE:-172800}
       - COOKIE_SAMESITE=${COOKIE_SAMESITE:-lax}
-      - CORS_ORIGINS=${CORS_ORIGINS}
       - DEBUG=${DEBUG:-false}
       - VITE_LOGO_TITLE=${VITE_LOGO_TITLE:-AstroCat}
       - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}

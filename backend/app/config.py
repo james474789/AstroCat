@@ -63,7 +63,6 @@ class Settings(BaseSettings):
 
     # API Settings
     api_prefix: str = "/api"
-    cors_origins_raw: str = Field("", alias="CORS_ORIGINS")
     
     @field_validator('secret_key')
     @classmethod
@@ -90,12 +89,6 @@ class Settings(BaseSettings):
         
         return v
     
-    @property
-    def cors_origins(self) -> List[str]:
-        if not self.cors_origins_raw:
-            return []
-        v = self.cors_origins_raw.strip().strip("'").strip('"').strip("[").strip("]")
-        return [i.strip().strip('"').strip("'") for i in v.split(",") if i.strip()]
     
     @property
     def image_paths_list(self) -> List[str]:
