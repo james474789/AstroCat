@@ -1,0 +1,116 @@
+.spatial-search-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.spatial-search-group .label {
+    margin-bottom: 0;
+    font-size: var(--font-size-sm);
+}
+
+.spatial-search-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: var(--border-radius-md);
+}
+
+.spatial-coords {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-sm);
+}
+
+.spatial-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.spatial-field-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.spatial-icon {
+    font-size: 1.1em;
+    display: inline-block;
+}
+
+.spatial-input {
+    padding: var(--spacing-sm) var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.spatial-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.spatial-radius {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.spatial-radius-input {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.spatial-radius-input .input {
+    flex: 1;
+    padding: var(--spacing-sm) var(--spacing-sm);
+    font-size: var(--font-size-sm);
+}
+
+.radius-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.spatial-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    padding: var(--spacing-sm);
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: var(--border-radius-sm);
+    border-left: 3px solid var(--color-primary);
+    line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .spatial-search-container {
+        gap: var(--spacing-md);
+        padding: var(--spacing-md);
+    }
+
+    .spatial-coords {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-md);
+    }
+
+    .spatial-radius-input {
+        gap: var(--spacing-md);
+    }
+}

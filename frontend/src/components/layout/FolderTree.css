@@ -1,0 +1,148 @@
+.folder-tree {
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--color-text-primary);
+    background-color: var(--color-surface);
+    border-radius: var(--border-radius);
+    overflow: auto;
+    max-height: 400px;
+    /* Added a max height to prevent the sidebar from becoming too long */
+}
+
+.folder-node {
+    user-select: none;
+}
+
+.folder-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    border-radius: 4px;
+    margin-bottom: 1px;
+    width: fit-content;
+    min-width: 100%;
+}
+
+.folder-item:hover {
+    background-color: var(--color-surface-hover);
+}
+
+.folder-item.selected {
+    background-color: var(--color-primary-glow);
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+.folder-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 4px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+.toggle-icon {
+    font-size: 0.7rem;
+    display: inline-block;
+    width: 100%;
+    text-align: center;
+}
+
+.toggle-spacer {
+    display: inline-block;
+    width: 20px;
+}
+
+.folder-icon {
+    margin-right: 8px;
+    opacity: 0.8;
+}
+
+.folder-name {
+    white-space: nowrap;
+    flex: 1;
+}
+
+.folder-count {
+    font-size: 0.75rem;
+    background-color: var(--color-surface-hover);
+    color: var(--color-text-muted);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 8px;
+    min-width: 20px;
+    text-align: center;
+}
+
+.selected .folder-count {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+/* .folder-children indent is handled via inline paddingLeft style in FolderNode */
+
+.folder-error {
+    color: var(--color-error);
+    font-size: 0.8rem;
+    padding: 4px 8px;
+}
+
+.folder-empty {
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--color-text-muted);
+    padding: 4px 8px;
+}
+
+.root-item {
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    padding: 8px 12px;
+}
+
+/* Context Menu Styles */
+.folder-context-menu {
+    background-color: #1a2435;
+    /* Using solid color to ensure no transparency */
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    min-width: 220px;
+    padding: 6px 0;
+    overflow: hidden;
+    animation: fadeIn 0.1s ease-out;
+}
+
+.menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-primary);
+    transition: background-color 0.15s;
+    font-size: 0.9rem;
+}
+
+.menu-item:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-primary);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

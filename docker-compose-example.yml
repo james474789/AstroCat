@@ -1,0 +1,116 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # Automated Database Backup
+  # ===========================================
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - SCHEDULE=${BACKUP_SCHEDULE:-@daily}
+      - BACKUP_KEEP_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      - BACKUP_SUFFIX=${BACKUP_SUFFIX:-.sql.gz}
+    volumes:
+      - ./library/backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ===========================================
+  # Redis for Celery Task Queue
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Ports removed for security (only accessible within docker network)
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  # ===========================================
+  # FastAPI Backend
+  # ===========================================
+  backend:
+    image: james474789/astrocat-backend:latest
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/0}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      - SECRET_KEY=${SECRET_KEY}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - COOKIE_MAX_AGE=${COOKIE_MAX_AGE:-172800}
+      - COOKIE_SAMESITE=${COOKIE_SAMESITE:-lax}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - DEBUG=${DEBUG:-false}
+      - VITE_LOGO_TITLE=${VITE_LOGO_TITLE:-AstroCat}
+      - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}
+      - THUMBNAIL_CACHE_PATH=/data/thumbnails
+      - ASTROMETRY_API_KEY=${ASTROMETRY_API_KEY}
+      - LOCAL_ASTROMETRY_URL=${LOCAL_ASTROMETRY_URL}
+      - LOCAL_ASTROMETRY_API_KEY=${LOCAL_ASTROMETRY_API_KEY}
+      - LOG_DIR=/var/log/astrocat
+      - CELERY_WORKERS=8
+      - UVICORN_WORKERS=2
+    ports:
+      - "${BACKEND_PORT:-8089}:8089"
+    volumes:
+      - ./library/logs:/var/log/astrocat
+      - ./library/temp:/tmp/astrocat
+      - ${IMAGE_PATH_1}:/data/images
+      - ${IMAGE_PATH_2}:/data/mount2
+      - ${THUMBNAIL_CACHE_PATH_HOST}:/data/thumbnails
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8089/api/health\")'" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    command: >
+      sh -c "python -m app.scripts.initialize_db && alembic stamp head && python -m app.data.seed &&  python -m app.scripts.seed_named_stars &&  /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  # ===========================================
+  # Frontend (React/Vite)
+  # ===========================================
+  frontend:
+    image: james474789/astrocat-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8090}:8090"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    name: astrocat_test_postgres_data
+    external: false
+  redis_data:
+    name: astrocat_test_redis_data
+    external: false

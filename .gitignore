@@ -1,0 +1,131 @@
+# ===========================================
+# AstroDB .gitignore
+# ===========================================
+
+# -------------------------------------------
+# Environment & Configuration
+# -------------------------------------------
+.env
+.env.local
+.env.*.local
+*.env
+.agent/
+
+# Ignore all performance reports by default
+docs/perf_*.md
+
+# -------------------------------------------
+# Python
+# -------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# -------------------------------------------
+# Virtual Environments
+# -------------------------------------------
+venv/
+ENV/
+env/
+.venv/
+
+# -------------------------------------------
+# Node.js / Frontend
+# -------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+frontend/dist/
+frontend/build/
+
+# -------------------------------------------
+# IDE & Editors
+# -------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# -------------------------------------------
+# Docker
+# -------------------------------------------
+*.log
+
+# -------------------------------------------
+# Database
+# -------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+# backups/ removed - handled in library/backups/ below
+
+# -------------------------------------------
+# Thumbnails & Cache
+# -------------------------------------------
+
+*.cache
+
+# -------------------------------------------
+# Local testing
+# -------------------------------------------
+test_*.py
+!backend/app/tests/
+backend/celerybeat-schedule
+#docker-compose.yml
+
+backend/celery_env.txt
+
+
+# -------------------------------------------
+# Host Mounts
+# -------------------------------------------
+library/logs/*
+!library/logs/.gitkeep
+!library/logs/frontend/
+library/logs/frontend/*
+!library/logs/frontend/.gitkeep
+library/backups/**
+!library/backups/**/
+!library/backups/**/.gitkeep
+library/temp/*
+!library/temp/.gitkeep
+library/thumbnails/*
+!library/thumbnails/.gitkeep
+postgres/
+/docs/reports/performance/perfcon_*.md
+scripts/push-to-dockerhub.ps1
+docker-compose.yml
+
+build_and_push.ps1
+backend/scripts/backfill_wcs_headers.py
+docker-compose.dev.yml
+docker-compose.hub.yml
