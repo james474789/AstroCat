@@ -258,7 +258,6 @@ Detailed documentation is available in the `docs/` directory:
 - [**Database Schema**](docs/core/DATABASE_SCHEMA.md): Detailed table definitions and spatial query logic.
 - [**Development Guide**](docs/development/DEVELOPMENT_GUIDE.md): Setup instructions and common development workflows.
 - [**Backup & Restore**](docs/infrastructure/BACKUP_RESTORE.md): Database backup and recovery procedures.
-- [**Security Audit**](docs/infrastructure/SECURITY_AUDIT.md): Findings from recent security audits.
 
 ## 🗄️ Database Schema
 
