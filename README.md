@@ -107,7 +107,8 @@ This method uses pre-built production images and doesn't require cloning the ent
 
 Upon first launch you will need to create an admin user. After logging in navigate to the admin section and click 'Start Scan' in the indexer section. This will start the process of scanning your image paths for images.
 
-
+---
+---
 ### Option 2: Build from Source
 
 Recommended if you want to modify the code or contribute.
