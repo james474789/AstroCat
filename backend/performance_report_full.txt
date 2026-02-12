@@ -1,0 +1,18 @@
+Page         | API Call                                      | Status          | Mean (ms)  | Notes
+---------------------------------------------------------------------------------------------------
+Dashboard    | GET /api/stats/overview                       | ⚠️ SLOW         | 1026.93    | 
+Dashboard    | GET /api/stats/by-month                       | ✅ OK            | 17.75      | 
+Dashboard    | GET /api/stats/by-subtype                     | ✅ OK            | 16.12      | 
+Dashboard    | GET /api/stats/by-format                      | ✅ OK            | 23.69      | 
+Dashboard    | GET /api/stats/top-objects                    | ✅ OK            | 61.28      | 
+Dashboard    | GET /api/images?limit=5                       | ✅ OK            | 1.93       | 
+Search       | GET /api/images?limit=20                      | ✅ OK            | 1.61       | 
+Search       | GET /api/images?is_plate_solved=solved&limit=20 | ✅ OK            | 1.62       | 
+Search       | GET /api/images?search=M31&limit=20           | ✅ OK            | 1.79       | 
+Search       | GET /api/search/coordinates?ra=10.68&dec=41.27&radius=2.0 | ✅ OK            | 58.94      | 
+Catalogs     | GET /api/catalogs/messier                     | ✅ OK            | 305.13     | 
+Catalogs     | GET /api/catalogs/ngc?limit=50                | ✅ OK            | 444.62     | 
+Analytics    | GET /api/stats/fits/                          | ✅ OK            | 399.28     | 
+Admin        | GET /api/admin/stats                          | ✅ OK            | 26.35      | 
+Admin        | GET /api/admin/workers                        | ⚠️ SLOW         | 1094.92    | 
+Admin        | GET /api/admin/queue                          | ⚠️ SLOW         | 3318.62    | 

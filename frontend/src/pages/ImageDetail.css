@@ -1,0 +1,623 @@
+.image-detail-loading,
+.image-detail-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    gap: var(--spacing-lg);
+    color: var(--color-text-secondary);
+}
+
+/* Breadcrumb */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-lg);
+}
+
+.breadcrumb-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.breadcrumb a {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+}
+
+.breadcrumb a:hover {
+    color: var(--color-primary);
+}
+
+/* Image Navigation */
+.image-navigation {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    background: var(--color-surface-elevated);
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--color-border);
+}
+
+.nav-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+
+.nav-btn:hover:not(:disabled) {
+    color: var(--color-primary);
+    transform: scale(1.2);
+}
+
+.nav-btn:disabled {
+    opacity: 0.2;
+    cursor: not-allowed;
+}
+
+.nav-index {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Layout */
+.image-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: var(--spacing-xl);
+}
+
+@media (max-width: 1200px) {
+    .image-detail-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Image Preview */
+.image-preview-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.image-preview {
+    aspect-ratio: 4 / 3;
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border);
+}
+
+/* Base Marker */
+.annotation-marker {
+    transform: translate(-50%, 50%);
+    /* Default center-bottom relative to point? No, usually center-center on point. */
+    /* If we position using left/bottom percentage of the center point, we want to center the CIRCLE on that point. */
+    /* Construction:
+       <div marker style="left: X%; bottom: Y%">
+          <circle /> -- centered
+          <label /> -- offset
+       </div>
+    */
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    cursor: pointer;
+    /* We want the (0,0) of this div to be exactly at the point.
+       If we use translate(-50%, 50%) assuming bottom-up coordinates...
+       Wait, "bottom: Y%" means the bottom edge is at Y.
+       If we want the CENTER to be at Y, we need to translate Y by +50% (downward visually?)
+       Actually, standard CSS: positive align is UP.
+       translate(-50%, 50%) moves LEFT by 50% width and DOWN by 50% height.
+       This effectively centers the div on the coordinate point.
+    */
+    /* 
+       We positioned the element using left: X%, bottom: Y%.
+       We interpreted Y as "distance from bottom".
+       But we want the CENTER of the element to be at (X, Y).
+       
+       By default, left/bottom positions the edge.
+       left: X% -> Left edge is at X.
+       bottom: Y% -> Bottom edge is at Y.
+       
+       To center horizontally: move left by -50% width. (translateX(-50%))
+       To center vertically: 
+         element is ALOVE Y. 
+         We want center at Y.
+         So move DOWN by 50% height. (translateY(50%))
+         
+       Wait, does bottom: 50% put the bottom edge at the middle of the screen? Yes.
+       If we want the center at the middle, we need to push the element DOWN by half its height.
+       Positive Y in translate is DOWN.
+       
+       So translate(-50%, 50%) IS correct for bottom-aligned positioning?
+       
+       Let's re-verify the "top-left" observation.
+       "The objects are located at the *top-left corner* of their respective boxes."
+       This means the box is drawn:
+       - To the right of the insertion point.
+       - Below the insertion point.
+       
+       This happens if:
+       - left: X% places left edge at X. (Correct)
+       - top: Y% places top edge at Y. (If we used Top)
+       
+       But we used Bottom!
+       `bottom: ${bottom}%`
+       
+       If the backend flip `y = height - y` works, then `y` is now distance from TOP.
+       So `bottom: (height - y_top) / height * 100` = percentage from bottom.
+       
+       Wait, if I inverted Y in backend...
+       Original: Y is fit-standard (bottom-up).
+       New Backend: Y is web-standard (top-down).
+       Frontend: `const bottom = (match.pixel_y / height) * 100`.
+       If `pixel_y` is top-down (e.g. 10px means top edge), then `bottom` calculation is:
+       (10 / 1000) * 100 = 1%. 
+       So `bottom: 1%`. That puts it at the BOTTOM of the screen.
+       This is WRONG if `pixel_y` is top-down.
+       
+       Correction:
+       If backend sends Top-Down coordinates:
+       Frontend should use `top: ${ (pixel_y / height) * 100 }%`.
+       
+       AND satisfy centering:
+       `top: Y%` -> Top edge at Y.
+       To center: `translate(-50%, -50%)`. (Up and Left).
+       
+       Let's switch to `top` positioning in React, and `translate(-50%, -50%)` in CSS.
+       This is standard and less confusing.
+    */
+    transform: translate(-50%, -50%);
+    z-index: 10;
+}
+
+/* Messier Style (Gold/Prominent) */
+.annotation-marker.messier {
+    z-index: 20;
+    /* On top of NGC */
+}
+
+.annotation-marker.messier .annotation-circle {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 193, 7, 0.8);
+    /* Amber-500 */
+    background-color: rgba(255, 193, 7, 0.15);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.annotation-marker.messier .annotation-label {
+    color: #ffc107;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin: 4px;
+}
+
+/* NGC Style (Cyan/Subtle) */
+.annotation-marker.ngc {
+    z-index: 10;
+}
+
+.annotation-marker.ngc .annotation-circle {
+    width: 18px;
+    height: 18px;
+    border: 1px solid rgba(0, 255, 255, 0.6);
+    /* Cyan */
+    border-style: dashed;
+    background-color: rgba(0, 255, 255, 0.05);
+}
+
+.annotation-marker.ngc .annotation-label {
+    color: rgba(0, 255, 255, 0.9);
+    font-size: 0.7rem;
+    font-weight: 400;
+}
+
+/* Named Star Style (Magenta/Vibrant) */
+.annotation-marker.named-star {
+    z-index: 15;
+}
+
+.annotation-marker.named-star .annotation-circle {
+    width: 22px;
+    height: 22px;
+    border: 2px solid rgba(255, 0, 255, 0.8);
+    /* Magenta */
+    border-radius: 50%;
+    /* Keep it circular as requested, distinct from icon */
+    background-color: rgba(255, 0, 255, 0.15);
+    box-shadow: 0 0 8px rgba(255, 0, 255, 0.4);
+}
+
+.annotation-marker.named-star .annotation-label {
+    color: #ff00ff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-shadow: 0 0 2px black;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* Hover Effects */
+.annotation-marker:hover {
+    z-index: 30;
+    /* Bring to front */
+}
+
+.annotation-marker:hover .annotation-circle {
+    background-color: rgba(255, 255, 255, 0.1);
+    transform: scale(1.1);
+}
+
+.annotation-marker:hover .annotation-label {
+    opacity: 1;
+    background-color: black;
+}
+
+/* Dynamic Label Positioning */
+/* Reset default label margin */
+.annotation-marker .annotation-label {
+    position: absolute;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+/* Top (Default) */
+.annotation-marker.label-top .annotation-label {
+    bottom: 100%;
+    margin-bottom: 5px;
+}
+
+/* Bottom */
+.annotation-marker.label-bottom .annotation-label {
+    top: 100%;
+    margin-top: 5px;
+}
+
+/* Right */
+.annotation-marker.label-right .annotation-label {
+    left: 100%;
+    margin-left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* Left */
+.annotation-marker.label-left .annotation-label {
+    right: 100%;
+    margin-right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.preview-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-md);
+    color: var(--color-text-muted);
+}
+
+.preview-icon {
+    font-size: 4rem;
+    opacity: 0.5;
+}
+
+.preview-text {
+    font-size: var(--font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.image-actions {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+.image-actions .btn {
+    flex: 1;
+}
+
+/* Metadata Panel */
+.metadata-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+}
+
+.metadata-header {
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--gradient-surface);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.title-group {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+}
+
+.title-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+}
+
+.image-title {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    word-break: break-all;
+    margin-bottom: 0;
+}
+
+.image-rating {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    font-size: var(--font-size-sm);
+    flex-shrink: 0;
+}
+
+.rating-label {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.image-rating .rating-stars {
+    display: flex;
+    gap: 2px;
+    font-size: 1.2rem;
+    line-height: 1;
+    position: static;
+    bottom: auto;
+    left: auto;
+}
+
+.image-rating .rating-stars .rating-star {
+    display: inline-block;
+    font-size: 1.2rem;
+    color: #4b5563;
+    /* Default gray for empty stars */
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.image-rating .rating-stars .rating-star:hover {
+    color: #fbbf24;
+    /* Gold on hover */
+    transform: scale(1.15);
+}
+
+.image-rating .rating-stars .rating-star.filled {
+    color: #fbbf24;
+    /* Gold for filled stars */
+}
+
+.rating-value {
+    color: var(--color-text-muted);
+    margin-left: var(--spacing-xs);
+    font-size: 0.9em;
+}
+
+.subtype-selector .select {
+    margin-top: var(--spacing-xs);
+}
+
+/* Metadata Sections */
+.metadata-section {
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.metadata-section:last-child {
+    border-bottom: none;
+}
+
+.section-title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-md);
+}
+
+@media (max-width: 1200px) {
+    .metadata-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.metadata-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    min-width: 0; /* Allow child overflow control */
+}
+
+.metadata-item dt {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.metadata-item dd {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-primary);
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+.exposure-value {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+/* Matched Objects */
+.matched-objects {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.matched-object-tag {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    text-decoration: none;
+    transition: all var(--transition-fast);
+}
+
+.matched-object-tag:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-glow);
+}
+
+.matched-object-tag .object-designation {
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+
+/* Crosshair Overlay */
+.crosshair-line {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+    z-index: 100;
+}
+
+.crosshair-line.horizontal {
+    height: 1px;
+    width: 100%;
+    left: 0;
+}
+
+.crosshair-line.vertical {
+    width: 1px;
+    height: 100%;
+    top: 0;
+}
+
+.crosshair-label {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: rgba(255, 255, 255, 0.9);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: monospace;
+    pointer-events: none;
+    z-index: 101;
+    white-space: nowrap;
+    transform: translate(10px, 10px);
+    /* Offset from cursor */
+}
+
+/* Secondary Layout Section */
+.image-secondary-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-lg);
+}
+
+@media (max-width: 900px) {
+    .image-secondary-section {
+        grid-template-columns: 1fr;
+    }
+}
+
+.secondary-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.secondary-panel .panel-header {
+    background: var(--gradient-surface);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.secondary-panel .panel-content {
+    padding: var(--spacing-lg);
+    flex: 1;
+}
+
+.secondary-panel .section-title {
+    margin-bottom: 0;
+    /* Remove default margin from reused class */
+}
+
+/* Object Coords */
+.object-coords {
+    font-family: monospace;
+    font-size: 0.8em;
+    color: var(--color-text-muted);
+    background: var(--color-background);
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin: 0 4px;
+}
+
+.image-main-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+}

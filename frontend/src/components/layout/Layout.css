@@ -1,0 +1,204 @@
+.layout {
+    display: flex;
+    min-height: 100vh;
+    position: relative;
+}
+
+/* Sidebar */
+.sidebar {
+    width: var(--sidebar-width);
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    transition: width var(--transition-normal), box-shadow var(--transition-normal);
+    overflow-x: hidden;
+}
+
+.layout.is-collapsed .sidebar {
+    width: 70px;
+}
+
+.layout.is-collapsed .sidebar:hover {
+    width: var(--sidebar-width);
+    box-shadow: var(--shadow-xl);
+}
+
+.sidebar-header {
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: var(--sidebar-width);
+}
+
+.sidebar-toggle {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    border-radius: var(--border-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    opacity: 0.5;
+}
+
+.sidebar-toggle:hover {
+    background: var(--color-surface-elevated);
+    color: var(--color-primary);
+    opacity: 1;
+}
+
+.layout.is-pinned .sidebar-toggle {
+    opacity: 0.8;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    flex-shrink: 0;
+}
+
+.logo-icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: var(--border-radius-lg);
+}
+
+.logo-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.logo-text {
+    display: flex;
+    flex-direction: column;
+    transition: opacity var(--transition-fast);
+}
+
+.layout.is-collapsed .sidebar:not(:hover) .logo-text,
+.layout.is-collapsed .sidebar:not(:hover) .nav-item span,
+.layout.is-collapsed .sidebar:not(:hover) .version-info {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Navigation */
+.sidebar-nav {
+    flex: 1;
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    min-width: var(--sidebar-width);
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    position: relative;
+    white-space: nowrap;
+}
+
+.nav-item svg {
+    flex-shrink: 0;
+    margin-left: 5px;
+    /* Alignment fix for collapsed view */
+}
+
+.layout.is-pinned .nav-item svg,
+.layout.is-collapsed .sidebar:hover .nav-item svg {
+    margin-left: 0;
+}
+
+.logout-button {
+    margin-top: auto;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    width: 100%;
+}
+
+.logout-button:hover {
+    background: rgba(248, 81, 73, 0.1) !important;
+    color: #f85149 !important;
+}
+
+
+/* Sidebar Footer */
+.sidebar-footer {
+    padding: var(--spacing-lg);
+    border-top: 1px solid var(--color-border);
+    min-width: var(--sidebar-width);
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    min-height: 100vh;
+    position: relative;
+    transition: margin-left var(--transition-normal);
+}
+
+.layout.is-collapsed .main-content {
+    margin-left: 70px;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 70px !important;
+    }
+
+    .logo-text,
+    .nav-item span,
+    .version-info {
+        display: none !important;
+    }
+
+    .logo-icon {
+        margin: 0 auto;
+    }
+
+    .nav-item {
+        justify-content: center;
+    }
+
+    .nav-item svg {
+        margin-left: 0;
+    }
+
+    .main-content,
+    .layout.is-collapsed .main-content {
+        margin-left: 70px;
+    }
+
+    .sidebar-toggle {
+        display: none;
+    }
+}
