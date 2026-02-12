@@ -40,6 +40,10 @@ def generate_thumbnail(self, image_id: int, force: bool = False):
 
             thumb_cache_dir = os.environ.get("THUMBNAIL_CACHE_PATH", "/data/thumbnails")
             
+            # Use settings for max size
+            from app.config import settings
+            max_size = (settings.thumbnail_max_size, settings.thumbnail_max_size)
+            
             # Generate (this now includes the hash fix and force parameter)
             # Check for subframe status to enable STF stretching
             from app.models.image import ImageSubtype
@@ -49,6 +53,7 @@ def generate_thumbnail(self, image_id: int, force: bool = False):
             thumb_path = ThumbnailGenerator.generate(
                 image.file_path, 
                 thumb_cache_dir, 
+                max_size=max_size,
                 is_subframe=is_subframe, 
                 apply_stf=is_subframe,
                 overwrite=force
