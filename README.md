@@ -83,6 +83,22 @@ This method uses pre-built production images and doesn't require cloning the ent
    - Generate a `SECRET_KEY`: `python -c "import secrets; print(secrets.token_hex(32))"`
    - Edit `.env` and set your `IMAGE_PATHS`, `NAS_USERNAME`, `NAS_PASSWORD`, etc.
 
+   - The most important section is to point the app at your source images. The example env file has 2 entries for this:
+   ```
+   # -------------------------------------------
+   # Image Storage Paths
+   # -------------------------------------------
+   # Container mount points for image scanning
+   IMAGE_PATH_1=./data/images
+   IMAGE_PATH_2=D:/temp/astro
+   ```
+   
+   # Download the backup and restore scripts
+   mkdir -p scripts
+   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/scripts/backup_db.ps1 -o scripts/backup_db.ps1
+   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/scripts/restore_backup.ps1 -o scripts/restore_backup.ps1
+
+
 3. **Start the Application**:
    ```bash
    docker compose up -d
