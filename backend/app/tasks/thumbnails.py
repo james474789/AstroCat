@@ -40,16 +40,24 @@ def generate_thumbnail(self, image_id: int, force: bool = False):
 
             thumb_cache_dir = os.environ.get("THUMBNAIL_CACHE_PATH", "/data/thumbnails")
             
-            # Generate (this now includes the hash fix)
-            # Check for subframe status to enable STF stretching -- NOW DISABLED BY DEFAULT
+            # Generate (this now includes the hash fix and force parameter)
+            # Check for subframe status to enable STF stretching
             from app.models.image import ImageSubtype
             is_subframe = (image.subtype == ImageSubtype.SUB_FRAME)
             
-            # Default to Linear (apply_stf=False) as requested
-            thumb_path = ThumbnailGenerator.generate(image.file_path, thumb_cache_dir, is_subframe=is_subframe, apply_stf=False)
+            # Apply STF stretch for subframes by default
+            thumb_path = ThumbnailGenerator.generate(
+                image.file_path, 
+                thumb_cache_dir, 
+                is_subframe=is_subframe, 
+                apply_stf=is_subframe,
+                overwrite=force
+            )
             
             if thumb_path:
                 image.thumbnail_path = thumb_path
+                from datetime import datetime
+                image.thumbnail_generated_at = datetime.utcnow()
                 session.commit()
                 return {
                     "status": "completed",
