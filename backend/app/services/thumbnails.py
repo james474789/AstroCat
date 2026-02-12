@@ -80,6 +80,8 @@ class ThumbnailGenerator:
             if denom != 0:
                 m = (x * (1 - y)) / denom
         
+        logger.debug(f"STF Stats: median={median:.6f}, mad={mad:.6f}, c0={c0:.6f}, median_new={median_new:.6f}, m={m:.6f}")
+
         # Apply MTF
         # (m - 1) * x / ((2 * m - 1) * x - m)
         if m != 0.5:
@@ -87,11 +89,6 @@ class ThumbnailGenerator:
              # Avoid division by zero
              term1 = (m - 1) * data
              term2 = (2 * m - 1) * data - m
-             # Handle term2 == 0 cases by replacing with small epsilon or masking? 
-             # MTF is monotonic, singularity at m/(2m-1) which is outside [0,1] for m in [0,1]?
-             # if m=0.5, term2 = 0*x - 0.5 = -0.5. No div zero.
-             # if m=0, term2 = -x. Div zero if x=0. But x in [0,1].
-             # if m=1, term2 = x - 1. Div zero if x=1.
              
              # Safe arithmetic
              with np.errstate(divide='ignore', invalid='ignore'):
@@ -285,12 +282,16 @@ class ThumbnailGenerator:
                 # Check for high bit depth modes
                 high_bit_modes = ('I', 'I;16', 'I;16L', 'I;16B', 'I;16S', 'F', 'I;32', 'I;32L', 'I;32B')
                 is_high_bit = img.mode in high_bit_modes
+                
+                logger.debug(f"Post-processing: handled={was_handled}, high_bit={is_high_bit}, mode={img.mode}")
 
-                if (apply_stf and not was_handled) or is_high_bit:
+                # ONLY enter this block if it wasn't already handled by a specialized loader
+                # OR if it's a high-bit image that Pillow didn't handle well but we can.
+                if (apply_stf or is_high_bit) and not was_handled:
                     arr = np.array(img).astype(float)
                     arr = np.nan_to_num(arr)
                     
-                    if apply_stf and not was_handled:
+                    if apply_stf:
                         # STF Stretch (Auto-Stretch)
                         processed_arr = ThumbnailGenerator.apply_stf_stretch(arr)
                     else:

@@ -151,7 +151,14 @@ def process_image(self, file_path: str):
         is_subframe = (metadata["subtype"] == ImageSubtype.SUB_FRAME)
     
     try:
-        thumbnail_path = ThumbnailGenerator.generate(file_path, settings.thumbnail_cache_path, is_subframe=is_subframe, apply_stf=is_subframe)
+        max_size = (settings.thumbnail_max_size, settings.thumbnail_max_size)
+        thumbnail_path = ThumbnailGenerator.generate(
+            file_path, 
+            settings.thumbnail_cache_path, 
+            max_size=max_size,
+            is_subframe=is_subframe, 
+            apply_stf=is_subframe
+        )
     except Exception as e:
         logger.error(f"Failed to generate thumbnail for {file_path}: {e}")
         thumbnail_path = None
