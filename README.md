@@ -185,9 +185,8 @@ AstroCat/
 ├── scripts/               # Utility scripts
 │   ├── backup_db.ps1      # Manual backup script
 │   └── restore_backup.ps1     # Database restore script
-├── docker-compose.yml     # Production (Build from source)
-├── docker-compose.hub.yml # Production (Pull from Docker Hub)
-├── docker-compose.dev.yml # Development override
+├── docker-compose.yml     # Core compose file (Build from Source)
+├── docker-compose-example.yml # Template for Docker Hub installation
 └── .env.example           # Environment template
 ```
 
