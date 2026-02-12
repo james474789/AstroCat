@@ -50,7 +50,7 @@ This method uses pre-built production images and doesn't require cloning the ent
    mkdir AstroCat; cd AstroCat
 
    # Download the compose file
-   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml" -OutFile "docker-compose.hub.yml"
+   Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose-example.yml" -OutFile "docker-compose.yml"
 
    # Download the environment template
    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example" -OutFile ".env"
@@ -68,7 +68,7 @@ This method uses pre-built production images and doesn't require cloning the ent
    mkdir AstroCat; cd AstroCat
 
    # Download the compose file
-   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose.hub.yml -o docker-compose.hub.yml
+   curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/docker-compose-example.yml -o docker-compose.yml
 
    # Download the environment template
    curl -L https://raw.githubusercontent.com/james474789/AstroCat/main/.env.example -o .env
@@ -85,7 +85,7 @@ This method uses pre-built production images and doesn't require cloning the ent
 
 3. **Start the Application**:
    ```bash
-   docker compose -f docker-compose.hub.yml up -d
+   docker compose up -d
    ```
 
 ---
