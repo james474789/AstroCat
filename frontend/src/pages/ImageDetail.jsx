@@ -24,8 +24,9 @@ export default function ImageDetail() {
         setAnnotatedImageError(false);
     }, [id]);
 
-    // Annotations Toggle: 0=None, 1=Astrocat (SVG), 2=Nova (Image Overlay)
-    const [annotationMode, setAnnotationMode] = useState(1);
+    // Annotations Toggle: 0=None, 1=Nova (Image Overlay)
+    const [annotationMode, setAnnotationMode] = useState(0);
+
     // Crosshair State
     const [cursorPos, setCursorPos] = useState(null);
     const imageRef = useRef(null);
@@ -246,124 +247,7 @@ export default function ImageDetail() {
         };
     };
 
-    // Memoize the annotation layer to avoid expensive recalculations on every render (e.g. mouse movement)
-    const annotationLayer = useMemo(() => {
-        if (annotationMode !== 1 || !image?.catalog_matches) return null;
 
-        const width = image.width_pixels;
-        const height = image.height_pixels;
-
-        if (!width || !height) return null;
-
-        // Filter valid matches
-        const validMatches = image.catalog_matches.filter(m => m.pixel_x != null && m.pixel_y != null);
-
-        // Sort: Messier first, then Named Stars, then NGC, then others
-        validMatches.sort((a, b) => {
-            const typeA = a.catalog_type;
-            const typeB = b.catalog_type;
-
-            const priority = { 'MESSIER': 1, 'NAMED_STAR': 2, 'NGC': 3, 'IC': 4 };
-            const pA = priority[typeA] || 99;
-            const pB = priority[typeB] || 99;
-
-            if (pA !== pB) return pA - pB;
-
-            return a.catalog_designation.localeCompare(b.catalog_designation);
-        });
-
-        // Collision Logic
-        const occupied = [];
-        // Default preference order: Top, Bottom, Right, Left
-        const directions = ['top', 'bottom', 'right', 'left'];
-
-        const processed = validMatches.map(match => {
-            const x = match.pixel_x;
-            const y = match.pixel_y;
-
-            let bestDir = 'top';
-
-            // Find best direction to avoid collision
-            for (const dir of directions) {
-                // Calculate proposed label center in pixels
-                // Offset approx 40 pixels from point
-                let lx = x;
-                let ly = y;
-                const offset = 40;
-
-                if (dir === 'top') ly -= offset; // Top means ABOVE point (smaller Y)
-                if (dir === 'bottom') ly += offset;
-                if (dir === 'right') lx += offset;
-                if (dir === 'left') lx -= offset;
-
-                // Check distance to all previously placed labels
-                let collision = false;
-                for (const occ of occupied) {
-                    const dx = lx - occ.x;
-                    const dy = ly - occ.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < 50) { // Collision threshold (radius)
-                        collision = true;
-                        break;
-                    }
-                }
-
-                if (!collision) {
-                    bestDir = dir;
-                    break;
-                }
-            }
-
-            // Record selected spot
-            let finalX = x;
-            let finalY = y;
-            const offset = 40;
-            if (bestDir === 'top') finalY -= offset;
-            if (bestDir === 'bottom') finalY += offset;
-            if (bestDir === 'right') finalX += offset;
-            if (bestDir === 'left') finalX -= offset;
-
-            occupied.push({ x: finalX, y: finalY });
-
-            return { ...match, labelDirection: bestDir };
-        });
-
-        return (
-            <div className="annotation-layer">
-                {processed.map((match, idx) => {
-                    const left = (match.pixel_x / width) * 100;
-                    const top = (match.pixel_y / height) * 100;
-
-                    let typeClass = 'ngc';
-                    if (match.catalog_type === 'MESSIER') typeClass = 'messier';
-                    else if (match.catalog_type === 'NAMED_STAR') typeClass = 'named-star';
-
-                    const dirClass = `label-${match.labelDirection}`;
-                    const label = match.common_name || match.name || match.catalog_designation;
-
-                    return (
-                        <div
-                            key={idx}
-                            className={`annotation-marker ${typeClass} ${dirClass}`}
-                            style={{
-                                left: `${left}%`,
-                                top: `${top}%`,
-                                position: 'absolute'
-                            }}
-                            title={label}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/search?object_name=${encodeURIComponent(match.catalog_designation || match.designation)}`)
-                            }}
-                        >
-                            <div className="annotation-circle"></div>
-                            <span className="annotation-label">{label}</span>
-                        </div>
-                    );
-                })}
-            </div>
-        );
-    }, [image, annotationMode, navigate]);
 
     // Mouse handlers for crosshair
     const handleMouseMove = (e) => {
@@ -499,9 +383,8 @@ export default function ImageDetail() {
                                         }}
                                         onError={() => setImgError(true)}
                                     />
-
                                     {/* Annotated Overlay Image (Nova Mode) */}
-                                    {annotationMode === 2 && image.is_plate_solved && !annotatedImageError && (
+                                    {annotationMode === 1 && image.is_plate_solved && !annotatedImageError && (
                                         <img
                                             src={`${API_BASE_URL}/images/${id}/annotated?t=${pageLoadTimestamp}`}
                                             alt="Annotated Overlay"
@@ -513,20 +396,13 @@ export default function ImageDetail() {
                                                 position: 'absolute',
                                                 top: 0,
                                                 left: 0,
-                                                zIndex: 3 // Above base and stretched layers
+                                                zIndex: 3 // Above base layer
                                             }}
                                             onError={(e) => {
                                                 e.target.style.display = 'none';
                                                 setAnnotatedImageError(true);
                                             }}
                                         />
-                                    )}
-
-                                    {/* SVG Annotation Layer (Astrocat Mode) */}
-                                    {annotationMode === 1 && (
-                                        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 4 }}>
-                                            {annotationLayer}
-                                        </div>
                                     )}
 
                                     {/* Transparent interactive layer for crosshair (needs to be on top) */}
@@ -586,15 +462,15 @@ export default function ImageDetail() {
                             >
                                 📥 Download JPG
                             </a>
+
                             <button
                                 className={`btn ${annotationMode !== 0 ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => setAnnotationMode((annotationMode + 1) % 3)}
-                                title="Toggle between: No Annotations, Astrocat (SVG), and Nova-astrometry (Retrieved)"
+                                onClick={() => setAnnotationMode(annotationMode === 0 ? 1 : 0)}
+                                title="Toggle Nova-astrometry Annotations"
                             >
-                                {annotationMode === 0 ? '🚫 No Annotations' :
-                                    annotationMode === 1 ? '🐱 Astrocat Annotations' :
-                                        '🔭 Nova Annotations'}
+                                {annotationMode === 0 ? '🚫 No Annotations' : '🔭 Nova Annotations'}
                             </button>
+
                             <button
                                 className="btn btn-secondary"
                                 onClick={handleRegenerateThumbnail}
