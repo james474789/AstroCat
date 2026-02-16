@@ -40,9 +40,10 @@ def _scan_directory(directory_path: str):
     try:
         with SessionLocal() as session:
             # 1. Get all existing file paths in this directory from DB for bulk lookup
-            stmt = select(Image.file_path).where(Image.file_path.like(f"{directory_path}%"))
+            stmt = select(Image.file_path, Image.pixinsight_annotation_path).where(Image.file_path.like(f"{directory_path}%"))
             result = session.execute(stmt)
-            existing_paths = {row[0] for row in result.all()}
+            # Map file_path -> pixinsight_annotation_path
+            existing_paths = {row[0]: row[1] for row in result.all()}
 
             # 2. Walk directory to find current files
             for root, _, files in os.walk(directory_path):
@@ -54,14 +55,40 @@ def _scan_directory(directory_path: str):
                         files_found += 1
 
                         # Check if already indexed using our pre-fetched set
-                        if str_path not in existing_paths:
+                        if str_path in existing_paths:
+                            # Existing file. Check if we need to backfill the annotation.
+                            # Skip if this IS an annotation file (safety check)
+                            if file_path.stem.endswith("_Annotated"):
+                                continue
+
+                            current_annotation = existing_paths[str_path]
+                            if not current_annotation:
+                                # Check if annotation exists on disk
+                                annotation_fname = file_path.stem + "_Annotated" + file_path.suffix
+                                annotation_file = file_path.parent / annotation_fname
+                                if annotation_file.exists():
+                                    # Update DB
+                                    logger.info(f"Backfilling annotation for existing image: {str_path}")
+                                    stmt = update(Image).where(Image.file_path == str_path).values(pixinsight_annotation_path=str(annotation_file))
+                                    session.execute(stmt)
+                                    session.commit()
+                        else:
+                             # New file logic remains...
+                            # SKIP if this is an annotation file (suffix "_Annotated")
+                            # We will handle it when processing the main file, or if main file exists we should update it.
+                            # Actually, we should check if it ends with _Annotated.{ext}
+                            # Robust check: stem ends with _Annotated
+                            if file_path.stem.endswith("_Annotated"):
+                                logger.debug(f"Skipping annotation file from main index: {str_path}")
+                                continue
+
                             # New file, queue for processing
                             logger.info(f"Queuing new file: {str_path}")
                             process_image.delay(str_path)
                             files_queued += 1
 
             # 3. Find files in DB that are no longer on disk (Efficiency: Bulk Delete)
-            missing_paths = existing_paths - disk_files
+            missing_paths = set(existing_paths.keys()) - disk_files
             if missing_paths:
                 files_removed = len(missing_paths)
                 logger.info(f"Removing {files_removed} deleted files from index in {directory_path}")
@@ -137,6 +164,23 @@ def process_image(self, file_path: str):
     file_stats = extractor.get_file_stats()
     
     logger.info(f"PROCESSING: {file_path}")
+    
+    logger.info(f"PROCESSING: {file_path}")
+
+    # Check for PixInsight Annotation File
+    # Convention: {filename}_Annotated.{ext}
+    # We look for a file in the same directory with same extension but _Annotated suffix
+    pixinsight_annotation_path = None
+    try:
+        # e.g. path/to/image.xisf -> path/to/image_Annotated.xisf
+        annotation_fname = path.stem + "_Annotated" + path.suffix
+        annotation_file = path.parent / annotation_fname
+        
+        if annotation_file.exists():
+            pixinsight_annotation_path = str(annotation_file)
+            logger.info(f"Found PixInsight annotation: {pixinsight_annotation_path}")
+    except Exception as e:
+        logger.error(f"Error checking for annotation file: {e}")
     
     # 1.5 Generate Thumbnail
     from app.services.thumbnails import ThumbnailGenerator
@@ -227,6 +271,17 @@ def process_image(self, file_path: str):
                     4326
                 )
 
+            # Update PostGIS geometry
+            if image.ra_center_degrees is not None and image.dec_center_degrees is not None:
+                image.center_location = func.ST_SetSRID(
+                    func.ST_MakePoint(float(image.ra_center_degrees), float(image.dec_center_degrees)), 
+                    4326
+                )
+            
+            # Update PixInsight Annotation Path
+            if pixinsight_annotation_path:
+                image.pixinsight_annotation_path = pixinsight_annotation_path
+
             # Update thumbnail if we generated one
             if thumbnail_path:
                 image.thumbnail_path = thumbnail_path
@@ -284,7 +339,10 @@ def process_image(self, file_path: str):
                 center_location=func.ST_SetSRID(
                     func.ST_MakePoint(float(wcs.get("ra_center")), float(wcs.get("dec_center"))), 
                     4326
-                ) if wcs.get("ra_center") is not None and wcs.get("dec_center") is not None else None
+                ) if wcs.get("ra_center") is not None and wcs.get("dec_center") is not None else None,
+                
+                # PixInsight Annotation
+                pixinsight_annotation_path=pixinsight_annotation_path
             )
             session.add(image)
             session.flush() # Get ID
