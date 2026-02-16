@@ -145,6 +145,9 @@ class Image(Base):
     
     # WCS Header (Full SIP Solution)
     wcs_header = Column(JSONB, nullable=True)
+
+    # PixInsight Annotation
+    pixinsight_annotation_path = Column(String(1024), nullable=True)
     
     # Timestamps
     indexed_at = Column(DateTime, default=datetime.utcnow, nullable=False)

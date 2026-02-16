@@ -195,7 +195,6 @@ class ThumbnailGenerator:
                                 data = data.astype(np.uint8)
                             
                             img = Image.fromarray(data)
-                            img = ImageOps.flip(img)
                         else:
                              return None
 
@@ -235,7 +234,6 @@ class ThumbnailGenerator:
                             data = data.astype(np.uint8)
                             
                         img = Image.fromarray(data)
-                        img = ImageOps.flip(img)
                     else:
                         return None
                 except Exception as e:

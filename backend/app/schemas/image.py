@@ -101,7 +101,9 @@ class ImageDetail(ImageBase):
     astrometry_url: Optional[str] = None
     astrometry_status: str = "NONE"
     plate_solve_provider: Optional[str] = None
+    plate_solve_provider: Optional[str] = None
     has_annotated_image: bool = False
+    has_pixinsight_annotation: bool = False
     
     # Thumbnails
     thumbnail_path: Optional[str] = None

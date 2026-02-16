@@ -24,7 +24,7 @@ export default function ImageDetail() {
         setAnnotatedImageError(false);
     }, [id]);
 
-    // Annotations Toggle: 0=None, 1=Nova (Image Overlay)
+    // Annotations Toggle: 0=None, 1=Nova (Image Overlay), 2=PixInsight (Full Image)
     const [annotationMode, setAnnotationMode] = useState(0);
 
     // Crosshair State
@@ -405,6 +405,24 @@ export default function ImageDetail() {
                                         />
                                     )}
 
+                                    {/* PixInsight Annotated Image (Replaces Base Layer visually) */}
+                                    {annotationMode === 2 && image.has_pixinsight_annotation && (
+                                        <img
+                                            src={`${API_BASE_URL}/images/${id}/pixinsight-annotation?t=${pageLoadTimestamp}`}
+                                            alt="PixInsight Annotation"
+                                            className="real-preview-image pixinsight-layer-img"
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'contain',
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                zIndex: 4 // Above Nova layer
+                                            }}
+                                        />
+                                    )}
+
                                     {/* Transparent interactive layer for crosshair (needs to be on top) */}
                                     <div
                                         style={{
@@ -463,12 +481,28 @@ export default function ImageDetail() {
                                 📥 Download JPG
                             </a>
 
+                            {/* Annotation Toggle (Cycle) */}
                             <button
                                 className={`btn ${annotationMode !== 0 ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => setAnnotationMode(annotationMode === 0 ? 1 : 0)}
-                                title="Toggle Nova-astrometry Annotations"
+                                onClick={() => {
+                                    // Cycle Logic: 0 -> 1 -> 2 -> 0 (Skip unavailable)
+                                    // Available modes
+                                    const available = [0];
+                                    if (image.is_plate_solved || image.has_annotated_image) available.push(1);
+                                    if (image.has_pixinsight_annotation) available.push(2);
+
+                                    // Find current index
+                                    const currentIdx = available.indexOf(annotationMode);
+                                    // Next index
+                                    const nextIdx = (currentIdx + 1) % available.length;
+                                    setAnnotationMode(available[nextIdx]);
+                                }}
+                                title="Toggle Annotations"
+                                disabled={(!image.is_plate_solved && !image.has_annotated_image && !image.has_pixinsight_annotation)}
                             >
-                                {annotationMode === 0 ? '🚫 No Annotations' : '🔭 Nova Annotations'}
+                                {annotationMode === 0 && '🚫 No Annotations'}
+                                {annotationMode === 1 && '🔭 Nova Annotation'}
+                                {annotationMode === 2 && '🎨 PixInsight Annotation'}
                             </button>
 
                             <button

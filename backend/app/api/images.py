@@ -489,10 +489,15 @@ async def get_image(image_id: int, db: AsyncSession = Depends(get_db)):
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
 
-    # Check for annotated image existence
+    # Check for annotated image existence (Astrometry.net)
     from app.config import settings
     annotated_path = os.path.join(settings.thumbnail_cache_path, f"annotated_{image_id}.jpg")
     image.has_annotated_image = os.path.exists(annotated_path)
+    
+    # Check for PixInsight Annotation existence
+    image.has_pixinsight_annotation = False
+    if image.pixinsight_annotation_path and os.path.exists(image.pixinsight_annotation_path):
+        image.has_pixinsight_annotation = True
 
     # If image is plate solved, calculate pixel coordinates for matches
     if image.is_plate_solved and image.catalog_matches:
@@ -958,7 +963,83 @@ async def get_annotated_image(image_id: int, db: AsyncSession = Depends(get_db))
     if not validate_path_safety(annotated_path, allowed_paths):
         raise HTTPException(status_code=403, detail="Access denied: Invalid annotated path")
         
+    if not validate_path_safety(annotated_path, allowed_paths):
+        raise HTTPException(status_code=403, detail="Access denied: Invalid annotated path")
+        
     return FileResponse(annotated_path)
+
+
+@router.get("/{image_id}/pixinsight-annotation")
+async def get_pixinsight_annotation(image_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Get the PixInsight annotated image (Source file + _Annotated).
+    """
+    from app.config import settings
+    
+    image = await db.get(Image, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+        
+    if not image.pixinsight_annotation_path:
+        raise HTTPException(status_code=404, detail="No PixInsight annotation available") # 404 if not linked
+        
+    if not os.path.exists(image.pixinsight_annotation_path):
+         raise HTTPException(status_code=404, detail="Annotation file missing from disk")
+
+    # Validate image path is within allowed directories
+    allowed_paths = settings.image_paths_list
+    if not validate_path_safety(image.pixinsight_annotation_path, allowed_paths):
+        raise HTTPException(status_code=403, detail="Access denied: Invalid file path")
+        
+    # Determine mime type from extension
+    import mimetypes
+    media_type, _ = mimetypes.guess_type(image.pixinsight_annotation_path)
+        
+    # If it's xisf or fits, we might want to convert it to JPG?
+    # For now, let's treat it similar to download/thumbnail.
+    # The requirement implies "viewing" it.
+    # The user asked for "show this PixInsight Annotation as an additional option".
+    # Browsers can't display XISF/FITS. 
+    # We should probably convert it to JPG on the fly if it's not web-safe.
+    
+    is_web_safe = media_type in ['image/jpeg', 'image/png', 'image/webp']
+    
+    if is_web_safe:
+        return FileResponse(image.pixinsight_annotation_path, media_type=media_type)
+    else:
+        # Generate JPG preview on the fly
+        try:
+            # Match stretching logic to the source image: apply STF only for linear sub-frames
+            from app.models.image import ImageSubtype
+            apply_stf = (image.subtype == ImageSubtype.SUB_FRAME)
+            
+            # Re-use thumbnail generator load logic (handles XISF/FITS)
+            img = ThumbnailGenerator.load_source_image(image.pixinsight_annotation_path, apply_stf=apply_stf) 
+            # If it's an annotation of a linear image, it might be linear. 
+            # But typically "Annotated" images are the final result.
+            # Safe bet: Try loading. If it's XISF, load_source_image handles it.
+            
+            if not img:
+                raise HTTPException(status_code=500, detail="Failed to proceed annotation image")
+                
+            # Resize? Full size?
+            # Let's send a high-res preview (2048px?) or full size?
+            # Full size might be huge. Let's limit to 2048 for performance unless requested otherwise.
+            # But users might want to zoom in to read text.
+            # Let's try 4096.
+            max_dimension = 4096
+            if img.width > max_dimension or img.height > max_dimension:
+               img.thumbnail((max_dimension, max_dimension), PILImage.Resampling.LANCZOS)
+            
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            buf.seek(0)
+            
+            return StreamingResponse(buf, media_type="image/jpeg")
+            
+        except Exception as e:
+            print(f"Error serving pixinsight annotation: {e}")
+            raise HTTPException(status_code=500, detail="Error processing annotation image")
 
 
 @router.get("/{image_id}/fits")
