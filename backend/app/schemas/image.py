@@ -145,3 +145,17 @@ class UpdateImageRequest(BaseModel):
     catalog_matches: List[CatalogMatchSchema] = [] # Optional for list view to save bandwidth?
     
     model_config = ConfigDict(from_attributes=True)
+
+class BulkUpdateImageTypeRequest(BaseModel):
+    """Request schema for bulk updating image types."""
+    image_ids: List[int]
+    subtype: ImageSubtype
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class BulkUpdateImageTypeResponse(BaseModel):
+    """Response schema for bulk image type update."""
+    updated_count: int
+    failed_count: int
+    total_count: int
+    errors: List[str] = []

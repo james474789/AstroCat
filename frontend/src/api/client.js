@@ -182,6 +182,16 @@ export function getDownloadUrl(id, format = 'jpg') {
     return `${API_BASE_URL}/images/${id}/download?format=${format}`;
 }
 
+export async function bulkUpdateImageType(newSubtype, searchParams) {
+    // Pass search filters as query parameters
+    const queryString = new URLSearchParams(searchParams).toString();
+    return handleResponse(await fetch(`${API_BASE_URL}/images/bulk/subtype?new_subtype=${encodeURIComponent(newSubtype)}&${queryString}`, {
+        method: 'PUT',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include'
+    }));
+}
+
 // ============ Search API ============
 
 export async function searchByMessier(designation) {

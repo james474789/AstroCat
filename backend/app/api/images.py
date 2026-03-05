@@ -863,6 +863,139 @@ async def update_image(
     return image
 
 
+@router.put("/bulk/subtype", response_model=dict)
+async def bulk_update_image_type(
+    new_subtype: ImageSubtype = Query(..., description="New image subtype to set"),
+    subtype: Optional[ImageSubtype] = None,
+    format: Optional[ImageFormat] = None,
+    is_plate_solved: Optional[str] = Query(None, description="Filter by plate solve status: 'solved', 'imported', 'unsolved', or boolean"),
+    rating: Optional[int] = Query(None, ge=0, le=5, description="Minimum rating (0-5 stars)"),
+    search: Optional[str] = Query(None, description="Search file names and object names"),
+    object_name: Optional[str] = None,
+    exposure_min: Optional[float] = None,
+    exposure_max: Optional[float] = None,
+    max_exposure_exclusive: bool = False,
+    rotation_min: Optional[float] = None,
+    rotation_max: Optional[float] = None,
+    pixel_scale_min: Optional[float] = None,
+    pixel_scale_max: Optional[float] = None,
+    pixel_scale_max_exclusive: bool = False,
+    filter: Optional[str] = None,
+    camera: Optional[str] = None,
+    ra: Optional[float] = Query(None, description="RA in degrees"),
+    dec: Optional[float] = Query(None, description="Dec in degrees"),
+    radius: Optional[float] = Query(None, description="Radius in degrees"),
+    path: Optional[str] = Query(None, description="Filter by file path prefix"),
+    start_date: Optional[Union[datetime, date]] = Query(None, description="Start of date range"),
+    end_date: Optional[Union[datetime, date]] = Query(None, description="End of date range"),
+    header_key: Optional[str] = None,
+    header_value: Optional[str] = None,
+    telescope: Optional[str] = None,
+    gain_min: Optional[float] = None,
+    gain_max: Optional[float] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Bulk update image type for all images matching the filters."""
+    
+    updated_count = 0
+    failed_count = 0
+    errors = []
+    
+    try:
+        # Build query using the same filter logic as export_csv
+        stmt = _build_image_query(
+            subtype=subtype,
+            format=format,
+            is_plate_solved=is_plate_solved,
+            rating=rating,
+            search=search,
+            object_name=object_name,
+            exposure_min=exposure_min,
+            exposure_max=exposure_max,
+            max_exposure_exclusive=max_exposure_exclusive,
+            rotation_min=rotation_min,
+            rotation_max=rotation_max,
+            pixel_scale_min=pixel_scale_min,
+            pixel_scale_max=pixel_scale_max,
+            pixel_scale_max_exclusive=pixel_scale_max_exclusive,
+            filter=filter,
+            camera=camera,
+            ra=ra,
+            dec=dec,
+            radius=radius,
+            path=path,
+            start_date=start_date,
+            end_date=end_date,
+            header_key=header_key,
+            header_value=header_value,
+            telescope=telescope,
+            gain_min=gain_min,
+            gain_max=gain_max
+        )
+        
+        # Execute query to get all matching images (no pagination)
+        result = await db.execute(stmt)
+        images = result.scalars().all()
+        
+        if not images:
+            return {
+                "updated_count": 0,
+                "failed_count": 0,
+                "total_count": 0,
+                "errors": []
+            }
+        
+        # Track which images need thumbnail regeneration
+        subtype_changed_ids = set()
+        
+        # Update all matching images
+        for image in images:
+            try:
+                # Only track if subtype actually changed
+                if image.subtype != new_subtype:
+                    image.subtype = new_subtype
+                    subtype_changed_ids.add(image.id)
+                    updated_count += 1
+                else:
+                    # Count as updated even if no change (idempotent)
+                    updated_count += 1
+            except Exception as e:
+                failed_count += 1
+                errors.append(f"Image {image.id}: {str(e)}")
+        
+        await db.commit()
+        
+        # Trigger thumbnail regeneration for changed images
+        if subtype_changed_ids:
+            try:
+                from app.tasks.thumbnails import generate_thumbnail
+                for image_id in subtype_changed_ids:
+                    generate_thumbnail.delay(image_id, force=True)
+            except Exception as e:
+                print(f"Failed to trigger thumbnail regeneration: {e}")
+        
+        # Trigger background sync to filesystem
+        try:
+            from app.tasks.sync_ratings import sync_ratings_to_filesystem
+            sync_ratings_to_filesystem.delay()
+        except Exception as e:
+            print(f"Failed to trigger rating sync: {e}")
+    
+    except Exception as e:
+        await db.rollback()
+        errors.append(f"Database error: {str(e)}")
+        failed_count = -1
+        updated_count = 0
+    
+    return {
+        "updated_count": updated_count,
+        "failed_count": failed_count,
+        "total_count": len(images) if 'images' in locals() else 0,
+        "errors": errors
+    }
+
+
+
 @router.get("/{image_id}/thumbnail")
 async def get_thumbnail(
     image_id: int, 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchImages, API_BASE_URL } from '../api/client';
+import { fetchImages, API_BASE_URL, bulkUpdateImageType } from '../api/client';
 import ImageCard from '../components/images/ImageCard';
 import FilterSection from '../components/layout/FilterSection';
 import FilterChips from '../components/layout/FilterChips';
@@ -40,6 +40,10 @@ export default function Search() {
         return saved ? parseInt(saved, 10) : 280;
     });
     const [imageContextMenu, setImageContextMenu] = useState(null); // { x, y, image }
+    const [bulkChangeModalOpen, setBulkChangeModalOpen] = useState(false);
+    const [bulkChangeSubtype, setBulkChangeSubtype] = useState('SUB_FRAME');
+    const [bulkChangeLoading, setBulkChangeLoading] = useState(false);
+    const [bulkChangeMessage, setBulkChangeMessage] = useState('');
 
     useEffect(() => {
         localStorage.setItem('thumbnailSize', thumbnailSize);
@@ -295,6 +299,39 @@ export default function Search() {
         }
     };
 
+    const handleBulkChangeImageType = async () => {
+        if (!bulkChangeSubtype || images.length === 0) {
+            setBulkChangeMessage('No valid selection');
+            return;
+        }
+
+        setBulkChangeLoading(true);
+        setBulkChangeMessage('');
+
+        try {
+            // Pass current search params to update all matching images
+            const result = await bulkUpdateImageType(bulkChangeSubtype, searchParams);
+
+            if (result.updated_count > 0) {
+                setBulkChangeMessage(`✓ Successfully updated ${result.updated_count} image(s)`);
+                // Reload images to reflect the changes
+                setTimeout(() => {
+                    loadImages();
+                    setBulkChangeModalOpen(false);
+                }, 1500);
+            } else if (result.failed_count > 0) {
+                setBulkChangeMessage(`✗ Failed to update ${result.failed_count} image(s)`);
+            } else {
+                setBulkChangeMessage('No images were updated');
+            }
+        } catch (error) {
+            console.error('Error updating image types:', error);
+            setBulkChangeMessage(`Error: ${error.message}`);
+        } finally {
+            setBulkChangeLoading(false);
+        }
+    };
+
     return (
         <div className="search-page">
             <div className="page-header">
@@ -311,6 +348,17 @@ export default function Search() {
                         title="Export current results to CSV"
                     >
                         ⬇ Export CSV
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                            setBulkChangeModalOpen(true);
+                            setBulkChangeMessage('');
+                        }}
+                        title="Change image type for all results"
+                        disabled={images.length === 0}
+                    >
+                        🔄 Bulk Change Type
                     </button>
                     <button
                         className="btn btn-secondary"
@@ -712,6 +760,96 @@ export default function Search() {
                 >
                     <div className="menu-item" onClick={handleExpandPath}>
                         📂 Expand Path
+                    </div>
+                </div>
+            )}
+
+            {bulkChangeModalOpen && (
+                <div 
+                    className="modal-overlay" 
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 2000
+                    }}
+                    onClick={() => !bulkChangeLoading && setBulkChangeModalOpen(false)}
+                >
+                    <div 
+                        className="modal-content"
+                        style={{
+                            backgroundColor: 'var(--color-bg-secondary)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: '8px',
+                            padding: '24px',
+                            maxWidth: '400px',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <h3 style={{ marginTop: 0, marginBottom: '16px', color: 'var(--color-text-primary)' }}>
+                            Change Image Type
+                        </h3>
+                        
+                        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
+                            This will change the image type for all {totalCount.toLocaleString()} matching image(s) in your search results.
+                        </p>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label className="label" style={{ display: 'block', marginBottom: '8px' }}>
+                                New Image Type
+                            </label>
+                            <select
+                                className="input select"
+                                value={bulkChangeSubtype}
+                                onChange={(e) => setBulkChangeSubtype(e.target.value)}
+                                disabled={bulkChangeLoading}
+                                style={{ width: '100%' }}
+                            >
+                                <option value="SUB_FRAME">Sub Frames</option>
+                                <option value="INTEGRATION_MASTER">Masters</option>
+                                <option value="INTEGRATION_DEPRECATED">Deprecated</option>
+                                <option value="PLANETARY">Planetary</option>
+                            </select>
+                        </div>
+
+                        {bulkChangeMessage && (
+                            <div style={{
+                                padding: '12px',
+                                marginBottom: '16px',
+                                borderRadius: '4px',
+                                backgroundColor: bulkChangeMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
+                                color: bulkChangeMessage.includes('✓') ? '#4CAF50' : '#F44336',
+                                fontSize: '0.9rem'
+                            }}>
+                                {bulkChangeMessage}
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setBulkChangeModalOpen(false)}
+                                disabled={bulkChangeLoading}
+                                style={{ minWidth: '100px' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleBulkChangeImageType}
+                                disabled={bulkChangeLoading}
+                                style={{ minWidth: '100px' }}
+                            >
+                                {bulkChangeLoading ? 'Updating...' : 'Update'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
