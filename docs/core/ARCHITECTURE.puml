@@ -1,0 +1,33 @@
+@startuml AstroCat_C4
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+SHOW_PERSON_OUTLINE()
+
+Person(user, "Astronomer", "Catalogs and searches astronomical images")
+
+System_Boundary(astrocat, "AstroCat System") {
+    Container(frontend, "React Frontend", "React 18, Vite", "SPA for browsing and searching images")
+    Container(api, "FastAPI Backend", "Python 3.12", "REST API for image management and queries")
+    Container(redis, "Redis", "Cache & Queue", "Task queue and caching layer")
+    Container(workers, "Celery Workers", "Python Celery", "Background processing: scanning, extracting metadata, matching catalogs, generating thumbnails")
+    Container(db, "PostgreSQL", "PostgreSQL 16 + PostGIS", "Persists images, metadata, and catalog matches with spatial indexing")
+    Container(storage, "Image Storage", "Filesystem", "FITS, RAW, and JPEG image files")
+}
+
+System_Ext(astrometry, "Astrometry.net", "External plate solving service")
+
+Rel(user, frontend, "Uses", "HTTPS")
+Rel(frontend, api, "REST API calls", "JSON/HTTP")
+Rel(api, db, "SQL queries", "SQL")
+Rel(api, redis, "Submits tasks", "Commands")
+Rel(api, storage, "Reads/writes", "Files")
+Rel(api, astrometry, "Submits images for plate solving", "HTTP API")
+
+Rel(redis, workers, "Delivers tasks", "Messages")
+Rel(workers, db, "Persists metadata and matches", "SQL")
+Rel(workers, storage, "Reads images", "Files")
+Rel(workers, astrometry, "Checks solving status", "HTTP API")
+
+Rel(frontend, storage, "Loads thumbnails", "HTTP/Files")
+
+@enduml
