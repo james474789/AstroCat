@@ -17,8 +17,18 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('images', sa.Column('pixinsight_annotation_path', sa.String(length=1024), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('images')]
+
+    if 'pixinsight_annotation_path' not in columns:
+        op.add_column('images', sa.Column('pixinsight_annotation_path', sa.String(length=1024), nullable=True))
 
 
 def downgrade():
-    op.drop_column('images', 'pixinsight_annotation_path')
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('images')]
+
+    if 'pixinsight_annotation_path' in columns:
+        op.drop_column('images', 'pixinsight_annotation_path')
