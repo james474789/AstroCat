@@ -261,15 +261,22 @@ async def seed_ngc_from_csv(session: AsyncSession, csv_path: str) -> int:
         except: return None
 
     count = 0
+    seen_designations = set()
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f, delimiter=';')
         for row in reader:
             name = row['Name']
-            
+            designation = name.replace(" ", "")
+
+            # Skip duplicate designations in the CSV file itself
+            if designation in seen_designations:
+                continue
+            seen_designations.add(designation)
+
             # Check if exists
             existing = await session.execute(
                 text("SELECT id FROM ngc_catalog WHERE designation = :des"),
-                {"des": name}
+                {"des": designation}
             )
             if existing.fetchone():
                 continue
