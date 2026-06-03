@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchMessierCatalog, fetchNGCCatalog, fetchNamedStarCatalog, formatRA, formatDec } from '../api/client';
+import { fetchMessierCatalog, fetchNGCCatalog, fetchCaldwellCatalog, fetchNamedStarCatalog, formatRA, formatDec } from '../api/client';
 import './Catalogs.css';
 
 export default function Catalogs() {
@@ -15,20 +15,22 @@ export default function Catalogs() {
     const [hasImagesOnly, setHasImagesOnly] = useState(false);
     const [sortBy, setSortBy] = useState('default');
     const [sortOrder, setSortOrder] = useState('asc');
-    const [counts, setCounts] = useState({ messier: 0, ngc: 0, stars: 0 });
+    const [counts, setCounts] = useState({ messier: 0, ngc: 0, caldwell: 0, stars: 0 });
 
     // Initial load for counts
     useEffect(() => {
         async function loadCounts() {
             try {
-                const [messierData, ngcData, starsData] = await Promise.all([
+                const [messierData, ngcData, caldwellData, starsData] = await Promise.all([
                     fetchMessierCatalog({ page: 1, page_size: 1 }),
                     fetchNGCCatalog({ page: 1, page_size: 1, catalog: 'NGC' }),
+                    fetchCaldwellCatalog({ page: 1, page_size: 1 }),
                     fetchNamedStarCatalog({ page: 1, page_size: 1 })
                 ]);
                 setCounts({
                     messier: messierData.total,
                     ngc: ngcData.total,
+                    caldwell: caldwellData.total,
                     stars: starsData.total
                 });
             } catch (error) {
@@ -69,6 +71,8 @@ export default function Catalogs() {
                 data = await fetchMessierCatalog(params);
             } else if (activeTab === 'ngc') {
                 data = await fetchNGCCatalog(params);
+            } else if (activeTab === 'caldwell') {
+                data = await fetchCaldwellCatalog(params);
             } else if (activeTab === 'stars') {
                 data = await fetchNamedStarCatalog(params);
             }
@@ -137,6 +141,14 @@ export default function Catalogs() {
                     <span className="tab-count">{counts.ngc.toLocaleString()} objects</span>
                 </button>
                 <button
+                    className={`catalog-tab ${activeTab === 'caldwell' ? 'active' : ''}`}
+                    onClick={() => handleTabChange('caldwell')}
+                >
+                    <span className="tab-icon">🌠</span>
+                    <span className="tab-label">Caldwell</span>
+                    <span className="tab-count">{counts.caldwell.toLocaleString()} objects</span>
+                </button>
+                <button
                     className={`catalog-tab ${activeTab === 'stars' ? 'active' : ''}`}
                     onClick={() => handleTabChange('stars')}
                 >
@@ -183,7 +195,7 @@ export default function Catalogs() {
                                 setCurrentPage(1);
                             }}
                         >
-                            <option value="default">Default Sort ({activeTab === 'messier' ? 'M#' : 'NGC#'})</option>
+                            <option value="default">Default Sort ({activeTab === 'messier' ? 'M#' : (activeTab === 'ngc' ? 'NGC#' : activeTab === 'caldwell' ? 'C#' : 'Name')})</option>
                             <option value="exposure">Cumulative Exposure</option>
                             <option value="ra">Right Ascension (RA)</option>
                         </select>

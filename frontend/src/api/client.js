@@ -241,6 +241,20 @@ export async function fetchNGCCatalog(params = {}) {
     return handleResponse(await fetch(`${API_BASE_URL}/catalogs/ngc?${queryString}`, { credentials: 'include' }));
 }
 
+export async function fetchCaldwellCatalog(params = {}) {
+    const queryParams = {
+        page: params.page || 1,
+        page_size: params.page_size || 50,
+        constellation: params.constellation,
+        q: params.q,
+        has_images: params.has_images,
+        sort_by: params.sort_by,
+        sort_order: params.sort_order
+    };
+    const queryString = buildQueryString(queryParams);
+    return handleResponse(await fetch(`${API_BASE_URL}/catalogs/caldwell?${queryString}`, { credentials: 'include' }));
+}
+
 export async function fetchNamedStarCatalog(params = {}) {
     const queryParams = {
         page: params.page || 1,

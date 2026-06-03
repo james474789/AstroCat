@@ -127,6 +127,39 @@ class NGCCatalog(Base):
         return "Unknown"
 
 
+class CaldwellCatalog(Base):
+    """
+    Caldwell Catalogue - 109 curated deep-sky objects.
+    """
+    __tablename__ = "caldwell_catalog"
+
+    id = Column(Integer, primary_key=True, index=True)
+    designation = Column(String(10), unique=True, nullable=False, index=True)
+    caldwell_number = Column(Integer, unique=True, nullable=False, index=True)
+    source_designation = Column(String(20), nullable=True, index=True)
+    common_name = Column(String(100), nullable=True)
+    aliases = Column(Text, nullable=True)
+
+    ra_degrees = Column(Float, nullable=False)
+    dec_degrees = Column(Float, nullable=False)
+    location = Column(
+        Geography(geometry_type='POINT', srid=4326),
+        nullable=True
+    )
+
+    object_type = Column(String(50), nullable=True)
+    object_definition = Column(String(100), nullable=True)
+    constellation = Column(String(50), nullable=True)
+
+    apparent_magnitude = Column(Float, nullable=True)
+    b_magnitude = Column(Float, nullable=True)
+    major_axis_arcmin = Column(Float, nullable=True)
+    minor_axis_arcmin = Column(Float, nullable=True)
+
+    def __repr__(self):
+        return f"<Caldwell({self.designation}, {self.common_name or self.object_type})>"
+
+
 class NamedStarCatalog(Base):
     """
     Named Stars Catalog (~3671 objects).
