@@ -13,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal, engine
-from app.models.catalog import MessierCatalog, NGCCatalog
+from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog
 
 
 async def seed_messier_catalog(session: AsyncSession) -> int:
@@ -332,6 +332,119 @@ async def seed_ngc_from_csv(session: AsyncSession, csv_path: str) -> int:
     return count
 
 
+async def seed_caldwell_catalog(session: AsyncSession) -> int:
+    """Seed the Caldwell catalog table from caldwell_catalog.json."""
+    json_path = Path(__file__).parent.parent.parent / "data" / "caldwell_catalog.json"
+    if not json_path.exists():
+        print(f"⚠️ caldwell_catalog.json not found at {json_path}")
+        return 0
+
+    print(f"📄 Importing Caldwell catalog from {json_path}...")
+    count = 0
+
+    with open(json_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+        targets = data.get('targets', [])
+
+        for item in targets:
+            designation = item.get('name')
+            if not designation or not designation.startswith('C'):
+                continue
+            try:
+                c_num = int(designation[1:])
+            except Exception:
+                continue
+
+            source_designation = item.get('source_id')
+            common_name = item.get('common_name') or None
+            aliases = item.get('aliases') or []
+            aliases_str = ','.join([alias for alias in aliases if alias]) if aliases else None
+            object_type = item.get('type') or item.get('object_definition') or 'Deep Sky Object'
+            object_definition = item.get('object_definition')
+            constellation = item.get('constellation')
+            ra = item.get('ra')
+            dec = item.get('dec')
+            apparent_mag = item.get('v_mag') if item.get('v_mag') is not None else item.get('max_mag')
+            b_mag = item.get('b_mag')
+            major_axis = item.get('major_axis_arcmin')
+            minor_axis = item.get('minor_axis_arcmin')
+
+            if ra is None or dec is None:
+                print(f"Skipping {designation} due to missing coordinates")
+                continue
+
+            existing = await session.execute(
+                text("SELECT id FROM caldwell_catalog WHERE designation = :des"),
+                {"des": designation}
+            )
+            existing_row = existing.fetchone()
+
+            if existing_row:
+                await session.execute(
+                    text("""
+                        UPDATE caldwell_catalog SET
+                            caldwell_number = :c_num,
+                            source_designation = :source,
+                            common_name = :common,
+                            aliases = :aliases,
+                            ra_degrees = :ra,
+                            dec_degrees = :dec,
+                            object_type = :otype,
+                            object_definition = :odef,
+                            constellation = :const,
+                            apparent_magnitude = :mag,
+                            b_magnitude = :bmag,
+                            major_axis_arcmin = :maj,
+                            minor_axis_arcmin = :min
+                        WHERE designation = :des
+                    """),
+                    {
+                        "c_num": c_num,
+                        "source": source_designation,
+                        "common": common_name,
+                        "aliases": aliases_str,
+                        "ra": ra,
+                        "dec": dec,
+                        "otype": object_type,
+                        "odef": object_definition,
+                        "const": constellation,
+                        "mag": apparent_mag,
+                        "bmag": b_mag,
+                        "maj": major_axis,
+                        "min": minor_axis,
+                        "des": designation
+                    }
+                )
+            else:
+                obj = CaldwellCatalog(
+                    caldwell_number=c_num,
+                    designation=designation,
+                    source_designation=source_designation,
+                    common_name=common_name,
+                    aliases=aliases_str,
+                    ra_degrees=ra,
+                    dec_degrees=dec,
+                    object_type=object_type,
+                    object_definition=object_definition,
+                    constellation=constellation,
+                    apparent_magnitude=apparent_mag,
+                    b_magnitude=b_mag,
+                    major_axis_arcmin=major_axis,
+                    minor_axis_arcmin=minor_axis,
+                )
+                session.add(obj)
+            count += 1
+
+    await session.commit()
+    await session.execute(text("""
+        UPDATE caldwell_catalog 
+        SET location = ST_SetSRID(ST_MakePoint(ra_degrees, dec_degrees), 4326)::geography
+        WHERE location IS NULL OR ra_degrees != ST_X(location::geometry) OR dec_degrees != ST_Y(location::geometry)
+    """))
+    await session.commit()
+    return count
+
+
 async def seed_all():
     """Run all seeding operations."""
     print("🌟 Seeding AstroCat catalogs...")
@@ -342,10 +455,12 @@ async def seed_all():
         m_count = res.scalar() or 0
         res = await session.execute(text("SELECT count(*) FROM ngc_catalog"))
         n_count = res.scalar() or 0
+        res = await session.execute(text("SELECT count(*) FROM caldwell_catalog"))
+        c_count = res.scalar() or 0
         
-        if m_count >= 110 and n_count >= 13000:
-            print(f"⏩ Catalogs already appear to be seeded (Messier: {m_count}, NGC: {n_count}). Skipping.")
-            return m_count + n_count
+        if m_count >= 110 and n_count >= 13000 and c_count >= 103:
+            print(f"⏩ Catalogs already appear to be seeded (Messier: {m_count}, NGC: {n_count}, Caldwell: {c_count}). Skipping.")
+            return m_count + n_count + c_count
 
         # 1. Seed Messier catalog
         messier_count = await seed_messier_catalog(session)
@@ -360,9 +475,13 @@ async def seed_all():
         else:
             ngc_count = await seed_ngc_catalog_sample(session)
             print(f"✅ Seeded {ngc_count} NGC objects from sample list")
+
+        # 3. Seed Caldwell catalog
+        caldwell_count = await seed_caldwell_catalog(session)
+        print(f"✅ Seeded {caldwell_count} Caldwell objects")
     
     print("🎉 Catalog seeding complete!")
-    return messier_count + ngc_count
+    return messier_count + ngc_count + caldwell_count
 
 
 if __name__ == "__main__":

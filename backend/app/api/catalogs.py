@@ -9,8 +9,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.catalog import MessierCatalog, NGCCatalog, NamedStarCatalog
-from app.schemas.catalog import MessierSchema, NGCSchema, NamedStarSchema
+from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, NamedStarCatalog
+from app.schemas.catalog import MessierSchema, NGCSchema, CaldwellSchema, NamedStarSchema
 from app.schemas.common import PaginatedResponse
 
 router = APIRouter()
@@ -188,6 +188,89 @@ async def list_ngc(
         obj.max_separation_degrees = row[3]
         items.append(obj)
     
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size
+    }
+
+
+@router.get("/caldwell", response_model=PaginatedResponse[CaldwellSchema])
+async def list_caldwell(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1),
+    constellation: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    has_images: bool = Query(False),
+    sort_by: str = Query("default"),
+    sort_order: str = Query("asc"),
+    db: AsyncSession = Depends(get_db)
+):
+    """List Caldwell catalog objects."""
+    from app.models.matches import ImageCatalogMatch
+    from app.models.image import Image
+    from sqlalchemy import select, func, desc
+
+    stats_subquery = select(
+        ImageCatalogMatch.catalog_designation,
+        func.coalesce(func.sum(Image.exposure_time_seconds), 0).label("cumulative_exposure_seconds"),
+        func.count(func.distinct(ImageCatalogMatch.image_id)).label("image_count"),
+        func.coalesce(func.max(ImageCatalogMatch.angular_separation_degrees), 0).label("max_separation_degrees")
+    ).join(Image, Image.id == ImageCatalogMatch.image_id).where(
+        ImageCatalogMatch.catalog_type.in_(["NGC", "IC"])
+    ).group_by(ImageCatalogMatch.catalog_designation).subquery()
+
+    base_stmt = select(
+        CaldwellCatalog,
+        func.coalesce(stats_subquery.c.cumulative_exposure_seconds, 0.0).label("cumulative_exposure_seconds"),
+        func.coalesce(stats_subquery.c.image_count, 0).label("image_count"),
+        func.coalesce(stats_subquery.c.max_separation_degrees, 0.0).label("max_separation_degrees")
+    ).outerjoin(
+        stats_subquery,
+        CaldwellCatalog.source_designation == stats_subquery.c.catalog_designation
+    )
+
+    if constellation:
+        base_stmt = base_stmt.where(CaldwellCatalog.constellation == constellation)
+    if q:
+        normalized_q = q.replace(" ", "")
+        base_stmt = base_stmt.where(
+            (func.replace(CaldwellCatalog.designation, ' ', '').ilike(normalized_q)) |
+            (CaldwellCatalog.common_name.ilike(f"%{q}%")) |
+            (CaldwellCatalog.constellation.ilike(f"%{q}%")) |
+            (func.replace(CaldwellCatalog.source_designation, ' ', '').ilike(normalized_q))
+        )
+    if has_images:
+        base_stmt = base_stmt.where(stats_subquery.c.image_count > 0)
+
+    count_stmt = select(func.count()).select_from(base_stmt.subquery())
+    count_result = await db.execute(count_stmt)
+    total = count_result.scalar() or 0
+
+    if sort_by == "exposure":
+        order_col = "cumulative_exposure_seconds"
+    elif sort_by == "ra":
+        order_col = CaldwellCatalog.ra_degrees
+    else:
+        order_col = CaldwellCatalog.caldwell_number
+
+    if sort_order == "desc":
+        stmt = base_stmt.order_by(desc(order_col))
+    else:
+        stmt = base_stmt.order_by(order_col)
+
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(stmt)
+    items = []
+    for row in result.all():
+        obj = row[0]
+        obj.cumulative_exposure_seconds = row[1]
+        obj.image_count = row[2]
+        obj.max_separation_degrees = row[3]
+        items.append(obj)
+
     return {
         "items": items,
         "total": total,
