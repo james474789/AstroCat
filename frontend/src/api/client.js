@@ -337,7 +337,8 @@ export async function fetchAdminStats() {
 export async function downloadBackup() {
     const response = await fetch(`${API_BASE_URL}/admin/backup/download`, {
         method: 'GET',
-        credentials: 'include'
+        credentials: 'include',
+        headers: withCsrfHeaders()
     });
     if (!response.ok) {
         const error = await response.text();
@@ -349,6 +350,7 @@ export async function downloadBackup() {
 export async function uploadBackup(formData) {
     return handleResponse(await fetch(`${API_BASE_URL}/admin/backup/upload`, {
         method: 'POST',
+        headers: withCsrfHeaders(),
         body: formData,
         credentials: 'include'
         // Important: DON'T set Content-Type header for FormData - let browser set it
