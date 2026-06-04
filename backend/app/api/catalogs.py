@@ -229,7 +229,7 @@ async def list_caldwell(
         func.coalesce(stats_subquery.c.max_separation_degrees, 0.0).label("max_separation_degrees")
     ).outerjoin(
         stats_subquery,
-        CaldwellCatalog.source_designation == stats_subquery.c.catalog_designation
+        CaldwellCatalog.designation == stats_subquery.c.catalog_designation
     )
 
     if constellation:
