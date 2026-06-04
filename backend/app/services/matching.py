@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import math
 
 from app.models.image import Image
-from app.models.catalog import MessierCatalog, NGCCatalog, NamedStarCatalog
+from app.models.catalog import MessierCatalog, NGCCatalog, NamedStarCatalog, CaldwellCatalog
 from app.models.matches import ImageCatalogMatch, CatalogType
 
 
@@ -61,6 +61,12 @@ class CatalogMatcher:
             image.ra_center_degrees, image.dec_center_degrees, radius
         )
         all_matches.append((CatalogType.NGC, ngc_rows))
+
+        # Match Caldwell
+        caldwell_rows = await self._find_caldwell_in_field(
+            image.ra_center_degrees, image.dec_center_degrees, radius
+        )
+        all_matches.append((CatalogType.CALDWELL, caldwell_rows))
 
         # Match Named Stars
         star_rows = await self._find_named_stars_in_field(
@@ -141,6 +147,32 @@ class CatalogMatcher:
                        ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography
                    ) / 111320.0 as dist
             FROM ngc_catalog
+            WHERE ST_DWithin(
+                location, 
+                ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography, 
+                :radius_meters
+            )
+            LIMIT 50
+        """)
+        
+        radius_meters = radius * 111320
+        
+        result = await self.session.execute(query, {
+            "ra": ra, 
+            "dec": dec, 
+            "radius_meters": radius_meters
+        })
+        return result.fetchall()
+
+    async def _find_caldwell_in_field(self, ra: float, dec: float, radius: float):
+        """Find Caldwell objects within radius."""
+        query = text("""
+            SELECT designation,
+                   ST_Distance(
+                       location, 
+                       ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography
+                   ) / 111320.0 as dist
+            FROM caldwell_catalog
             WHERE ST_DWithin(
                 location, 
                 ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography, 
@@ -263,6 +295,14 @@ class CatalogMatcher:
                 if obj:
                     return (obj.ra_degrees, obj.dec_degrees)
                     
+            elif cat_type == CatalogType.CALDWELL:
+                result = await self.session.execute(
+                    select(CaldwellCatalog).where(CaldwellCatalog.designation == designation)
+                )
+                obj = result.scalar_one_or_none()
+                if obj:
+                    return (obj.ra_degrees, obj.dec_degrees)
+                    
             elif cat_type == CatalogType.NAMED_STAR:
                 # Try direct match first
                 result = await self.session.execute(
@@ -368,6 +408,12 @@ class SyncCatalogMatcher:
         )
         all_matches.append((CatalogType.NGC, ngc_rows))
 
+        # Match Caldwell
+        caldwell_rows = self._find_caldwell_in_field(
+            image.ra_center_degrees, image.dec_center_degrees, radius
+        )
+        all_matches.append((CatalogType.CALDWELL, caldwell_rows))
+
         # Match Named Stars
         star_rows = self._find_named_stars_in_field(
             image.ra_center_degrees, image.dec_center_degrees, radius
@@ -443,6 +489,29 @@ class SyncCatalogMatcher:
                        ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography
                    ) / 111320.0 as dist
             FROM ngc_catalog
+            WHERE ST_DWithin(
+                location, 
+                ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography, 
+                :radius_meters
+            )
+            LIMIT 50
+        """)
+        radius_meters = radius * 111320
+        result = self.session.execute(query, {
+            "ra": ra, 
+            "dec": dec, 
+            "radius_meters": radius_meters
+        })
+        return result.fetchall()
+
+    def _find_caldwell_in_field(self, ra: float, dec: float, radius: float):
+        query = text("""
+            SELECT designation,
+                   ST_Distance(
+                       location, 
+                       ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography
+                   ) / 111320.0 as dist
+            FROM caldwell_catalog
             WHERE ST_DWithin(
                 location, 
                 ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography, 
@@ -555,6 +624,14 @@ class SyncCatalogMatcher:
             elif cat_type == CatalogType.NGC or cat_type == CatalogType.IC:
                 result = self.session.execute(
                     select(NGCCatalog).where(NGCCatalog.designation == designation)
+                )
+                obj = result.scalar_one_or_none()
+                if obj:
+                    return (obj.ra_degrees, obj.dec_degrees)
+                    
+            elif cat_type == CatalogType.CALDWELL:
+                result = self.session.execute(
+                    select(CaldwellCatalog).where(CaldwellCatalog.designation == designation)
                 )
                 obj = result.scalar_one_or_none()
                 if obj:

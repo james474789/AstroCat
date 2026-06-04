@@ -13,6 +13,8 @@ import {
     updateSettings,
     triggerMountMatches,
     triggerMountRescan,
+    downloadBackup,
+    uploadBackup,
     fetchUsers,
     createUser,
     deleteUser,
@@ -48,6 +50,9 @@ function Admin() {
     const [users, setUsers] = useState([]);
     const [newUser, setNewUser] = useState({ email: '', password: '', confirmPassword: '' });
     const [userActionLoading, setUserActionLoading] = useState(false);
+
+    // Backup/Restore Modal State
+    const [backupModal, setBackupModal] = useState({ open: false, type: '', file: null });
 
     // Lazy load settings section after main content renders
     const [settingsSectionReady, setSettingsSectionReady] = useState(false);
@@ -271,6 +276,71 @@ function Admin() {
             return;
         }
         setRescanModal({ open: true, path, force, dontShowAgain: false });
+    }
+
+    async function handleOpenBackupModal() {
+        setBackupModal({ open: true, type: 'backup', file: null });
+    }
+
+    async function handleOpenRestoreModal() {
+        setBackupModal({ open: true, type: 'restore', file: null });
+    }
+
+    async function handleBackup() {
+        try {
+            const blob = await downloadBackup();
+
+            // Create download link and trigger download
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const timestamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '_');
+            const filename = `astrocat_backup_${timestamp}.sql.gz`;
+
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+
+            // Cleanup
+            window.URL.revokeObjectURL(downloadUrl);
+            link.remove();
+
+            showToast('Database backup downloaded successfully', 'success', 3000);
+        } catch (error) {
+            console.error('Backup error:', error);
+            showToast(`Backup failed: ${error.message}`, 'error', 5000);
+        }
+    }
+
+    async function handleRestoreFileSelected(e) {
+        const file = e.target.files[0];
+        if (file) {
+            setBackupModal(prev => ({ ...prev, file }));
+        }
+    }
+
+    async function handleRestore(file) {
+        if (!window.confirm('WARNING: This will REPLACE ALL existing data in the database. This action cannot be undone!\n\nAre you sure you want to continue?')) {
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            await uploadBackup(formData);
+
+            showToast('Database restored successfully. Please refresh the page to see updated data.', 'success', 5000);
+            // Reset file input
+            const fileInput = document.getElementById('backup-restore-file-input');
+            if (fileInput) {
+                fileInput.value = '';
+            }
+            setBackupModal({ open: false, type: '', file: null });
+        } catch (error) {
+            console.error('Restore error:', error);
+            showToast(`Restore failed: ${error.message}`, 'error', 7000);
+        }
     }
 
     function toggleForceRescan(path) {
@@ -524,6 +594,16 @@ function Admin() {
                                     ))}
                             </div>
                         )}
+                        <div className="text-[10px] text-slate-500 mt-2 text-center">
+                            <div className="flex gap-2 justify-center">
+                                <button className="btn btn-sm btn-ghost" onClick={handleOpenBackupModal}>
+                                    💾 Backup
+                                </button>
+                                <button className="btn btn-sm btn-ghost" onClick={handleOpenRestoreModal}>
+                                    ♻️ Restore
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     {/* ACTIVE BULK OPERATIONS */}
@@ -647,6 +727,67 @@ function Admin() {
                                 <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #374151' }}>
                                     <button className="btn btn-secondary btn-sm" onClick={() => setRescanModal({ open: false, path: null, force: false, dontShowAgain: false })}>Cancel</button>
                                     <button className="btn btn-primary btn-sm" onClick={() => { if (rescanModal.dontShowAgain) localStorage.setItem('suppressBulkRescanConfirm', '1'); const { path, force } = rescanModal; setRescanModal({ open: false, path: null, force: false, dontShowAgain: false }); startBulkRescan(path, force); }}>Start</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Backup/Restore Confirm Modal */}
+                    {backupModal.open && (
+                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999 }}>
+                            <div style={{ width: 'min(480px, 92vw)', margin: '10vh auto', background: '#111827', color: 'white', borderRadius: '8px', border: '1px solid #374151', boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
+                                <div style={{ padding: '16px 18px', borderBottom: '1px solid #374151', fontWeight: 600 }}>
+                                    {backupModal.type === 'backup' ? 'Confirm Database Backup' : 'Confirm Database Restore'}
+                                </div>
+                                <div style={{ padding: '16px 18px' }}>
+                                    {backupModal.type === 'backup' ? (
+                                        <>
+                                            <p style={{ marginBottom: '12px' }}>This will create a backup of the AstroCat database and download it as a .sql.gz file.</p>
+                                            <p style={{ marginBottom: '8px', color: '#EAB308', fontSize: '0.9em' }}>
+                                                <strong>Warning:</strong> Depending on database size, this may take a moment and temporarily affect performance.
+                                            </p>
+                                        <div>
+                                            <p style={{ marginBottom: '12px' }}>This will restore the AstroCat database from the selected backup file.</p>
+                                            <p style={{ marginBottom: '8px', color: '#EF4444', fontSize: '0.9em' }}>
+                                                <strong>Warning:</strong> This will REPLACE ALL existing data in the database. This action cannot be undone!
+                                            </p>
+                                            <p style={{ marginBottom: '12px', color: '#9CA3AF', fontSize: '0.9em' }}>
+                                                Only select .sql or .sql.gz files that were exported from this AstroCat instance.
+                                            </p>
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>Select Backup File</label>
+                                                <input
+                                                    type="file"
+                                                    id="backup-restore-file-input"
+                                                    accept=".sql,.sql.gz"
+                                                    onChange={handleRestoreFileSelected}
+                                                    style={{ width: '100%', padding: '10px', background: '#2d3748', border: '1px solid #4a5568', borderRadius: '4px', color: 'white' }}
+                                                />
+                                                {backupModal.file && (
+                                                    <p style={{ marginTop: '8px', fontSize: '0.9em', color: '#10b981' }}>
+                                                        Selected: {backupModal.file.name}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                </div>
+                                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #374151' }}>
+                                    <button className="btn btn-secondary btn-sm" onClick={() => setBackupModal({ open: false, type: '', file: null })}>Cancel</button>
+                                    <button
+                                        className="btn btn-primary btn-sm"
+                                        onClick={() => {
+                                            if (backupModal.type === 'backup') {
+                                                handleBackup().then(() => setBackupModal({ open: false, type: '', file: null }));
+                                            } else if (backupModal.type === 'restore' && backupModal.file) {
+                                                handleRestore(backupModal.file).then(() => setBackupModal({ open: false, type: '', file: null }));
+                                            } else if (backupModal.type === 'restore' && !backupModal.file) {
+                                                // Show error if no file selected for restore
+                                                alert('Please select a backup file to restore');
+                                            }
+                                        }}
+                                    >
+                                        {backupModal.type === 'backup' ? 'Create Backup' : 'Restore Database'}
+                                    </button>
                                 </div>
                             </div>
                         </div>
