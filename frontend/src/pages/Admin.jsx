@@ -746,7 +746,9 @@ function Admin() {
                                             <p style={{ marginBottom: '8px', color: '#EAB308', fontSize: '0.9em' }}>
                                                 <strong>Warning:</strong> Depending on database size, this may take a moment and temporarily affect performance.
                                             </p>
-                                        <div>
+                                        </>
+                                    ) : (
+                                        <>
                                             <p style={{ marginBottom: '12px' }}>This will restore the AstroCat database from the selected backup file.</p>
                                             <p style={{ marginBottom: '8px', color: '#EF4444', fontSize: '0.9em' }}>
                                                 <strong>Warning:</strong> This will REPLACE ALL existing data in the database. This action cannot be undone!
@@ -769,7 +771,8 @@ function Admin() {
                                                     </p>
                                                 )}
                                             </div>
-                                        </div>
+                                        </>
+                                    )}
                                 </div>
                                 <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #374151' }}>
                                     <button className="btn btn-secondary btn-sm" onClick={() => setBackupModal({ open: false, type: '', file: null })}>Cancel</button>
