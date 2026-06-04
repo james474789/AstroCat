@@ -209,7 +209,7 @@ async def list_caldwell(
     db: AsyncSession = Depends(get_db)
 ):
     """List Caldwell catalog objects."""
-    from app.models.matches import ImageCatalogMatch
+    from app.models.matches import ImageCatalogMatch, CatalogType
     from app.models.image import Image
     from sqlalchemy import select, func, desc
 
@@ -219,7 +219,7 @@ async def list_caldwell(
         func.count(func.distinct(ImageCatalogMatch.image_id)).label("image_count"),
         func.coalesce(func.max(ImageCatalogMatch.angular_separation_degrees), 0).label("max_separation_degrees")
     ).join(Image, Image.id == ImageCatalogMatch.image_id).where(
-        ImageCatalogMatch.catalog_type.in_(["NGC", "IC"])
+        ImageCatalogMatch.catalog_type == CatalogType.CALDWELL
     ).group_by(ImageCatalogMatch.catalog_designation).subquery()
 
     base_stmt = select(

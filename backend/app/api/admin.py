@@ -3,7 +3,7 @@ Admin API
 Endpoints for system observability and administration.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from app.config import settings
@@ -338,3 +338,151 @@ async def get_system_stats():
     except Exception as e:
         print(f"CRITICAL ERROR in get_system_stats: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+@router.get("/backup/download")
+async def download_backup():
+    """
+    Download a backup of the database as a .sql.gz file.
+    """
+    from datetime import datetime
+    import subprocess
+    import tempfile
+    from urllib.parse import urlparse
+
+    try:
+        # Parse database URL to get connection parameters
+        parsed = urlparse(str(settings.database_url))
+        host = parsed.hostname or "db"
+        port = parsed.port or 5432
+        user = parsed.username
+        password = parsed.password
+        db = parsed.path.lstrip('/') if parsed.path else ""
+
+        # Create a temporary file for the backup
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"astrocat_backup_{timestamp}.sql.gz"
+
+        # Use pg_dump to create the backup
+        cmd = [
+            "pg_dump",
+            "-h", host,
+            "-p", str(port),
+            "-U", user,
+            "-d", db,
+            "-F", "p",  # plain text format
+            "--no-owner",
+            "--no-privileges"
+        ]
+
+        # Set environment for password
+        env = os.environ.copy()
+        env["PGPASSWORD"] = password
+
+        # Execute pg_dump and capture stdout
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env
+        )
+
+        stdout, stderr = proc.communicate()
+
+        if proc.returncode != 0:
+            raise Exception(f"pg_dump failed: {stderr.decode()}")
+
+        # Gzip the output
+        import gzip
+        compressed_data = gzip.compress(stdout, compresslevel=9)
+
+        # Return as downloadable file
+        from fastapi.responses import Response
+        return Response(
+            content=compressed_data,
+            media_type="application/gzip",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+
+    except Exception as e:
+        print(f"Error creating backup: {e}")
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
+
+@router.post("/backup/upload")
+async def upload_backup(file: UploadFile = File(...)):
+    """
+    Upload and restore a database backup from a .sql or .sql.gz file.
+    """
+    import subprocess
+    import tempfile
+    import os
+    from urllib.parse import urlparse
+
+    try:
+        # Validate file type
+        if not file.filename.endswith(('.sql', '.sql.gz')):
+            raise HTTPException(status_code=400, detail="File must be a .sql or .sql.gz file")
+
+        # Parse database URL to get connection parameters
+        parsed = urlparse(str(settings.database_url))
+        host = parsed.hostname or "db"
+        port = parsed.port or 5432
+        user = parsed.username
+        password = parsed.password
+        db = parsed.path.lstrip('/') if parsed.path else ""
+
+        # Read the uploaded file
+        contents = await file.read()
+
+        # Handle gzipped files
+        if file.filename.endswith('.gz'):
+            import gzip
+            contents = gzip.decompress(contents)
+
+        # Write to temporary file
+        with tempfile.NamedTemporaryFile(suffix='.sql', delete=False) as tmp_file:
+            tmp_file.write(contents)
+            tmp_filename = tmp_file.name
+
+        try:
+            # Use psql to restore the backup
+            cmd = [
+                "psql",
+                "-h", host,
+                "-p", str(port),
+                "-U", user,
+                "-d", db,
+                "-f", tmp_filename,
+                "--quiet",
+                "--no-owner",
+                "--no-privileges"
+            ]
+
+            # Set environment for password
+            env = os.environ.copy()
+            env["PGPASSWORD"] = password
+
+            # Execute psql for restore
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env
+            )
+
+            stdout, stderr = proc.communicate()
+
+            if proc.returncode != 0:
+                raise Exception(f"psql restore failed: {stderr.decode()}")
+
+            return JSONResponse(content={
+                "message": "Database restored successfully",
+                "filename": file.filename
+            })
+
+        finally:
+            # Clean up temporary file
+            os.unlink(tmp_filename)
+
+    except Exception as e:
+        print(f"Error restoring backup: {e}")
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")

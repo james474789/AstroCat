@@ -107,15 +107,11 @@ def _build_image_query(
     
     if object_name:
         from app.models.matches import ImageCatalogMatch
-        from app.models.catalog import MessierCatalog, NGCCatalog, NamedStarCatalog
+        from app.models.catalog import MessierCatalog, NGCCatalog, NamedStarCatalog, CaldwellCatalog
         
         # Search both header object name and matched catalog designations
         # Normalize by removing spaces for exact matching
         normalized_query = object_name.replace(" ", "")
-        
-        # 1. Search Matches (Messier, NGC, Named Stars)
-        # We want images that have a match where the designation OR common name matches query
-        # Use EXACT matching (case-insensitive) to prevent 'M1' from matching 'M13', 'M10', etc.
         
         # Subquery for Named Stars matching the query (exact match on designation, partial on common name)
         named_star_matches = select(NamedStarCatalog.designation).where(
@@ -123,10 +119,17 @@ def _build_image_query(
             (NamedStarCatalog.common_name.ilike(f"%{object_name}%"))
         )
         
+        # Subquery for Caldwell matches by designation or common name
+        caldwell_matches = select(CaldwellCatalog.designation).where(
+            (func.replace(CaldwellCatalog.designation, ' ', '').ilike(normalized_query)) |
+            (CaldwellCatalog.common_name.ilike(f"%{object_name}%"))
+        )
+        
         stmt = stmt.outerjoin(ImageCatalogMatch).where(
             (func.replace(Image.object_name, ' ', '').ilike(normalized_query)) | 
             (func.replace(ImageCatalogMatch.catalog_designation, ' ', '').ilike(normalized_query)) |
-            (ImageCatalogMatch.catalog_designation.in_(named_star_matches))
+            (ImageCatalogMatch.catalog_designation.in_(named_star_matches)) |
+            (ImageCatalogMatch.catalog_designation.in_(caldwell_matches))
         ).distinct()
     if exposure_min is not None:
         stmt = stmt.where(Image.exposure_time_seconds >= exposure_min)

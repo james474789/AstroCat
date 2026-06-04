@@ -17,6 +17,7 @@ class CatalogType(str, enum.Enum):
     MESSIER = "MESSIER"
     NGC = "NGC"
     IC = "IC"
+    CALDWELL = "CALDWELL"
     NAMED_STAR = "NAMED_STAR" # Named Stars
 
 

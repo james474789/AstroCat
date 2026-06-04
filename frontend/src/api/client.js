@@ -334,6 +334,27 @@ export async function fetchAdminStats() {
     return handleResponse(await fetch(`${API_BASE_URL}/admin/stats`, { credentials: 'include' }));
 }
 
+export async function downloadBackup() {
+    const response = await fetch(`${API_BASE_URL}/admin/backup/download`, {
+        method: 'GET',
+        credentials: 'include'
+    });
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error);
+    }
+    return response.blob();
+}
+
+export async function uploadBackup(formData) {
+    return handleResponse(await fetch(`${API_BASE_URL}/admin/backup/upload`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+        // Important: DON'T set Content-Type header for FormData - let browser set it
+    }));
+}
+
 export async function fetchWorkerStats() {
     return handleResponse(await fetch(`${API_BASE_URL}/admin/workers`, { credentials: 'include' }));
 }

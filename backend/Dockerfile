@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     libffi-dev \
     libraw-dev \
+    postgresql-client \
     supervisor \
     && mkdir -p /data/thumbnails /data/images /data/mount2 /data/mount3 \
     && chown -R 1000:1000 /data/thumbnails /data/images /data/mount2 /data/mount3 \
@@ -45,6 +46,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    postgresql-client \
     supervisor \
     && rm -rf /var/lib/apt/lists/*
 
