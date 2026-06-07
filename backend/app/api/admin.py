@@ -11,11 +11,13 @@ from app.worker import celery_app
 import redis
 import os
 import shutil
+import logging
 from app.database import AsyncSessionLocal
 from sqlalchemy import text, select
 
 import time
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Simple in-memory cache
@@ -350,6 +352,8 @@ async def download_backup():
     from urllib.parse import urlparse
 
     try:
+        logger.info("Starting database backup creation")
+
         # Parse database URL to get connection parameters
         parsed = urlparse(str(settings.database_url))
         host = parsed.hostname or "db"
@@ -370,7 +374,6 @@ async def download_backup():
             "-U", user,
             "-d", db,
             "-F", "p",  # plain text format
-            "--no-owner",
             "--no-privileges"
         ]
 
@@ -395,6 +398,8 @@ async def download_backup():
         import gzip
         compressed_data = gzip.compress(stdout, compresslevel=9)
 
+        logger.info(f"Database backup completed successfully: {filename}")
+
         # Return as downloadable file
         from fastapi.responses import Response
         return Response(
@@ -404,6 +409,7 @@ async def download_backup():
         )
 
     except Exception as e:
+        logger.error(f"Error creating backup: {e}")
         print(f"Error creating backup: {e}")
         raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
 
@@ -421,6 +427,8 @@ async def upload_backup(file: UploadFile = File(...)):
         # Validate file type
         if not file.filename.endswith(('.sql', '.sql.gz')):
             raise HTTPException(status_code=400, detail="File must be a .sql or .sql.gz file")
+
+        logger.info(f"Starting database restore from file: {file.filename}")
 
         # Parse database URL to get connection parameters
         parsed = urlparse(str(settings.database_url))
@@ -452,9 +460,7 @@ async def upload_backup(file: UploadFile = File(...)):
                 "-U", user,
                 "-d", db,
                 "-f", tmp_filename,
-                "--quiet",
-                "--no-owner",
-                "--no-privileges"
+                "--quiet"
             ]
 
             # Set environment for password
@@ -474,6 +480,7 @@ async def upload_backup(file: UploadFile = File(...)):
             if proc.returncode != 0:
                 raise Exception(f"psql restore failed: {stderr.decode()}")
 
+            logger.info(f"Database restore completed successfully from file: {file.filename}")
             return JSONResponse(content={
                 "message": "Database restored successfully",
                 "filename": file.filename
@@ -484,5 +491,6 @@ async def upload_backup(file: UploadFile = File(...)):
             os.unlink(tmp_filename)
 
     except Exception as e:
+        logger.error(f"Error restoring backup from {file.filename}: {e}")
         print(f"Error restoring backup: {e}")
         raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
