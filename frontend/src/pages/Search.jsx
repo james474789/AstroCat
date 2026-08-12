@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchImages, API_BASE_URL, bulkUpdateImageType } from '../api/client';
+import { fetchImages, API_BASE_URL, bulkUpdateImageType, bulkSyncMetadata } from '../api/client';
 import ImageCard from '../components/images/ImageCard';
 import FilterSection from '../components/layout/FilterSection';
 import FilterChips from '../components/layout/FilterChips';
@@ -44,6 +44,8 @@ export default function Search() {
     const [bulkChangeSubtype, setBulkChangeSubtype] = useState('SUB_FRAME');
     const [bulkChangeLoading, setBulkChangeLoading] = useState(false);
     const [bulkChangeMessage, setBulkChangeMessage] = useState('');
+    const [syncMetadataLoading, setSyncMetadataLoading] = useState(false);
+    const [syncMetadataMessage, setSyncMetadataMessage] = useState('');
 
     useEffect(() => {
         localStorage.setItem('thumbnailSize', thumbnailSize);
@@ -273,6 +275,21 @@ export default function Search() {
         window.location.href = url;
     }
 
+    async function handleSyncMetadata() {
+        setSyncMetadataLoading(true);
+        setSyncMetadataMessage('');
+
+        try {
+            const result = await bulkSyncMetadata(searchParams);
+            setSyncMetadataMessage(`Queued metadata sync for ${result.queued} image(s).`);
+        } catch (error) {
+            console.error('Failed to sync metadata:', error);
+            setSyncMetadataMessage(`Metadata sync failed: ${error.message}`);
+        } finally {
+            setSyncMetadataLoading(false);
+        }
+    }
+
     const handleImageContextMenu = (e, image) => {
         e.preventDefault();
         setImageContextMenu({
@@ -351,6 +368,14 @@ export default function Search() {
                     </button>
                     <button
                         className="btn btn-secondary"
+                        onClick={handleSyncMetadata}
+                        title="Queue metadata sync for all matching search results"
+                        disabled={syncMetadataLoading || totalCount === 0}
+                    >
+                        {syncMetadataLoading ? 'Syncing...' : '⟳ Sync Metadata'}
+                    </button>
+                    <button
+                        className="btn btn-secondary"
                         onClick={() => {
                             setBulkChangeModalOpen(true);
                             setBulkChangeMessage('');
@@ -367,6 +392,11 @@ export default function Search() {
                         {showFilters ? 'Hide Filters' : 'Show Filters'}
                     </button>
                 </div>
+                {syncMetadataMessage && (
+                    <div style={{ marginTop: '0.75rem', color: syncMetadataMessage.startsWith('Metadata sync failed') ? '#fda4af' : '#86efac' }}>
+                        {syncMetadataMessage}
+                    </div>
+                )}
             </div>
 
             <div className="search-layout">

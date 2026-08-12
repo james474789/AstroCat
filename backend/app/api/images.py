@@ -988,6 +988,93 @@ async def bulk_update_image_type(
         await db.rollback()
         errors.append(f"Database error: {str(e)}")
         failed_count = -1
+
+    return {
+        "updated_count": updated_count,
+        "failed_count": failed_count,
+        "total_count": len(images) if 'images' in locals() else 0,
+        "errors": errors
+    }
+
+
+@router.post("/bulk/metadata", response_model=dict)
+async def bulk_sync_metadata(
+    subtype: Optional[ImageSubtype] = None,
+    format: Optional[ImageFormat] = None,
+    is_plate_solved: Optional[str] = Query(None, description="Filter by plate solve status: 'solved', 'imported', 'unsolved', or boolean"),
+    rating: Optional[int] = Query(None, ge=0, le=5, description="Minimum rating (0-5 stars)"),
+    search: Optional[str] = Query(None, description="Search file names and object names"),
+    object_name: Optional[str] = None,
+    exposure_min: Optional[float] = None,
+    exposure_max: Optional[float] = None,
+    max_exposure_exclusive: bool = False,
+    rotation_min: Optional[float] = None,
+    rotation_max: Optional[float] = None,
+    pixel_scale_min: Optional[float] = None,
+    pixel_scale_max: Optional[float] = None,
+    pixel_scale_max_exclusive: bool = False,
+    filter: Optional[str] = None,
+    camera: Optional[str] = None,
+    ra: Optional[float] = Query(None, description="RA in degrees"),
+    dec: Optional[float] = Query(None, description="Dec in degrees"),
+    radius: Optional[float] = Query(None, description="Radius in degrees"),
+    path: Optional[str] = Query(None, description="Filter by file path prefix"),
+    start_date: Optional[Union[datetime, date]] = Query(None, description="Start of date range"),
+    end_date: Optional[Union[datetime, date]] = Query(None, description="End of date range"),
+    header_key: Optional[str] = None,
+    header_value: Optional[str] = None,
+    telescope: Optional[str] = None,
+    gain_min: Optional[float] = None,
+    gain_max: Optional[float] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Queue metadata re-extraction for all images matching the filters."""
+    try:
+        stmt = _build_image_query(
+            subtype=subtype,
+            format=format,
+            is_plate_solved=is_plate_solved,
+            rating=rating,
+            search=search,
+            object_name=object_name,
+            exposure_min=exposure_min,
+            exposure_max=exposure_max,
+            max_exposure_exclusive=max_exposure_exclusive,
+            rotation_min=rotation_min,
+            rotation_max=rotation_max,
+            pixel_scale_min=pixel_scale_min,
+            pixel_scale_max=pixel_scale_max,
+            pixel_scale_max_exclusive=pixel_scale_max_exclusive,
+            filter=filter,
+            camera=camera,
+            ra=ra,
+            dec=dec,
+            radius=radius,
+            path=path,
+            start_date=start_date,
+            end_date=end_date,
+            header_key=header_key,
+            header_value=header_value,
+            telescope=telescope,
+            gain_min=gain_min,
+            gain_max=gain_max
+        )
+        stmt = stmt.with_only_columns(Image.file_path).order_by(None)
+        result = await db.execute(stmt)
+        file_paths = [row[0] for row in result.all()]
+
+        from app.tasks.indexer import process_image
+
+        for file_path in file_paths:
+            process_image.delay(file_path)
+
+        return {
+            "status": "queued",
+            "queued": len(file_paths)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
         updated_count = 0
     
     return {
