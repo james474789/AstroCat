@@ -146,9 +146,10 @@ def sanitize_metadata(data):
 
 
 @celery_app.task(bind=True, name="app.tasks.indexer.process_image")
-def process_image(self, file_path: str):
+def process_image(self, file_path: str, generate_thumbnail: bool = True):
     """
     Process a single image file - extract metadata and match catalogs (Synchronous).
+    Set generate_thumbnail=False to do a metadata-only refresh without regenerating thumbnails.
     """
     path = Path(file_path)
     if not path.exists():
@@ -182,30 +183,32 @@ def process_image(self, file_path: str):
     except Exception as e:
         logger.error(f"Error checking for annotation file: {e}")
     
-    # 1.5 Generate Thumbnail
-    from app.services.thumbnails import ThumbnailGenerator
-    
-    # Determine if stf stretch is needed (Default to True for new imports as they are likely subframes)
-    # Ideally extractors should return this.
-    is_subframe = True
-    if metadata.get("subtype"):
-        # If extractor determined it (e.g. from header), use it
-        # We need the enum value or string match
-        from app.models.image import ImageSubtype
-        is_subframe = (metadata["subtype"] == ImageSubtype.SUB_FRAME)
-    
-    try:
-        max_size = (settings.thumbnail_max_size, settings.thumbnail_max_size)
-        thumbnail_path = ThumbnailGenerator.generate(
-            file_path, 
-            settings.thumbnail_cache_path, 
-            max_size=max_size,
-            is_subframe=is_subframe, 
-            apply_stf=is_subframe
-        )
-    except Exception as e:
-        logger.error(f"Failed to generate thumbnail for {file_path}: {e}")
-        thumbnail_path = None
+    thumbnail_path = None
+    if generate_thumbnail:
+        # 1.5 Generate Thumbnail
+        from app.services.thumbnails import ThumbnailGenerator
+        
+        # Determine if stf stretch is needed (Default to True for new imports as they are likely subframes)
+        # Ideally extractors should return this.
+        is_subframe = True
+        if metadata.get("subtype"):
+            # If extractor determined it (e.g. from header), use it
+            # We need the enum value or string match
+            from app.models.image import ImageSubtype
+            is_subframe = (metadata["subtype"] == ImageSubtype.SUB_FRAME)
+        
+        try:
+            max_size = (settings.thumbnail_max_size, settings.thumbnail_max_size)
+            thumbnail_path = ThumbnailGenerator.generate(
+                file_path, 
+                settings.thumbnail_cache_path, 
+                max_size=max_size,
+                is_subframe=is_subframe, 
+                apply_stf=is_subframe
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate thumbnail for {file_path}: {e}")
+            thumbnail_path = None
     
     # 2. Save to Database
     with SessionLocal() as session:

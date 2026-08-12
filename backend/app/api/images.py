@@ -1066,7 +1066,7 @@ async def bulk_sync_metadata(
         from app.tasks.indexer import process_image
 
         for file_path in file_paths:
-            process_image.delay(file_path)
+            process_image.delay(file_path, generate_thumbnail=False)
 
         return {
             "status": "queued",
