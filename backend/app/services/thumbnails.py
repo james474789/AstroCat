@@ -318,14 +318,14 @@ class ThumbnailGenerator:
             return None
 
     @staticmethod
-    def generate(source_path: str, output_dir: str, max_size=(800, 800), is_subframe: bool = True, apply_stf: bool = False, overwrite: bool = False) -> str:
+    def generate(source_path: str, output_dir: str, max_size=(400, 400), is_subframe: bool = True, apply_stf: bool = False, overwrite: bool = False) -> str:
         """
         Generates a JPEG thumbnail for the given image file.
         
         Args:
             source_path: Absolute path to source file
             output_dir: Directory to save thumbnail
-            max_size: Tuple of (width, height)
+            max_size: Tuple of (width, height) - will be adjusted based on source image dimensions
             is_subframe: Whether to interpret as subframe (linear extraction for RAWs)
             apply_stf: Whether to apply STF Auto Stretch
             overwrite: Whether to overwrite existing thumbnail
@@ -347,7 +347,17 @@ class ThumbnailGenerator:
             img = ThumbnailGenerator.load_source_image(source_path, is_subframe=is_subframe, apply_stf=apply_stf)
             
             if img:
-                img.thumbnail(max_size, Image.Resampling.LANCZOS)
+                # Adaptive sizing: if longest side >= 1024, cap at 1024; otherwise use original size
+                width, height = img.size
+                longest_side = max(width, height)
+                
+                if longest_side >= 1024:
+                    adaptive_max_size = (1024, 1024)
+                else:
+                    # Use original image size (no downscaling for small images)
+                    adaptive_max_size = (width, height)
+                
+                img.thumbnail(adaptive_max_size, Image.Resampling.LANCZOS)
                 # Strip metadata to avoid save errors (e.g. malformed XMP)
                 img.info = {}
                 img.save(thumb_path, "JPEG", quality=85)
