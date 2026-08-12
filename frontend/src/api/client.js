@@ -192,6 +192,18 @@ export async function bulkUpdateImageType(newSubtype, searchParams) {
     }));
 }
 
+export async function bulkSyncMetadata(searchParams) {
+    const params = new URLSearchParams(searchParams);
+    params.delete('page');
+    params.delete('page_size');
+    const queryString = params.toString();
+    return handleResponse(await fetch(`${API_BASE_URL}/images/bulk/metadata?${queryString}`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include'
+    }));
+}
+
 // ============ Search API ============
 
 export async function searchByMessier(designation) {
