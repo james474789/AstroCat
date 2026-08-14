@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchDirectoryListing, triggerBulkThumbnails, triggerBulkMetadata, triggerMountRescan } from '../../api/client';
+import { fetchDirectoryListing, triggerBulkThumbnails, triggerBulkMetadata, triggerMountRescan, triggerFolderScan } from '../../api/client';
 import './FolderTree.css';
 
 // Robust path-prefix check to avoid partial matches (e.g. /data matching /data2)
@@ -181,6 +181,12 @@ export default function FolderTree({ selectedPath, onSelect }) {
                 await triggerBulkThumbnails(path);
             } else if (action === 'metadata') {
                 await triggerBulkMetadata(path);
+            } else if (action === 'scan') {
+                const result = await triggerFolderScan(path);
+                if (result?.error) {
+                    throw new Error(result.error);
+                }
+                alert(`Folder scan started for ${path}${result?.task_id ? ` (task ${result.task_id})` : ''}`);
             } else if (action === 'astrometry') {
                 await triggerMountRescan(path, true); // true to force rescan
             }
@@ -234,6 +240,9 @@ export default function FolderTree({ selectedPath, onSelect }) {
                     </div>
                     <div className="menu-item" onClick={() => handleAction('metadata')}>
                         📄 Pull Metadata from files
+                    </div>
+                    <div className="menu-item" onClick={() => handleAction('scan')}>
+                        🔄 Rescan folder
                     </div>
                     <div className="menu-item" onClick={() => handleAction('astrometry')}>
                         🔭 Bulk Astrometry

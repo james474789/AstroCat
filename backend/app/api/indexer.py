@@ -14,6 +14,32 @@ async def trigger_scan(background_tasks: BackgroundTasks):
     return {"message": "Scan started", "task_id": task.id}
 
 
+@router.post("/folder/scan")
+async def trigger_folder_scan(payload: dict, background_tasks: BackgroundTasks = None):
+    """Trigger a selective re-index for one folder/sub-folder."""
+    path = payload.get("path")
+    if not path:
+        logger.warning("Folder scan triggered without path")
+        return {"error": "Path required"}
+
+    if not isinstance(path, str) or not path.startswith("/data/"):
+        logger.warning(f"Invalid path format for folder scan: {path}")
+        return {"error": "Invalid path format. Must start with /data/"}
+
+    if ".." in path:
+        logger.warning(f"Path traversal attempt in folder scan: {path}")
+        return {"error": "Invalid path format. Must start with /data/"}
+
+    logger.info(f"Triggering folder scan for path: {path}")
+    try:
+        from app.tasks.indexer import scan_directory
+        task = scan_directory.delay(path)
+        logger.info(f"Folder scan task queued successfully: task_id={task.id}, path={path}")
+        return {"message": "Folder scan started", "task_id": task.id, "path": path}
+    except Exception as e:
+        logger.error(f"Failed to queue folder scan: {e}", exc_info=True)
+        return {"error": f"Failed to start folder scan: {str(e)}"}
+
 
 @router.post("/batch/matches")
 async def trigger_bulk_matches(payload: dict, background_tasks: BackgroundTasks):

@@ -396,6 +396,15 @@ export async function triggerScan() {
     }));
 }
 
+export async function triggerFolderScan(path) {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/folder/scan`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ path }),
+        credentials: 'include'
+    }));
+}
+
 export async function fetchThumbnailStats() {
     return handleResponse(await fetch(`${API_BASE_URL}/indexer/thumbnails/stats`, { credentials: 'include' }));
 }
