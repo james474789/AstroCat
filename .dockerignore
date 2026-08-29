@@ -1,0 +1,9 @@
+node_modules
+library
+data
+.git
+.pytest_cache
+*.log
+dist
+venv
+.venv

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { fetchCurrentUser, loginUser, logoutUser, fetchSetupStatus, signupAdmin } from '../api/client';
+import { fetchCurrentUser, loginUser, logoutUser, fetchSetupStatus, signupAdmin, fetchSystemVersion } from '../api/client';
 
 const AuthContext = createContext();
 
@@ -13,6 +13,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
+    const [systemVersion, setSystemVersion] = useState(null);
     const [loading, setLoading] = useState(true);
     const [setupComplete, setSetupComplete] = useState(false); // Default to false for first boot safety
     const [error, setError] = useState(null);
@@ -22,11 +23,15 @@ export const AuthProvider = ({ children }) => {
         const maxAttempts = 10;
         const delay = 1000; // 1 second
 
+        // Try fetching system version info in background
+        fetchSystemVersion().then(v => setSystemVersion(v)).catch(() => {});
+
         while (attempts < maxAttempts) {
             try {
                 // Check setup status first
                 const setupData = await fetchSetupStatus();
                 setSetupComplete(setupData.setup_complete);
+
 
                 // If setup is complete, try to fetch user
                 if (setupData.setup_complete) {
@@ -110,6 +115,7 @@ export const AuthProvider = ({ children }) => {
 
     const value = {
         user,
+        systemVersion,
         loading,
         setupComplete,
         setSetupComplete,

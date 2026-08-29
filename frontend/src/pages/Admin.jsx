@@ -1075,7 +1075,7 @@ function Admin() {
                         <div className="about-card">
                             <div className="about-logo">🌌 AstroCat</div>
                             <div className="about-version">
-                                App Version: <strong>v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'}</strong>
+                                App Version: <strong>v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')}</strong>
                             </div>
                             <p className="about-description">
                                 Astronomical Image Database - A modern web application for cataloging, indexing, and retrieving astronomical image files with plate-solving metadata and celestial object associations.
@@ -1088,7 +1088,7 @@ function Admin() {
                                     <div className="component-stack-item">
                                         <span className="component-name">Frontend UI</span>
                                         <span className="component-value font-mono">
-                                            v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'} (React + Vite)
+                                            v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')} (React + Vite)
                                         </span>
                                     </div>
                                     <div className="component-stack-item">
@@ -1097,6 +1097,7 @@ function Admin() {
                                             v{systemVersion?.backend?.version || '0.1.0'} (FastAPI / Python {systemVersion?.backend?.python || '3.12'})
                                         </span>
                                     </div>
+
                                     <div className="component-stack-item">
                                         <span className="component-name">Database</span>
                                         <span className="component-value font-mono">
