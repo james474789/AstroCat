@@ -81,8 +81,9 @@ const navItems = [
 ];
 
 export default function Layout({ children }) {
-    const { logout, user } = useAuth();
+    const { logout, user, systemVersion } = useAuth();
     const location = useLocation();
+
 
     const [isPinned, setIsPinned] = useState(() => {
         const saved = localStorage.getItem('sidebar-pinned');
@@ -146,7 +147,7 @@ export default function Layout({ children }) {
 
                 <div className="sidebar-footer">
                     <div className="version-info">
-                        <span>v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'}</span>
+                        <span>v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')}</span>
                         <span className="text-muted">AstroCat</span>
                     </div>
                 </div>
