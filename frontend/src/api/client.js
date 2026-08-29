@@ -552,6 +552,12 @@ export async function updateUserRole(userId, isAdmin) {
     }));
 }
 
+// ============ System Version API ============
+
+export async function fetchSystemVersion() {
+    return handleResponse(await fetch(`${API_BASE_URL}/version`));
+}
+
 
 // ============ Utility Functions ============
 

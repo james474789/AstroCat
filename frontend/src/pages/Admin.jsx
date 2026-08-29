@@ -18,7 +18,8 @@ import {
     fetchUsers,
     createUser,
     deleteUser,
-    updateUserRole
+    updateUserRole,
+    fetchSystemVersion
 } from '../api/client';
 import './Admin.css';
 import './Settings.css';
@@ -29,7 +30,9 @@ function Admin() {
     const [stats, setStats] = useState(null);
     const [workerStats, setWorkerStats] = useState(null);
     const [indexerStatus, setIndexerStatus] = useState(null);
+    const [systemVersion, setSystemVersion] = useState(null);
     const [loading, setLoading] = useState(true);
+
     const [error, setError] = useState(null);
     const [queueDetails, setQueueDetails] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -139,14 +142,25 @@ function Admin() {
         }
     }
 
+    async function loadVersionData() {
+        try {
+            const v = await fetchSystemVersion();
+            setSystemVersion(v);
+        } catch (err) {
+            console.error("Failed to load system version:", err);
+        }
+    }
+
     async function loadSystemSettings() {
         try {
             const s = await fetchSettings();
             setSystemSettings(s);
+            loadVersionData();
         } catch (err) {
             console.error("Failed to load settings:", err);
         }
     }
+
 
     async function handleProviderChange(newProvider) {
         setSettingsLoading(true);
@@ -1055,14 +1069,66 @@ function Admin() {
                         </div>
                     </section>
 
-                    {/* About Section */}
+                    {/* About & Component Stack Section */}
                     <section className="settings-section">
-                        <h2 className="section-title">ℹ️ About</h2>
+                        <h2 className="section-title">ℹ️ About & System Components</h2>
                         <div className="about-card">
                             <div className="about-logo">🌌 AstroCat</div>
-                            <div className="about-version">Version 1.0.0 (Development Build)</div>
-                            <p className="about-description">Astronomical Image Database - A modern web application for cataloging, indexing, and retrieving astronomical image files with plate-solving metadata and celestial object associations.</p>
-                            <div className="about-links"><a href="https://github.com/james474789/AstroCat" target="_blank" rel="noopener" className="link">GitHub Repository</a><a href="#" className="link">Documentation</a></div>
+                            <div className="about-version">
+                                App Version: <strong>v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'}</strong>
+                            </div>
+                            <p className="about-description">
+                                Astronomical Image Database - A modern web application for cataloging, indexing, and retrieving astronomical image files with plate-solving metadata and celestial object associations.
+                            </p>
+
+                            {/* Component Stack Breakdown */}
+                            <div className="component-stack-container">
+                                <h3 className="component-stack-title">Component Stack Details</h3>
+                                <div className="component-stack-grid">
+                                    <div className="component-stack-item">
+                                        <span className="component-name">Frontend UI</span>
+                                        <span className="component-value font-mono">
+                                            v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'} (React + Vite)
+                                        </span>
+                                    </div>
+                                    <div className="component-stack-item">
+                                        <span className="component-name">Backend API</span>
+                                        <span className="component-value font-mono">
+                                            v{systemVersion?.backend?.version || '0.1.0'} (FastAPI / Python {systemVersion?.backend?.python || '3.12'})
+                                        </span>
+                                    </div>
+                                    <div className="component-stack-item">
+                                        <span className="component-name">Database</span>
+                                        <span className="component-value font-mono">
+                                            {systemVersion?.database?.status === 'connected' ? 'PostgreSQL' : 'Disconnected'}
+                                            {systemVersion?.database?.postgis_version ? ` (PostGIS ${systemVersion.database.postgis_version.split(' ')[0]})` : ''}
+                                        </span>
+                                    </div>
+                                    <div className="component-stack-item">
+                                        <span className="component-name">DB Schema Revision</span>
+                                        <span className="component-value font-mono">
+                                            {systemVersion?.database?.schema_revision || 'Current'}
+                                        </span>
+                                    </div>
+                                    <div className="component-stack-item">
+                                        <span className="component-name">Task Queue</span>
+                                        <span className="component-value font-mono">
+                                            Celery + Redis {systemVersion?.redis?.redis_version ? `v${systemVersion.redis.redis_version}` : ''}
+                                        </span>
+                                    </div>
+                                    <div className="component-stack-item">
+                                        <span className="component-name">Environment</span>
+                                        <span className="component-value font-mono">
+                                            {systemVersion?.backend?.os || 'Docker / Linux'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="about-links">
+                                <a href="https://github.com/james474789/AstroCat" target="_blank" rel="noopener" className="link">GitHub Repository</a>
+                                <a href="/api/docs" target="_blank" rel="noopener" className="link">API Documentation</a>
+                            </div>
                         </div>
                     </section>
                 </div>

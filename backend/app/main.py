@@ -13,6 +13,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.database import init_db, close_db
+from app.version import __version__
 
 # API Routers (will be implemented in Phase 4)
 # from app.api import images, search, catalogs, stats, indexer
@@ -62,7 +63,7 @@ app = FastAPI(
     - **Advanced Search**: Search by coordinates, object names, exposure time, and more
     - **Thumbnail Generation**: On-demand thumbnail creation for quick previews
     """,
-    version="0.1.0",
+    version=__version__,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
@@ -100,7 +101,7 @@ app.add_middleware(CSRFMiddleware)
 
 
 # =============================================================================
-# Health Check Endpoints
+# Health & Version Check Endpoints
 # =============================================================================
 
 @app.get("/", tags=["Health"])
@@ -108,7 +109,7 @@ async def root():
     """Root endpoint - API information."""
     return {
         "name": "AstroCat API",
-        "version": "0.1.0",
+        "version": __version__,
         "docs": "/api/docs",
         "status": "running"
     }
@@ -120,8 +121,69 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "AstroCat-backend",
-        "version": "0.1.0"
+        "version": __version__
     }
+
+
+@app.get("/api/version", tags=["Health"])
+async def stack_version():
+    """Comprehensive stack and component version inspection."""
+    import sys
+    import platform
+    from sqlalchemy import text
+    from app.database import AsyncSessionLocal
+
+    version_info = {
+        "app_version": __version__,
+        "backend": {
+            "version": __version__,
+            "python": platform.python_version(),
+            "os": f"{platform.system()} {platform.release()}",
+        },
+        "database": {
+            "status": "disconnected",
+            "postgres_version": None,
+            "postgis_version": None,
+            "schema_revision": None,
+        },
+        "redis": {
+            "status": "disconnected",
+            "redis_version": None,
+        }
+    }
+
+    # DB Checks
+    try:
+        async with AsyncSessionLocal() as session:
+            pg_res = await session.execute(text("SELECT version()"))
+            version_info["database"]["postgres_version"] = pg_res.scalar()
+
+            gis_res = await session.execute(text("SELECT PostGIS_Version()"))
+            version_info["database"]["postgis_version"] = gis_res.scalar()
+
+            try:
+                rev_res = await session.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+                version_info["database"]["schema_revision"] = rev_res.scalar()
+            except Exception:
+                version_info["database"]["schema_revision"] = "unversioned/initial"
+
+            version_info["database"]["status"] = "connected"
+    except Exception as e:
+        version_info["database"]["error"] = str(e)
+
+    # Redis Checks
+    try:
+        import redis.asyncio as redis_async
+        r = redis_async.from_url(settings.redis_url)
+        info = await r.info("server")
+        version_info["redis"]["redis_version"] = info.get("redis_version")
+        version_info["redis"]["status"] = "connected"
+        await r.close()
+    except Exception as e:
+        version_info["redis"]["error"] = str(e)
+
+    return version_info
+
 
 
 @app.get("/api/health/db", tags=["Health"])

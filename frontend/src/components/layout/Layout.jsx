@@ -146,8 +146,8 @@ export default function Layout({ children }) {
 
                 <div className="sidebar-footer">
                     <div className="version-info">
-                        <span>v1.0.0</span>
-                        <span className="text-muted">Development Build</span>
+                        <span>v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0'}</span>
+                        <span className="text-muted">AstroCat</span>
                     </div>
                 </div>
             </aside>
