@@ -29,6 +29,7 @@ Detailed technical analysis and specifications for specific features.
 - [Overlay Logic](features/overlay_logic.md)
 - [Image Processors](features/Processors.md)
 - [Objects in Field Analysis](features/objects_in_field_technical_analysis.md)
+- [Indexer Scan Process](scanner.md)
 
 ### [Infrastructure](infrastructure/)
 Documentation related to deployment, security, and data integrity.
