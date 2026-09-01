@@ -168,6 +168,8 @@ async def get_indexer_status():
         files_added = r.get("indexer:files_added")
         files_updated = r.get("indexer:files_updated")
         files_removed = r.get("indexer:files_removed")
+        process_failures = r.get("indexer:process_failures")
+        failed_files = r.lrange("indexer:failed_files", 0, 9)
     except:
         is_running = False
         last_scan_at = None
@@ -176,6 +178,8 @@ async def get_indexer_status():
         files_added = None
         files_updated = None
         files_removed = None
+        process_failures = None
+        failed_files = []
     
     # Get mount point stats from database-persisted SystemStats (fast and consistent)
     mount_points = []
@@ -262,6 +266,8 @@ async def get_indexer_status():
         "files_added": int(files_added) if files_added else 0,
         "files_updated": int(files_updated) if files_updated else 0,
         "files_removed": int(files_removed) if files_removed else 0,
+        "process_failures": int(process_failures) if process_failures else 0,
+        "failed_files": failed_files if failed_files else [],
         "indexed_count": total_indexed,
         "mount_points": mount_points
     }

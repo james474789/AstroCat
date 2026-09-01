@@ -22,6 +22,15 @@ def setup_logging(log_dir: str = "/var/log/astrocat", log_level: str = "INFO"):
     
     log_file_path = os.path.join(log_dir, "app.log")
     
+    # Prefer a multi-process safe rotating handler: the celery worker pool and
+    # uvicorn workers all share app.log, and the stdlib RotatingFileHandler
+    # races during rotation (rename fails under concurrency).
+    try:
+        import concurrent_log_handler  # noqa: F401
+        file_handler_class = "concurrent_log_handler.ConcurrentRotatingFileHandler"
+    except ImportError:
+        file_handler_class = "logging.handlers.RotatingFileHandler"
+
     logging_config = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -43,7 +52,7 @@ def setup_logging(log_dir: str = "/var/log/astrocat", log_level: str = "INFO"):
                 "level": log_level,
             },
             "file": {
-                "class": "logging.handlers.RotatingFileHandler",
+                "class": file_handler_class,
                 "filename": log_file_path,
                 "maxBytes": 10 * 1024 * 1024,  # 10 MB
                 "backupCount": 5,

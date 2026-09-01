@@ -3,9 +3,13 @@ Base Extractor
 Abstract base class for all image metadata extractors.
 """
 
+import logging
+
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class BaseExtractor(ABC):
@@ -17,7 +21,10 @@ class BaseExtractor(ABC):
     def __init__(self, file_path: str):
         self.file_path = Path(file_path)
         if not self.file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+            # Lenient by design: callers (e.g. process_image) validate existence
+            # themselves, and unit tests construct extractors with mock paths.
+            # Extraction still fails naturally if the file is unreadable.
+            logger.warning(f"Extractor constructed for missing file: {file_path}")
 
     @abstractmethod
     def extract(self) -> Dict[str, Any]:

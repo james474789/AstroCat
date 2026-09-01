@@ -148,6 +148,11 @@ class Image(Base):
 
     # PixInsight Annotation
     pixinsight_annotation_path = Column(String(1024), nullable=True)
+
+    # Metadata Extraction Diagnostics
+    # Populated when metadata extraction failed and only a minimal record
+    # (path/name/format/size/dates) could be created for the file.
+    extraction_error = Column(String(500), nullable=True)
     
     # Timestamps
     indexed_at = Column(DateTime, default=datetime.utcnow, nullable=False)

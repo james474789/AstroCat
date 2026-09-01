@@ -98,6 +98,7 @@ Thumbs.db
 # Local testing
 # -------------------------------------------
 test_*.py
+!backend/tests/test_*.py
 !backend/app/tests/
 backend/celerybeat-schedule
 #docker-compose.yml
