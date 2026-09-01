@@ -5,12 +5,13 @@ Background tasks for scanning directories and processing images.
 
 import os
 import hashlib
+import math
 from typing import List
 from pathlib import Path
 import logging
 import time
 import redis
-from datetime import datetime
+from datetime import datetime, date
 
 from app.worker import celery_app
 from app.database import SessionLocal
@@ -19,6 +20,7 @@ from app.extractors.factory import get_extractor, determine_format
 from app.services.matching import SyncCatalogMatcher
 from app.config import settings
 from sqlalchemy import select, func, delete, update
+from sqlalchemy.exc import OperationalError
 from app.models.system_stats import SystemStats
 
 logger = logging.getLogger(__name__)
@@ -125,7 +127,8 @@ def calculate_file_hash(file_path: str) -> str:
     return sha256_hash.hexdigest()
 
 
-@celery_app.task(bind=True, name="app.tasks.indexer.scan_directory")
+@celery_app.task(bind=True, name="app.tasks.indexer.scan_directory",
+                 soft_time_limit=21600, time_limit=28800)
 def scan_directory(self, directory_path: str):
     """
     Scan a directory for new image files (Synchronous).
@@ -134,38 +137,85 @@ def scan_directory(self, directory_path: str):
 
 
 def sanitize_metadata(data):
-    """Recursively remove null characters from strings in metadata (keys and values)."""
+    """
+    Recursively remove null characters from strings in metadata (keys and values)
+    and normalize values PostgreSQL JSONB cannot store:
+      - non-finite floats (NaN/Infinity) -> None (json.dumps would emit NaN
+        tokens that PostgreSQL rejects)
+      - datetime/date objects -> ISO strings (not JSON-serializable otherwise)
+    """
     if isinstance(data, dict):
         return {sanitize_metadata(k): sanitize_metadata(v) for k, v in data.items()}
     elif isinstance(data, list):
         return [sanitize_metadata(item) for item in data]
     elif isinstance(data, str):
-        return data.replace('\x00', '').replace('\\u0000', '')
+        return data.replace('\x00', '').replace('\u0000', '')
+    elif isinstance(data, bool):
+        return data
+    elif isinstance(data, float):
+        return data if math.isfinite(data) else None
+    elif isinstance(data, (datetime, date)):
+        return data.isoformat()
     else:
         return data
 
 
-@celery_app.task(bind=True, name="app.tasks.indexer.process_image")
-def process_image(self, file_path: str, generate_thumbnail: bool = True):
+def _record_process_failure(file_path: str, error: str):
+    """
+    Track per-file processing failures in Redis so poison files are visible in
+    the Admin UI (GET /api/indexer/status) instead of looping silently forever.
+    Counters are reset at the start of each full reindex_all scan.
+    """
+    try:
+        r = redis.from_url(settings.redis_url)
+        r.incr("indexer:process_failures")
+        r.lpush("indexer:failed_files", f"{file_path} :: {error}"[:500])
+        r.ltrim("indexer:failed_files", 0, 99)
+    except Exception:
+        # Observability must never break processing
+        pass
+
+
+def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
     """
     Process a single image file - extract metadata and match catalogs (Synchronous).
     Set generate_thumbnail=False to do a metadata-only refresh without regenerating thumbnails.
+
+    Fault tolerant by design: if metadata extraction fails (e.g. malformed FITS
+    header cards), a minimal record is still written to the database so the
+    scanner diff sees the file as indexed and stops re-queueing it on every scan.
     """
     path = Path(file_path)
     if not path.exists():
         return {"status": "error", "message": "File not found"}
-        
+
     # 1. Extract Metadata
-    extractor = get_extractor(file_path)
-    metadata = extractor.extract()
-    
-    # Sanitize metadata to remove null characters (PostgreSQL JSONB constraint)
-    metadata = sanitize_metadata(metadata)
-    
-    file_stats = extractor.get_file_stats()
-    
-    logger.info(f"PROCESSING: {file_path}")
-    
+    extraction_error = None
+    try:
+        extractor = get_extractor(file_path)
+        metadata = extractor.extract()
+
+        # Sanitize metadata to remove null characters (PostgreSQL JSONB constraint)
+        metadata = sanitize_metadata(metadata)
+
+        file_stats = extractor.get_file_stats()
+    except Exception as e:
+        # Poison file: log it, record it, but do NOT abort - the minimal record
+        # written below breaks the re-scan loop for malformed files.
+        extraction_error = f"{type(e).__name__}: {e}"[:500]
+        logger.warning(f"Extraction failed for {file_path} ({extraction_error}); inserting minimal record")
+        _record_process_failure(file_path, extraction_error)
+        metadata = {}
+        try:
+            st = os.stat(file_path)
+            file_stats = {
+                "file_size_bytes": st.st_size,
+                "created_at": st.st_ctime,
+                "modified_at": st.st_mtime,
+            }
+        except OSError:
+            file_stats = {"file_size_bytes": 0}
+
     logger.info(f"PROCESSING: {file_path}")
 
     # Check for PixInsight Annotation File
@@ -285,6 +335,9 @@ def process_image(self, file_path: str, generate_thumbnail: bool = True):
             if pixinsight_annotation_path:
                 image.pixinsight_annotation_path = pixinsight_annotation_path
 
+            # Record/clear metadata extraction diagnostics
+            image.extraction_error = extraction_error
+
             # Update thumbnail if we generated one
             if thumbnail_path:
                 image.thumbnail_path = thumbnail_path
@@ -345,7 +398,10 @@ def process_image(self, file_path: str, generate_thumbnail: bool = True):
                 ) if wcs.get("ra_center") is not None and wcs.get("dec_center") is not None else None,
                 
                 # PixInsight Annotation
-                pixinsight_annotation_path=pixinsight_annotation_path
+                pixinsight_annotation_path=pixinsight_annotation_path,
+                
+                # Metadata extraction diagnostics (set when extraction failed)
+                extraction_error=extraction_error
             )
             session.add(image)
             session.flush() # Get ID
@@ -362,7 +418,27 @@ def process_image(self, file_path: str, generate_thumbnail: bool = True):
     return {"status": "completed", "file": file_path, "matches": matches_count}
 
 
-@celery_app.task(bind=True, name="app.tasks.indexer.reindex_all")
+@celery_app.task(bind=True, name="app.tasks.indexer.process_image",
+                 autoretry_for=(OperationalError,), retry_backoff=True, max_retries=3)
+def process_image(self, file_path: str, generate_thumbnail: bool = True):
+    """
+    Celery entry point for single-file processing.
+
+    - Transient database connection errors are retried with exponential backoff.
+    - Any other failure is recorded in Redis (Admin UI visibility) and re-raised
+      so Celery marks the task failed. Metadata extraction failures never reach
+      this point: they are handled inside _process_image_impl, which inserts a
+      minimal record so the scanner stops re-queueing the file on every scan.
+    """
+    try:
+        return _process_image_impl(file_path, generate_thumbnail)
+    except Exception as e:
+        _record_process_failure(file_path, f"DB: {type(e).__name__}: {e}"[:500])
+        raise
+
+
+@celery_app.task(bind=True, name="app.tasks.indexer.reindex_all",
+                 soft_time_limit=21600, time_limit=28800)
 def reindex_all(self):
     """
     Re-scan all configured image paths with state tracking (Synchronous).
@@ -372,6 +448,11 @@ def reindex_all(self):
     
     # Mark scan as running
     r.set("indexer:is_running", "1")
+    # Reset per-scan failure tracking (populated by process_image)
+    try:
+        r.delete("indexer:process_failures", "indexer:failed_files")
+    except Exception:
+        pass
     start_time = time.time()
     
     total_files_scanned = 0

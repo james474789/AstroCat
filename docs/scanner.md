@@ -75,9 +75,17 @@ Runs on the Celery workers (8 workers via `CELERY_WORKERS` in docker-compose, ro
    - `ExifExtractor` (ExifRead + rawpy + Pillow) for everything else
    
    Strings are sanitized of `\x00` characters so they survive PostgreSQL JSONB storage.
+   FITS header reads are fault tolerant: unparsable cards (e.g. `CCD-TEMP = -19.80C`
+   written by some all-sky cameras) are skipped and logged via `_safe_get()` instead
+   of aborting extraction. Non-finite floats (NaN/Inf) and datetimes in headers are
+   normalized so `raw_header` always survives JSONB storage.
 2. **Detect PixInsight annotation sidecar** — `{stem}_Annotated{ext}` next to the file, recorded as `pixinsight_annotation_path`.
 3. **Generate thumbnail** — WebP written to the thumbnail cache, with **STF (screen-transfer-function) stretch applied for subframes** so linear FITS/RAW data is actually visible. Failures are logged and non-fatal (`thumbnail_path = None`).
 4. **Upsert into `images`**:
+   If metadata extraction fails entirely, `process_image` still inserts a minimal
+   record (path, name, format, size, file dates) with `extraction_error` populated,
+   so malformed files are indexed exactly once instead of being re-detected as
+   "new" on every scan. Transient database errors are retried with backoff.
    - *New record*: full insert, including PostGIS geography — `ST_SetSRID(ST_MakePoint(ra, dec), 4326)` stored as `center_location`.
    - *Existing record*: metadata refresh, **but WCS fields are protected when `astrometry_status == "SOLVED"`** — header/sidecar re-extraction cannot clobber a plate-solve result obtained from Astrometry.net.
    - `capture_date` falls back to the file's modification time when metadata lacks it.
@@ -94,6 +102,9 @@ Runs on the Celery workers (8 workers via `CELERY_WORKERS` in docker-compose, ro
   - `indexer:is_running` (`1` while a scan/bulk job is active)
   - `indexer:last_scan_at`, `indexer:last_scan_duration`
   - `indexer:files_scanned`, `indexer:files_added`, `indexer:files_updated`, `indexer:files_removed`
+  - `indexer:process_failures`, `indexer:failed_files` (last 100) - per-scan processing
+    failure tracking, reset at the start of each full scan and exposed via
+    `GET /api/indexer/status`
   
   `GET /api/indexer/status` reads these and caches mount-point stats for 10 seconds.
 - **Mount statistics** live in the `SystemStats` table (`category = "mount:{path}"`), populated by `update_mount_stats` via a per-mount `COUNT/SUM` aggregation — so the Admin page never has to aggregate the whole `images` table on request.
@@ -111,10 +122,14 @@ Runs on the Celery workers (8 workers via `CELERY_WORKERS` in docker-compose, ro
 | `worker_prefetch_multiplier` | `1` | Fair distribution — one task at a time per worker process |
 | `worker_max_tasks_per_child` | `100` | Worker process recycling (astropy/rawpy memory hygiene) |
 | `task_time_limit` / `task_soft_time_limit` | 3600 s / 3000 s | Hard ceiling per task |
+| `reindex_all` / `scan_directory` limits | 8 h / 6 h | Per-task override - NAS directory walks can exceed the global 50 min soft limit |
 | Queue routing | `indexer.*` and `bulk.*` → `indexer` queue; `thumbnails.*` → `thumbnails` queue | Isolates workloads |
 
 ## Known Quirks (non-functional)
 
-- `process_image` contains duplicated `logger.info(f"PROCESSING: ...")` lines and a duplicated PostGIS `center_location` update block — harmless redundancy.
+- `process_image` contains a duplicated PostGIS `center_location` update block — harmless redundancy.
+- Celery tasks run with `task_acks_late=True`: application exceptions are acked as
+  failures and NOT retried (only worker loss re-queues a task), which is why the
+  extraction path is fault tolerant by design.
 - `reindex_all` always writes `files_updated = 0` to Redis; updates are not currently counted separately from additions.
 
