@@ -4,6 +4,7 @@ Background tasks for scanning directories and processing images.
 """
 
 import os
+import errno
 import hashlib
 import math
 from typing import List
@@ -160,6 +161,43 @@ def sanitize_metadata(data):
         return data
 
 
+_TRANSIENT_ERRNOS = {
+    errno.EAGAIN, errno.EINTR, errno.ETIMEDOUT,
+    errno.ECONNRESET, errno.ECONNREFUSED, errno.ENETRESET,
+    errno.ENFILE, errno.EMFILE, errno.EIO, errno.EBUSY,
+}
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    """
+    Classify errors worth retrying instead of recording permanently.
+
+    EAGAIN / ETIMEDOUT / ECONNRESET are the classic NAS/CIFS transient I/O
+    errors seen during large backfills (a worker briefly cannot read a file
+    while the share is saturated). These should be retried with backoff and,
+    if the retries are exhausted, left unindexed so the next directory scan
+    naturally re-queues them - instead of being marked as permanent failures.
+    """
+    if isinstance(exc, (BlockingIOError, TimeoutError, ConnectionError, InterruptedError)):
+        return True
+    if isinstance(exc, OSError) and exc.errno in _TRANSIENT_ERRNOS:
+        return True
+    return False
+
+
+def _touch_indexer_heartbeat():
+    """
+    Refresh the 'scan alive' heartbeat used by cleanup_stuck_astrometry to
+    detect a stale indexer:is_running flag (e.g. a scan task hard-killed by a
+    container restart or hard time limit before its finally block ran).
+    """
+    try:
+        r = redis.from_url(settings.redis_url)
+        r.set("indexer:last_heartbeat", datetime.utcnow().isoformat(), ex=3600)
+    except Exception:
+        pass
+
+
 def _record_process_failure(file_path: str, error: str):
     """
     Track per-file processing failures in Redis so poison files are visible in
@@ -200,6 +238,13 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
 
         file_stats = extractor.get_file_stats()
     except Exception as e:
+        if _is_transient_error(e):
+            # Transient storage hiccup (e.g. NAS EAGAIN under backfill load).
+            # Do NOT write a minimal record: the Celery wrapper retries with
+            # backoff, and if all retries are exhausted the file stays unindexed
+            # so the next directory scan naturally re-queues it (self-healing).
+            logger.warning(f"Transient error processing {file_path} ({type(e).__name__}: {e}); task will be retried")
+            raise
         # Poison file: log it, record it, but do NOT abort - the minimal record
         # written below breaks the re-scan loop for malformed files.
         extraction_error = f"{type(e).__name__}: {e}"[:500]
@@ -419,7 +464,8 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
 
 
 @celery_app.task(bind=True, name="app.tasks.indexer.process_image",
-                 autoretry_for=(OperationalError,), retry_backoff=True, max_retries=3)
+                 autoretry_for=(OperationalError, BlockingIOError, TimeoutError),
+                 retry_backoff=True, retry_backoff_max=60, max_retries=3)
 def process_image(self, file_path: str, generate_thumbnail: bool = True):
     """
     Celery entry point for single-file processing.
@@ -433,7 +479,8 @@ def process_image(self, file_path: str, generate_thumbnail: bool = True):
     try:
         return _process_image_impl(file_path, generate_thumbnail)
     except Exception as e:
-        _record_process_failure(file_path, f"DB: {type(e).__name__}: {e}"[:500])
+        if not _is_transient_error(e):
+            _record_process_failure(file_path, f"{type(e).__name__}: {e}"[:500])
         raise
 
 
@@ -464,12 +511,22 @@ def reindex_all(self):
     try:
         for path in settings.image_paths_list:
             if os.path.exists(path):
+                r.set("indexer:current_path", path)
+                _touch_indexer_heartbeat()
                 # Run synchronously inside the worker to track progress without spawning extra tasks
                 result = _scan_directory(path)
                 results.append({"path": path, **result})
                 total_files_scanned += result.get("files_found", 0)
                 total_files_added += result.get("files_queued", 0)
                 total_files_removed += result.get("files_removed", 0)
+
+                # Publish live progress after each mount so the Admin UI never
+                # shows stale counters (and looks frozen) mid-scan.
+                r.set("indexer:files_scanned", str(total_files_scanned))
+                r.set("indexer:files_added", str(total_files_added))
+                r.set("indexer:files_updated", "0")
+                r.set("indexer:files_removed", str(total_files_removed))
+                logger.info(f"Scan progress: {path} done; scanned={total_files_scanned} added={total_files_added} removed={total_files_removed}")
     except Exception as e:
         logger.error(f"Error during reindex_all: {e}", exc_info=True)
     finally:
@@ -485,6 +542,12 @@ def reindex_all(self):
         r.set("indexer:files_updated", "0")
         r.set("indexer:files_removed", str(total_files_removed))
         
+        # Remove live-scan-only markers that are meaningless once the scan ends
+        try:
+            r.delete("indexer:current_path", "indexer:last_heartbeat")
+        except Exception:
+            pass
+
         # Trigger mount stats update after scan completion
         logger.info("Triggering mount stats update after scan completion")
         update_mount_stats()
