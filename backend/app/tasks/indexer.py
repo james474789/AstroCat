@@ -22,6 +22,7 @@ from app.services.matching import SyncCatalogMatcher
 from app.config import settings
 from sqlalchemy import select, func, delete, update
 from sqlalchemy.exc import OperationalError
+from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from app.models.system_stats import SystemStats
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ def _scan_directory(directory_path: str):
     }
 
     disk_files = set()
+    r = redis.from_url(settings.redis_url)
 
     try:
         with SessionLocal() as session:
@@ -50,6 +52,8 @@ def _scan_directory(directory_path: str):
 
             # 2. Walk directory to find current files
             for root, _, files in os.walk(directory_path):
+                # Refresh heartbeat on each directory level to prevent soft timeout during long NAS walks
+                _touch_indexer_heartbeat()
                 for file in files:
                     file_path = Path(root) / file
                     if file_path.suffix.lower() in allowed_extensions:
@@ -109,6 +113,12 @@ def _scan_directory(directory_path: str):
     except Exception as e:
         logger.error(f"Error scanning directory {directory_path}: {e}", exc_info=True)
         raise
+    finally:
+        # Ensure heartbeat is cleared when scan completes
+        try:
+            r.delete("indexer:last_heartbeat")
+        except Exception:
+            pass
 
     return {
         "status": "completed",
@@ -465,7 +475,8 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
 
 @celery_app.task(bind=True, name="app.tasks.indexer.process_image",
                  autoretry_for=(OperationalError, BlockingIOError, TimeoutError),
-                 retry_backoff=True, retry_backoff_max=60, max_retries=3)
+                 retry_backoff=True, retry_backoff_max=60, max_retries=3,
+                 soft_time_limit=7200, time_limit=10800)
 def process_image(self, file_path: str, generate_thumbnail: bool = True):
     """
     Celery entry point for single-file processing.
@@ -478,6 +489,14 @@ def process_image(self, file_path: str, generate_thumbnail: bool = True):
     """
     try:
         return _process_image_impl(file_path, generate_thumbnail)
+    except SoftTimeLimitExceeded:
+        logger.error(f"Metadata extraction soft time limit (2 hours) exceeded for file: {file_path}")
+        _record_process_failure(file_path, "Task timeout: Soft time limit (2 hours) exceeded")
+        raise
+    except TimeLimitExceeded:
+        logger.error(f"Metadata extraction hard time limit (3 hours) exceeded for file: {file_path}")
+        _record_process_failure(file_path, "Task timeout: Hard time limit (3 hours) exceeded")
+        raise
     except Exception as e:
         if not _is_transient_error(e):
             _record_process_failure(file_path, f"{type(e).__name__}: {e}"[:500])
@@ -527,6 +546,11 @@ def reindex_all(self):
                 r.set("indexer:files_updated", "0")
                 r.set("indexer:files_removed", str(total_files_removed))
                 logger.info(f"Scan progress: {path} done; scanned={total_files_scanned} added={total_files_added} removed={total_files_removed}")
+    except SoftTimeLimitExceeded:
+        logger.warning("Indexer scan soft time limit (6 hours) exceeded, saving state and stopping gracefully")
+        # Ensure is_running is cleared so UI isn't blocked
+        r.set("indexer:is_running", "0")
+        raise  # Let Celery handle timeout properly
     except Exception as e:
         logger.error(f"Error during reindex_all: {e}", exc_info=True)
     finally:
