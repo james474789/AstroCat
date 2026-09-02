@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timedelta
 from sqlalchemy.future import select
 from sqlalchemy import func
@@ -318,6 +319,48 @@ async def _monitor_logic(submission_id: str | int, image_id: int):
             await session.commit()
         raise e
 
+def _clear_stale_indexer_running_flag(stale_after_seconds: int = 1800):
+    """
+    Clear a stuck indexer:is_running flag.
+
+    reindex_all writes a heartbeat (indexer:last_heartbeat, TTL 1h) after each
+    mount and removes it when it finishes. If the flag is still '1' but the
+    heartbeat is missing or older than stale_after_seconds, the scan task was
+    killed without its finally block running (container restart, hard time
+    limit, lost worker) - clear the flag so the Admin UI stops showing
+    'Scanning Files...' forever. Bulk operation hashes that report fresh
+    progress also keep the flag alive.
+    """
+    try:
+        r = redis.from_url(settings.redis_url, decode_responses=True)
+        if r.get("indexer:is_running") != "1":
+            return
+
+        heartbeat = r.get("indexer:last_heartbeat")
+        if heartbeat:
+            try:
+                hb_dt = datetime.fromisoformat(heartbeat)
+                if (datetime.utcnow() - hb_dt).total_seconds() < stale_after_seconds:
+                    return  # scan is actively alive
+            except ValueError:
+                pass
+
+        # Don't clear while a bulk operation reports recent progress.
+        for key in r.scan_iter("bulk:*"):
+            updated = r.hget(key, "updated_at")
+            if updated:
+                try:
+                    if int(time.time()) - int(updated) < 600:
+                        return
+                except (ValueError, TypeError):
+                    continue
+
+        logger.warning("Clearing stale indexer:is_running flag (no recent heartbeat or bulk activity)")
+        r.set("indexer:is_running", "0")
+    except Exception as e:
+        logger.warning(f"Failed to clear stale indexer:is_running flag: {e}")
+
+
 @celery_app.task(name="app.tasks.astrometry.cleanup_stuck_astrometry")
 def cleanup_stuck_astrometry():
     """
@@ -329,6 +372,10 @@ def cleanup_stuck_astrometry():
     
     async def _cleanup():
         logger.info("Running stuck astrometry cleanup...")
+        try:
+            _clear_stale_indexer_running_flag()
+        except Exception as e:
+            logger.warning(f"Failed to check/clear stale indexer flag: {e}")
         async with AsyncSessionLocal() as session:
             # Find images stuck in non-terminal states for > 5 mins
             # We use updated_at to judge "stuckness"
