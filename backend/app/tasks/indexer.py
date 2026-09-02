@@ -305,10 +305,10 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
         try:
             max_size = (settings.thumbnail_max_size, settings.thumbnail_max_size)
             thumbnail_path = ThumbnailGenerator.generate(
-                file_path, 
-                settings.thumbnail_cache_path, 
+                file_path,
+                settings.thumbnail_cache_path,
                 max_size=max_size,
-                is_subframe=is_subframe, 
+                is_subframe=is_subframe,
                 apply_stf=is_subframe
             )
         except Exception as e:

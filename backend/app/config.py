@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # Image Storage
     image_paths: str = "/data/images"
     thumbnail_cache_path: str = "/data/thumbnails"
-    thumbnail_max_size: int = 400
+    thumbnail_max_size: int = 1024
 
     # Logging
     log_dir: str = "/var/log/astrocat"

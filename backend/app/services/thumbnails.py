@@ -1,12 +1,13 @@
-import os
-import numpy as np
+import hashlib
 import logging
-from PIL import Image, ImageOps
+import os
 from pathlib import Path
+
+import numpy as np
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Try importing specialized libraries
 try:
     import rawpy
 except ImportError:
@@ -18,354 +19,178 @@ except ImportError:
     fits = None
 
 try:
-    import xisf
-except ImportError:
-    xisf = None
-
-try:
     import tifffile
 except ImportError:
     tifffile = None
 
+try:
+    import xisf
+except ImportError:
+    xisf = None
+
 
 class ThumbnailGenerator:
+    @staticmethod
+    def _source_stride(width, height, target_size):
+        if not target_size or not width or not height:
+            return 1
+        target_width, target_height = target_size
+        return max(1, int(np.ceil(max(width / target_width, height / target_height))))
+
+    @staticmethod
+    def _prepare_array(data, max_dimension=2048):
+        if data.ndim == 2:
+            height, width = data.shape
+            if max(height, width) > max_dimension:
+                stride = max(1, int(np.ceil(max(height, width) / max_dimension)))
+                data = data[::stride, ::stride]
+        elif data.ndim == 3:
+            channel_first = data.shape[0] in (1, 3, 4) and data.shape[1] > 4
+            height, width = data.shape[1:3] if channel_first else data.shape[:2]
+            if max(height, width) > max_dimension:
+                stride = max(1, int(np.ceil(max(height, width) / max_dimension)))
+                data = data[:, ::stride, ::stride] if channel_first else data[::stride, ::stride, ...]
+        return data
 
     @staticmethod
     def apply_stf_stretch(data, target_bg=0.25, shadows_clip=-1.25):
-        """
-        Apply PixInsight-style STF Auto Stretch to image data (numpy array).
-        Expects floating point input (normalized or not, will be normalized).
-        """
-        # 1. Normalize to [0, 1]
-        data = data.astype(float)
-        # Handle NaN/Inf
-        data = np.nan_to_num(data)
-        
+        data = np.nan_to_num(data.astype(np.float32, copy=False))
         d_min = np.min(data)
         d_max = np.max(data)
-        
+        if d_max <= d_min:
+            return np.zeros_like(data, dtype=np.uint8)
+        data = (data - d_min) / (d_max - d_min)
+        median = np.median(data)
+        mad = np.median(np.abs(data - median))
+        c0 = max(0.0, median + shadows_clip * mad)
+        data = (np.clip(data, c0, 1.0) - c0) / (1.0 - c0)
+        median_new = np.median(data)
+        denominator = median_new + target_bg - 2 * median_new * target_bg
+        midpoint = (median_new * (1 - target_bg) / denominator
+                    if denominator and 0 < median_new < 1 and median_new != target_bg else 0.5)
+        if midpoint != 0.5:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                data = ((midpoint - 1) * data) / ((2 * midpoint - 1) * data - midpoint)
+        return (np.clip(data, 0, 1) * 255).astype(np.uint8)
+
+    @staticmethod
+    def _normalize(data, apply_stf):
+        if apply_stf:
+            return ThumbnailGenerator.apply_stf_stretch(data)
+        data = np.nan_to_num(data.astype(np.float32, copy=False))
+        d_min = np.min(data)
+        d_max = np.max(data)
         if d_max > d_min:
             data = (data - d_min) / (d_max - d_min)
         else:
-            return np.zeros_like(data)
-            
-        # 2. Statistics
-        median = np.median(data)
-        mad = np.median(np.abs(data - median))
-        
-        # 3. Shadows / Highlights
-        c0 = median + shadows_clip * mad
-        c0 = max(0.0, c0) # Clip to 0
-        c1 = 1.0 # Default highlight clip
-        
-        # Clip data
-        data = np.clip(data, c0, c1)
-        
-        # Re-normalize to [0, 1] after clipping
-        if c1 > c0:
-            data = (data - c0) / (c1 - c0)
-        else:
-            pass # Should be flat
-            
-        # 4. Midtones Transfer Function (MTF)
-        # Find 'm' such that MTF(m, median_new) = target_bg
-        median_new = np.median(data)
-        
-        x = median_new
-        y = target_bg
-        
-        m = 0.5
-        if x > 0 and x < 1 and x != y:
-            denom = x + y - 2 * x * y
-            if denom != 0:
-                m = (x * (1 - y)) / denom
-        
-        logger.debug(f"STF Stats: median={median:.6f}, mad={mad:.6f}, c0={c0:.6f}, median_new={median_new:.6f}, m={m:.6f}")
-
-        # Apply MTF
-        # (m - 1) * x / ((2 * m - 1) * x - m)
-        if m != 0.5:
-             # Vectorized application
-             # Avoid division by zero
-             term1 = (m - 1) * data
-             term2 = (2 * m - 1) * data - m
-             
-             # Safe arithmetic
-             with np.errstate(divide='ignore', invalid='ignore'):
-                 data = term1 / term2
-             
-        data = np.clip(data, 0, 1)
-        return (data * 255).astype(np.uint8)
+            data = data - d_min
+        return (np.clip(data, 0, 1) * 255).astype(np.uint8)
 
     @staticmethod
-    def load_source_image(source_path: str, is_subframe: bool = True, apply_stf: bool = False) -> Image.Image:
-        """
-        Loads a source image (FITS, RAW, Standard) and returns a PIL Image object (RGB).
-        
-        Args:
-            source_path: Path to file
-            is_subframe: If True, uses linear extraction for RAWs suitable for processing.
-            apply_stf: If True, applies PixInsight-style STF Auto Stretch.
-                       If False, applies simple normalization or uses default gamma.
-        """
+    def _read_xisf_preview(source_path, target_size):
+        reader = xisf.XISF(source_path)
+        metadata = reader.get_images_metadata()[0]
+        width, height, channels = metadata["geometry"]
+        location = metadata["location"]
+        if location[0] != "attachment" or "compression" in metadata:
+            return None
+        _, offset, _ = location
+        stride = ThumbnailGenerator._source_stride(width, height, target_size)
+        data = np.memmap(
+            source_path,
+            dtype=metadata["dtype"],
+            mode="r",
+            offset=offset,
+            shape=(channels, height, width),
+        )
+        data = data[:, ::stride, ::stride]
+        return np.transpose(data, (1, 2, 0)) if channels > 1 else data[0]
+
+    @staticmethod
+    def load_source_image(source_path: str, is_subframe: bool = True,
+                          apply_stf: bool = False, target_size=(1024, 1024)) -> Image.Image:
         source = Path(source_path)
         if not source.exists():
-            logger.error(f"Source file not found: {source_path}")
             return None
-            
-        img = None
         ext = source.suffix.lower()
-        logger.debug(f"Loading image: {source_path} | Ext: '{ext}' | Subframe: {is_subframe} | STF: {apply_stf}")
-        
         try:
-            # --- 1. RAW files (.cr2, .nef, etc) ---
-            if ext in ['.cr2', '.nef', '.arw', '.dng', '.raf', '.cr3'] and rawpy:
-                try:
-                    with rawpy.imread(source_path) as raw:
-                        if is_subframe:
-                            # Linear extraction
-                            rgb = raw.postprocess(
-                                gamma=(1, 1),
-                                no_auto_bright=True,
-                                output_bps=16,
-                                use_camera_wb=True
-                            )
-                            if apply_stf:
-                                rgb = ThumbnailGenerator.apply_stf_stretch(rgb)
-                            else:
-                                # Simple normalize for visualization if linear
-                                # Or just simple scale to 8-bit?
-                                # If we return raw linear 16-bit without STF, it will be very dark.
-                                # Simple min-max scan to view it?
-                                # User asked for "linear images".
-                                # Let's do a simple 16->8 bit scaling or min/max normalize?
-                                # Let's do Min-Max Standard implementation for consistency
-                                # Standard Normalize (Linear Scale)
-                                d_min = np.min(rgb)
-                                d_max = np.max(rgb)
-                                if d_max > d_min:
-                                    rgb = (rgb - d_min) / (d_max - d_min)
-                                else:
-                                    rgb = rgb - d_min
-                                rgb = np.clip(rgb, 0, 1) * 255
-                                rgb = rgb.astype(np.uint8)
-                                
-                            img = Image.fromarray(rgb)
-                        else:
-                            # Standard processing (Gamma corrected)
-                            rgb = raw.postprocess(use_camera_wb=True, bright=1.0)
-                            img = Image.fromarray(rgb)
-                            
-                except Exception as e:
-                    print(f"RawPy processing failed for {source_path}: {e}")
-            
-            # --- 2. FITS files ---
-            elif ext in ['.fits', '.fit']:
-                if not fits:
-                    logger.error("Astropy not installed but .fits file requested")
-                    return None
-                   
-                try:
-                    with fits.open(source_path) as hdul:
-                        data = None
-                        for hdu in hdul:
-                            if hdu.data is not None and len(hdu.data.shape) >= 2:
-                                data = hdu.data
-                                break
-                        
-                        if data is not None:
-                            if len(data.shape) == 3:
-                                data = data[0] # Take first channel
-                                
-                            data = data.astype(float)
-                            data = np.nan_to_num(data)
-                            
-                            if apply_stf:
-                                data = ThumbnailGenerator.apply_stf_stretch(data)
-                            else:
-                                # Standard Normalize (Linear Stretch)
-                                # Standard Normalize (Linear Scale)
-                                d_min = np.min(data)
-                                d_max = np.max(data)
-                                if d_max > d_min:
-                                    data = (data - d_min) / (d_max - d_min)
-                                else:
-                                    data = data - d_min
-                                data = np.clip(data, 0, 1) * 255
-                                data = data.astype(np.uint8)
-                            
-                            img = Image.fromarray(data)
-                        else:
-                             return None
+            if ext in {".cr2", ".nef", ".arw", ".dng", ".raf", ".cr3"} and rawpy:
+                with rawpy.imread(source_path) as raw:
+                    half_size = bool(target_size and max(raw.sizes.height, raw.sizes.width) > max(target_size))
+                    if is_subframe:
+                        rgb = raw.postprocess(gamma=(1, 1), no_auto_bright=True, output_bps=16,
+                                              use_camera_wb=True, half_size=half_size)
+                        rgb = ThumbnailGenerator._normalize(rgb, apply_stf)
+                    else:
+                        rgb = raw.postprocess(use_camera_wb=True, bright=1.0, half_size=half_size)
+                    return Image.fromarray(rgb).convert("RGB")
 
-                except Exception as e:
-                    logger.exception(f"FITS processing failed for {source_path}")
-                    return None
-            
-            # --- 3. XISF files ---
-            elif ext == '.xisf':
-                if not xisf:
-                    return None
-                
-                try:
+            if ext in {".fits", ".fit"} and fits:
+                with fits.open(source_path, memmap=True) as hdul:
+                    for hdu in hdul:
+                        shape = hdu.shape
+                        if not shape or len(shape) < 2:
+                            continue
+                        stride = ThumbnailGenerator._source_stride(shape[-1], shape[-2], target_size)
+                        data = hdu.section[0, ::stride, ::stride] if len(shape) == 3 else hdu.section[::stride, ::stride]
+                        return Image.fromarray(ThumbnailGenerator._normalize(data, apply_stf)).convert("RGB")
+                return None
+
+            if ext == ".xisf" and xisf:
+                data = ThumbnailGenerator._read_xisf_preview(source_path, target_size)
+                if data is None:
                     data = xisf.XISF.read(source_path)
-                    if data is not None:
-                        # Shape handling
-                        if len(data.shape) == 3:
-                            if data.shape[2] in [3, 4]: pass
-                            elif data.shape[0] in [3, 4]: data = np.transpose(data, (1, 2, 0))
-                            else:
-                                if data.shape[2] == 1: data = np.squeeze(data, axis=2)
-                                elif data.shape[0] == 1: data = np.squeeze(data, axis=0)
-                                else: data = data[0]
-
-                        data = data.astype(float)
-                        data = np.nan_to_num(data)
-                        
-                        if apply_stf:
-                            data = ThumbnailGenerator.apply_stf_stretch(data)
-                        else:
-                            # Standard Normalize (Linear Scale)
-                            d_min = np.min(data)
-                            d_max = np.max(data)
-                            if d_max > d_min: data = (data - d_min) / (d_max - d_min)
-                            else: data = data - d_min
-                            data = np.clip(data, 0, 1) * 255
-                            data = data.astype(np.uint8)
-                            
-                        img = Image.fromarray(data)
-                    else:
-                        return None
-                except Exception as e:
-                    logger.exception(f"XISF processing failed for {source_path}")
+                if data is None:
                     return None
-            
-            # --- 4. Standard Images (JPG, TIFF, etc) ---
-            if img is None and ext not in ['.fits', '.fit', '.xisf', '.cr2', '.nef', '.arw', '.dng', '.raf', '.cr3']:
-                try:
-                    img = Image.open(source_path)
-                    img.load()
-                    # Standard images don't usually use STF, but if requested:
-                    # (Usually only relevant for 16-bit TIFFs which we act on below in try-except fallback or high-bit check)
-                except Exception as e:
-                    # Fallback for TIFFs
-                    if ext in ['.tif', '.tiff'] and tifffile:
-                        try:
-                            data = tifffile.imread(source_path)
-                            if data is not None:
-                                data = data.astype(float)
-                                data = np.nan_to_num(data)
-                                
-                                if apply_stf:
-                                    data = ThumbnailGenerator.apply_stf_stretch(data)
-                                else:
-                                    d_min = np.min(data)
-                                    d_max = np.max(data)
-                                    if d_max > d_min:
-                                        data = (data - d_min) / (d_max - d_min)
-                                    data = (np.clip(data, 0, 1) * 255).astype(np.uint8)
-                                    
-                                img = Image.fromarray(data)
-                        except Exception as te:
-                            img = None
-                    else:
-                        img = None
-            
-            if img:
-                # Post-processing for loaded images (STF and high-bit normalization)
-                # Specialized loaders (Fits, Xisf, Raw) already handle STF internally.
-                SpecialExtensions = ['.fits', '.fit', '.xisf', '.cr2', '.nef', '.arw', '.dng', '.raf', '.cr3']
-                was_handled = ext in SpecialExtensions
-                
-                # Check for high bit depth modes
-                high_bit_modes = ('I', 'I;16', 'I;16L', 'I;16B', 'I;16S', 'F', 'I;32', 'I;32L', 'I;32B')
-                is_high_bit = img.mode in high_bit_modes
-                
-                logger.debug(f"Post-processing: handled={was_handled}, high_bit={is_high_bit}, mode={img.mode}")
+                if data.ndim == 3:
+                    if data.shape[0] in (3, 4) and data.shape[1] > 4:
+                        data = np.transpose(data, (1, 2, 0))
+                    elif data.shape[2] not in (3, 4):
+                        data = data[0]
+                data = ThumbnailGenerator._prepare_array(data)
+                return Image.fromarray(ThumbnailGenerator._normalize(data, apply_stf)).convert("RGB")
 
-                # ONLY enter this block if it wasn't already handled by a specialized loader
-                # OR if it's a high-bit image that Pillow didn't handle well but we can.
-                if (apply_stf or is_high_bit) and not was_handled:
-                    arr = np.array(img).astype(float)
-                    arr = np.nan_to_num(arr)
-                    
-                    if apply_stf:
-                        # STF Stretch (Auto-Stretch)
-                        processed_arr = ThumbnailGenerator.apply_stf_stretch(arr)
-                    else:
-                        # Simple Linear Normalization for high-bit files
-                        d_min = np.min(arr)
-                        d_max = np.max(arr)
-                        if d_max > d_min: 
-                            arr = (arr - d_min) / (d_max - d_min)
-                        else: 
-                            arr = arr - d_min
-                        processed_arr = (np.clip(arr, 0, 1) * 255).astype(np.uint8)
-                    
-                    # Create new image from processed array
-                    if len(processed_arr.shape) == 3:
-                        img = Image.fromarray(processed_arr, mode='RGB')
-                    else:
-                        img = Image.fromarray(processed_arr, mode='L')
+            if ext in {".tif", ".tiff"} and tifffile:
+                with tifffile.TiffFile(source_path) as tif:
+                    series = tif.series[0]
+                    level = series
+                    for candidate in getattr(series, "levels", ()):
+                        if max(candidate.shape[-2:]) <= max(target_size):
+                            level = candidate
+                            break
+                    try:
+                        data = level.asarray(out="memmap")
+                    except (ValueError, OSError):
+                        data = level.asarray()
+                data = ThumbnailGenerator._prepare_array(data)
+                return Image.fromarray(ThumbnailGenerator._normalize(data, apply_stf)).convert("RGB")
 
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                
-            return img
-            
-        except Exception as e:
-            logger.exception(f"Failed to load source image {source_path}")
+            with Image.open(source_path) as opened:
+                if target_size and max(opened.size) > max(target_size):
+                    opened.draft(opened.mode, target_size)
+                img = opened.copy()
+            if apply_stf or img.mode in {"I", "I;16", "I;16L", "I;16B", "I;16S", "F", "I;32"}:
+                img = Image.fromarray(ThumbnailGenerator._normalize(np.asarray(img), apply_stf))
+            return img.convert("RGB")
+        except Exception:
+            logger.exception("Failed to load source image %s", source_path)
             return None
 
     @staticmethod
-    def generate(source_path: str, output_dir: str, max_size=(400, 400), is_subframe: bool = True, apply_stf: bool = False, overwrite: bool = False) -> str:
-        """
-        Generates a JPEG thumbnail for the given image file.
-        
-        Args:
-            source_path: Absolute path to source file
-            output_dir: Directory to save thumbnail
-            max_size: Tuple of (width, height) - will be adjusted based on source image dimensions
-            is_subframe: Whether to interpret as subframe (linear extraction for RAWs)
-            apply_stf: Whether to apply STF Auto Stretch
-            overwrite: Whether to overwrite existing thumbnail
-        """
-        import hashlib
+    def generate(source_path: str, output_dir: str, max_size=(400, 400),
+                 is_subframe: bool = True, apply_stf: bool = False,
+                 overwrite: bool = False) -> str:
         source = Path(source_path)
         os.makedirs(output_dir, exist_ok=True)
-        
-        path_hash = hashlib.md5(str(source).encode('utf-8')).hexdigest()[:8]
-        thumb_filename = f"{source.stem}_{path_hash}_thumb.jpg"
-        thumb_path = os.path.join(output_dir, thumb_filename)
-        
-        # Check if thumbnail already exists to avoid redundant processing
+        path_hash = hashlib.md5(str(source).encode("utf-8")).hexdigest()[:8]
+        thumb_path = os.path.join(output_dir, f"{source.stem}_{path_hash}_thumb.jpg")
         if os.path.exists(thumb_path) and not overwrite:
-            logger.debug(f"Thumbnail already exists: {thumb_path}")
             return thumb_path
-            
-        try:
-            img = ThumbnailGenerator.load_source_image(source_path, is_subframe=is_subframe, apply_stf=apply_stf)
-            
-            if img:
-                # Adaptive sizing: if longest side >= 1024, cap at 1024; otherwise use original size
-                width, height = img.size
-                longest_side = max(width, height)
-                
-                if longest_side >= 1024:
-                    adaptive_max_size = (1024, 1024)
-                else:
-                    # Use original image size (no downscaling for small images)
-                    adaptive_max_size = (width, height)
-                
-                img.thumbnail(adaptive_max_size, Image.Resampling.LANCZOS)
-                # Strip metadata to avoid save errors (e.g. malformed XMP)
-                img.info = {}
-                img.save(thumb_path, "JPEG", quality=85)
-                return thumb_path
-                
-        except Exception as e:
-            logger.exception(f"Failed to generate thumbnail for {source_path}: {e}")
+        img = ThumbnailGenerator.load_source_image(
+            source_path, is_subframe=is_subframe, apply_stf=apply_stf, target_size=max_size)
+        if img is None:
             return None
-            
-        return None
-
+        img.thumbnail(max_size, Image.Resampling.LANCZOS, reducing_gap=2.0)
+        img.info = {}
+        img.save(thumb_path, "JPEG", quality=85)
+        return thumb_path
