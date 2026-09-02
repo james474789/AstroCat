@@ -6,6 +6,7 @@ Background tasks for bulk operations on mount points (matching, rescanning).
 import logging
 import time
 from sqlalchemy import select, func
+from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from app.worker import celery_app
 from app.database import SessionLocal
 from app.models.image import Image
@@ -234,7 +235,8 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False):
         r.hset(key, "error", str(e))
     finally:
         r.set("indexer:is_running", "0")
-@celery_app.task(bind=True, name="app.tasks.bulk.bulk_thumbnail_task")
+@celery_app.task(bind=True, name="app.tasks.bulk.bulk_thumbnail_task",
+                 soft_time_limit=21600, time_limit=28800)
 def bulk_thumbnail_task(self, mount_path: str):
     """
     Bulk regenerate thumbnails for all images in a mount point/folder.
@@ -278,7 +280,14 @@ def bulk_thumbnail_task(self, mount_path: str):
                 "processed": processed,
                 "updated_at": int(time.time())
             })
-            
+    except SoftTimeLimitExceeded:
+        logger.error(f"Bulk thumbnail soft time limit (6 hours) exceeded for mount: {mount_path}")
+        r.hset(key, mapping={"status": "timeout", "error": "Soft time limit (6 hours) exceeded"})
+        raise
+    except TimeLimitExceeded:
+        logger.error(f"Bulk thumbnail hard time limit (8 hours) exceeded for mount: {mount_path}")
+        r.hset(key, mapping={"status": "timeout", "error": "Hard time limit (8 hours) exceeded"})
+        raise
     except Exception as e:
         logger.error(f"Bulk thumbnail error: {e}", exc_info=True)
         r.hset(key, "status", "failed")
@@ -287,7 +296,8 @@ def bulk_thumbnail_task(self, mount_path: str):
         r.set("indexer:is_running", "0")
 
 
-@celery_app.task(bind=True, name="app.tasks.bulk.bulk_metadata_task")
+@celery_app.task(bind=True, name="app.tasks.bulk.bulk_metadata_task",
+                 soft_time_limit=21600, time_limit=28800)
 def bulk_metadata_task(self, mount_path: str):
     """
     Bulk re-extract metadata for all images in a mount point/folder.
@@ -332,7 +342,14 @@ def bulk_metadata_task(self, mount_path: str):
                 "processed": processed,
                 "updated_at": int(time.time())
             })
-            
+    except SoftTimeLimitExceeded:
+        logger.error(f"Bulk metadata soft time limit (6 hours) exceeded for mount: {mount_path}")
+        r.hset(key, mapping={"status": "timeout", "error": "Soft time limit (6 hours) exceeded"})
+        raise
+    except TimeLimitExceeded:
+        logger.error(f"Bulk metadata hard time limit (8 hours) exceeded for mount: {mount_path}")
+        r.hset(key, mapping={"status": "timeout", "error": "Hard time limit (8 hours) exceeded"})
+        raise
     except Exception as e:
         logger.error(f"Bulk metadata error: {e}", exc_info=True)
         r.hset(key, "status", "failed")

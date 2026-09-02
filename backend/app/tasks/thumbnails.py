@@ -3,7 +3,11 @@ Thumbnail Tasks
 Background tasks for thumbnail generation.
 """
 
+import logging
+from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from app.worker import celery_app
+
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True, name="app.tasks.thumbnails.generate_thumbnail")
@@ -72,12 +76,19 @@ def generate_thumbnail(self, image_id: int, force: bool = False):
             else:
                  return {"status": "error", "message": "Failed to generate thumbnail"}
                  
+    except SoftTimeLimitExceeded:
+        logger.error(f"Thumbnail generation soft time limit (2 hours) exceeded for image {image_id}")
+        return {"status": "error", "message": "Task timeout: Soft time limit (2 hours) exceeded"}
+    except TimeLimitExceeded:
+        logger.error(f"Thumbnail generation hard time limit (3 hours) exceeded for image {image_id}")
+        return {"status": "error", "message": "Task timeout: Hard time limit (3 hours) exceeded"}
     except Exception as e:
         logger.error(f"Error regenerating thumbnail for image {image_id}: {e}")
         return {"status": "error", "message": str(e)}
 
 
-@celery_app.task(bind=True, name="app.tasks.thumbnails.generate_batch")
+@celery_app.task(bind=True, name="app.tasks.thumbnails.generate_batch",
+                 soft_time_limit=7200, time_limit=10800)
 def generate_batch(self, image_ids: list):
     """
     Generate thumbnails for multiple images.
@@ -88,9 +99,19 @@ def generate_batch(self, image_ids: list):
     Returns:
         dict with batch generation status
     """
-    # TODO: Implement in Phase 3
-    return {
-        "status": "completed",
-        "count": len(image_ids),
-        "message": "Batch thumbnail task placeholder - implement in Phase 3"
-    }
+    try:
+        # TODO: Implement in Phase 3
+        return {
+            "status": "completed",
+            "count": len(image_ids),
+            "message": "Batch thumbnail task placeholder - implement in Phase 3"
+        }
+    except SoftTimeLimitExceeded:
+        logger.error(f"Batch thumbnail generation soft time limit (2 hours) exceeded while processing {len(image_ids)} images")
+        return {"status": "error", "message": "Task timeout: Soft time limit (2 hours) exceeded"}
+    except TimeLimitExceeded:
+        logger.error(f"Batch thumbnail generation hard time limit (3 hours) exceeded while processing {len(image_ids)} images")
+        return {"status": "error", "message": "Task timeout: Hard time limit (3 hours) exceeded"}
+    except Exception as e:
+        logger.error(f"Error in batch thumbnail generation: {e}")
+        return {"status": "error", "message": str(e)}
