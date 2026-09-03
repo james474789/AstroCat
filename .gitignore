@@ -130,3 +130,4 @@ build_and_push.ps1
 backend/scripts/backfill_wcs_headers.py
 docker-compose.dev.yml
 docker-compose.hub.yml
+CLAUDE.md
