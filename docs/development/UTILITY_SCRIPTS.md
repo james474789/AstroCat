@@ -45,3 +45,11 @@ docker exec AstroCat-backend python -m app.scripts.<script_name>
 | `create_admin` | Creates an admin user account. |
 | `initialize_db` | Runs database initialization (migrations + catalog seeding). |
 | `reprocess_unsolved` | Re-queues unsolved images for astrometry processing. |
+
+## Targets (F2)
+
+| Script | Description |
+|--------|-------------|
+| `backfill_targets` | Resolves `target_key`/`target_source` for LIGHT subs that don't have one yet, in resumable keyset batches of 1000. Never overwrites a `MANUAL` target. Pass `--all` to re-resolve every non-MANUAL row (e.g. after a catalog reseed or alias index change). Clears `cache:targets:*` in Redis when done. Safe to run any time the indexer/backfill chain runs, after `backfill_frame_types` (F1) if present. |
+
+See `docs/features/TARGETS.md` for the full target resolution design.

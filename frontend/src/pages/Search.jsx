@@ -95,6 +95,7 @@ export default function Search() {
         // F1: '' means the default (Lights only, not written to the URL).
         // 'ALL' means no filter. Otherwise DARK/FLAT/BIAS/DARK_FLAT.
         frame_type: searchParams.get('frame_type') || '',
+        target_key: searchParams.get('target_key') || '',
     });
 
     // Local state for RA input to allow HH:MM editing
@@ -133,6 +134,7 @@ export default function Search() {
             sort_order: searchParams.get('sort_order') || 'desc',
             path: searchParams.get('path') || '',
             frame_type: searchParams.get('frame_type') || '',
+            target_key: searchParams.get('target_key') || '',
         });
 
         // Sync RA input display from URL param
@@ -180,6 +182,7 @@ export default function Search() {
             // F1: default to Lights only when no frame_type URL param is present.
             // "ALL" is sent through as-is (backend treats it as no filter).
             params.frame_type = searchParams.get('frame_type') || 'LIGHT';
+            if (searchParams.get('target_key')) params.target_key = searchParams.get('target_key');
 
             const data = await fetchImages(params);
             setImages(data.items);
@@ -276,6 +279,7 @@ export default function Search() {
             path: '',
             // F1: "Clear filters" resets to the Lights default, not All.
             frame_type: '',
+            target_key: '',
         });
         setRaInput('');
         setSearchParams(new URLSearchParams());

@@ -131,6 +131,7 @@ export async function fetchImages(params = {}) {
         sort_by: params.sort_by,
         sort_order: params.sort_order,
         frame_type: params.frame_type,
+        target_key: params.target_key,
     };
 
     const queryString = buildQueryString(queryParams);
@@ -680,4 +681,67 @@ export function formatFrameTypeBadge(frameType) {
         'DARK_FLAT': 'D-FLAT'
     };
     return mapping[frameType] || frameType;
+}
+
+// ============ Targets API (F2) ============
+
+export async function fetchTargets(params = {}) {
+    const queryParams = {
+        search: params.search,
+        sort: params.sort,
+        order: params.order,
+        min_hours: params.min_hours,
+        filter: params.filter,
+        has_master: params.has_master,
+        catalog: params.catalog,
+        page: params.page || 1,
+        page_size: params.page_size || 50,
+        keys_only: params.keys_only,
+    };
+    const queryString = buildQueryString(queryParams);
+    return handleResponse(await fetch(`${API_BASE_URL}/targets/?${queryString}`, { credentials: 'include' }));
+}
+
+export async function fetchTargetKeys() {
+    const data = await fetchTargets({ page_size: 10000, keys_only: true });
+    return data.keys || [];
+}
+
+export async function fetchUnassignedTargetsSummary() {
+    return handleResponse(await fetch(`${API_BASE_URL}/targets/unassigned/summary`, { credentials: 'include' }));
+}
+
+export async function fetchTarget(key) {
+    return handleResponse(await fetch(`${API_BASE_URL}/targets/${encodeURIComponent(key)}`, { credentials: 'include' }));
+}
+
+export async function updateTargetGoals(key, goals) {
+    return handleResponse(await fetch(`${API_BASE_URL}/targets/${encodeURIComponent(key)}/goals`, {
+        method: 'PUT',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(goals),
+        credentials: 'include'
+    }));
+}
+
+export async function bulkAssignTarget(text, searchParams) {
+    const params = new URLSearchParams(searchParams);
+    params.delete('page');
+    params.delete('page_size');
+    params.set('target', text);
+    return handleResponse(await fetch(`${API_BASE_URL}/images/bulk/target?${params.toString()}`, {
+        method: 'PUT',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include'
+    }));
+}
+
+export function formatHours(seconds) {
+    if (!seconds && seconds !== 0) return '0h';
+    const totalMinutes = Math.round(seconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours === 0) return `${minutes}m`;
+    if (minutes === 0) return `${hours}h`;
+    return `${hours}h ${minutes}m`;
 }

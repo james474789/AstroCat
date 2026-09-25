@@ -13,4 +13,7 @@ docker-compose exec -T backend python -m app.scripts.seed_named_stars
 Write-Host "Backfilling frame types..."
 docker-compose exec -T backend python -m app.scripts.backfill_frame_types
 
+Write-Host "Backfilling Targets..."
+docker-compose exec -T backend python -m app.scripts.backfill_targets
+
 Write-Host "Done! Please refresh the application."

@@ -36,6 +36,7 @@ export default function FilterChips({ filters, onRemove }) {
                 return names[v] || v;
             }
         },
+        target_key: { label: 'Target', format: (v) => v === '__none__' ? 'Unassigned' : v },
     };
 
     // Get active filters (frame_type is handled separately below: unlike

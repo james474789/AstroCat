@@ -168,6 +168,10 @@ class Image(Base):
                         default=FrameType.LIGHT, server_default="LIGHT", index=True)
     frame_type_source = Column(String(20), nullable=True)  # HEADER | FILENAME | PATH | DEFAULT | MANUAL
 
+    # Target (F2)
+    target_key = Column(String(64), nullable=True, index=True)
+    target_source = Column(String(20), nullable=True)  # MANUAL | HEADER | MATCH | HEADER_RAW
+
     # Timestamps
     indexed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -185,6 +189,7 @@ class Image(Base):
         Index('ix_images_subtype_capture', 'subtype', 'capture_date'),
         Index('ix_images_format_solved', 'file_format', 'is_plate_solved'),
         Index('ix_images_frame_subtype', 'frame_type', 'subtype'),
+        Index('ix_images_target_frame', 'target_key', 'frame_type'),
     )
     
     def __repr__(self):

@@ -233,33 +233,27 @@ async def get_stats_by_format(db: AsyncSession = Depends(get_db)):
 @router.get("/top-objects")
 @cache_response(ttl_seconds=600)
 async def get_top_objects(db: AsyncSession = Depends(get_db)):
-    """Get top imaged objects with counts."""
-    stmt = select(
-        ImageCatalogMatch.catalog_designation,
-        ImageCatalogMatch.catalog_type,
-        func.count(ImageCatalogMatch.image_id).label('image_count'),
-        func.sum(Image.exposure_time_seconds).label('total_exposure_seconds')
-    ).join(
-        Image, Image.id == ImageCatalogMatch.image_id
-    ).where(
-        lights_clause()
-    ).group_by(
-        ImageCatalogMatch.catalog_designation,
-        ImageCatalogMatch.catalog_type
-    ).order_by(
-        func.count(ImageCatalogMatch.image_id).desc()
-    ).limit(10)
-    
-    result = await db.execute(stmt)
-    rows = result.all()
-    
+    """
+    Get top imaged objects with counts.
+
+    F2: reads from the targets list (per-target integration totals, which
+    correctly attribute a sub to its single primary target rather than to
+    every catalog object whose field it happens to overlap) instead of
+    ImageCatalogMatch, and fills in `name`. Response shape is unchanged for
+    Dashboard compatibility. The targets list is itself lights-only (F1).
+    """
+    from app.api.targets import get_cached_targets_list
+
+    targets = await get_cached_targets_list(db)
+    top = sorted(targets, key=lambda t: t["total_seconds"], reverse=True)[:10]
+
     top_objects = []
-    for row in rows:
+    for t in top:
         top_objects.append({
-            "designation": row.catalog_designation,
-            "name": "",  # Name would require joining catalog tables
-            "image_count": row.image_count,
-            "total_exposure_hours": round(float(row.total_exposure_seconds or 0) / 3600, 1)
+            "designation": t["target_key"],
+            "name": t["display_name"],
+            "image_count": t["total_subs"],
+            "total_exposure_hours": round(float(t["total_seconds"] or 0) / 3600, 1)
         })
-    
+
     return top_objects
