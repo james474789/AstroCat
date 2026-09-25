@@ -170,6 +170,38 @@ export default function Dashboard() {
                         ))}
                     </div>
                 </div>
+
+                {/* Calibration Library (F1) */}
+                <div className="dashboard-card">
+                    <div className="card-header">
+                        <h3>Calibration Library</h3>
+                        <Link to="/search?frame_type=ALL" className="link text-sm">View all →</Link>
+                    </div>
+                    <div className="top-objects-list">
+                        {[
+                            { type: 'DARK', label: 'Darks', icon: '🌑' },
+                            { type: 'FLAT', label: 'Flats', icon: '⚪' },
+                            { type: 'BIAS', label: 'Bias', icon: '⬛' },
+                            { type: 'DARK_FLAT', label: 'Dark Flats', icon: '🌗' },
+                        ].map(({ type, label, icon }) => (
+                            <Link
+                                key={type}
+                                to={`/search?frame_type=${type}`}
+                                className="top-object-item"
+                            >
+                                <div className="object-rank">{icon}</div>
+                                <div className="object-info">
+                                    <span className="object-designation">{label}</span>
+                                </div>
+                                <div className="object-stats">
+                                    <span className="object-count">
+                                        {(stats?.calibration_counts?.[type] ?? 0).toLocaleString()}
+                                    </span>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             {/* Recent Images */}

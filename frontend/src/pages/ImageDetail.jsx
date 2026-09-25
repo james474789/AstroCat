@@ -89,6 +89,18 @@ export default function ImageDetail() {
         }
     }
 
+    async function handleFrameTypeChange(newFrameType) {
+        setSaving(true);
+        try {
+            const updated = await updateImage(id, { frame_type: newFrameType });
+            setImage(updated);
+        } catch (err) {
+            console.error('Failed to update frame type:', err);
+        } finally {
+            setSaving(false);
+        }
+    }
+
     async function handleRatingChange(newRating) {
         setSaving(true);
         try {
@@ -694,6 +706,32 @@ export default function ImageDetail() {
                                 <option value="INTEGRATION_MASTER">Integration Master</option>
                                 <option value="INTEGRATION_DEPRECATED">Deprecated</option>
                                 <option value="PLANETARY">Planetary</option>
+                            </select>
+                        </div>
+
+                        {/* Frame Type Selector (F1) */}
+                        <div className="subtype-selector">
+                            <label className="label">
+                                Frame Type
+                                {image.frame_type_source && (
+                                    <span className="text-xs text-muted" style={{ marginLeft: '0.5rem', fontWeight: 'normal' }}>
+                                        {image.frame_type_source === 'MANUAL'
+                                            ? '(manual)'
+                                            : `(auto: ${image.frame_type_source.toLowerCase()})`}
+                                    </span>
+                                )}
+                            </label>
+                            <select
+                                className="input select"
+                                value={image.frame_type || 'LIGHT'}
+                                onChange={(e) => handleFrameTypeChange(e.target.value)}
+                                disabled={saving}
+                            >
+                                <option value="LIGHT">Light</option>
+                                <option value="DARK">Dark</option>
+                                <option value="FLAT">Flat</option>
+                                <option value="BIAS">Bias</option>
+                                <option value="DARK_FLAT">Dark Flat</option>
                             </select>
                         </div>
                     </div>

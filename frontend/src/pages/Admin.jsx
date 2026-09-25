@@ -13,6 +13,7 @@ import {
     updateSettings,
     triggerMountMatches,
     triggerMountRescan,
+    triggerReclassifyFrameTypes,
     downloadBackup,
     uploadBackup,
     fetchUsers,
@@ -42,6 +43,7 @@ function Admin() {
     const [scanning, setScanning] = useState(false);
     const [cacheStats, setCacheStats] = useState(null);
     const [cacheActionLoading, setCacheActionLoading] = useState(false);
+    const [reclassifyLoading, setReclassifyLoading] = useState(false);
     const [systemSettings, setSystemSettings] = useState({ astrometry_provider: 'nova' });
     const [settingsLoading, setSettingsLoading] = useState(false);
     const [bulkActionLoading, setBulkActionLoading] = useState({}); // { [path]: 'match' | 'rescan' | null }
@@ -202,6 +204,19 @@ function Admin() {
             alert('Failed to start regeneration.');
         } finally {
             setCacheActionLoading(false);
+        }
+    }
+
+    async function handleReclassifyFrameTypes() {
+        setReclassifyLoading(true);
+        try {
+            await triggerReclassifyFrameTypes(false);
+            showToast('Frame type reclassification started in background.', 'success', 2500);
+        } catch (err) {
+            console.error('Failed to start frame type reclassification:', err);
+            showToast(`Failed to start reclassification: ${err.message}`, 'error');
+        } finally {
+            setReclassifyLoading(false);
         }
     }
 
@@ -959,6 +974,23 @@ function Admin() {
                                 <div className="cache-stat">{cacheStats ? <span className="cache-value">{cacheStats.size_mb} MB</span> : <span className="cache-value">--</span>}<span className="cache-label">Cache Size</span></div>
                             </div>
                             <div className="cache-actions"><button className="btn btn-secondary" onClick={handleClearCache} disabled={cacheActionLoading}>{cacheActionLoading ? 'Processing...' : 'Clear Cache'}</button><button className="btn btn-primary" onClick={handleRegenerateThumbnails} disabled={cacheActionLoading} style={{ marginLeft: '1rem' }}>Regenerate All</button></div>
+                        </div>
+                    </section>
+
+                    {/* Data Maintenance Section (F1) */}
+                    <section className="settings-section">
+                        <h2 className="section-title">🌓 Data Maintenance</h2>
+                        <div className="cache-card">
+                            <div className="cache-info">
+                                <div className="cache-stat">
+                                    <span className="cache-label">Frame type classification (Light/Dark/Flat/Bias/Dark-Flat), derived from stored header/filename/path data. No file IO -- safe to re-run.</span>
+                                </div>
+                            </div>
+                            <div className="cache-actions">
+                                <button className="btn btn-secondary" onClick={handleReclassifyFrameTypes} disabled={reclassifyLoading}>
+                                    {reclassifyLoading ? 'Starting...' : '🌓 Reclassify frame types'}
+                                </button>
+                            </div>
                         </div>
                     </section>
 
