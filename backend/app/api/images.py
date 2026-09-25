@@ -14,7 +14,7 @@ import os
 import math
 
 from app.database import get_db
-from app.models.image import Image, ImageFormat, ImageSubtype
+from app.models.image import Image, ImageFormat, ImageSubtype, FrameType
 from app.schemas.image import ImageDetail, ImageList, UpdateImageRequest
 from app.schemas.image import ImageDetail, ImageList
 from app.schemas.common import PaginatedResponse
@@ -56,6 +56,7 @@ def _build_image_query(
     telescope: Optional[str] = None,
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
+    frame_type: Optional[str] = None,
 ):
     """
     Helper to build the SQLAlchemy select statement for images based on filters.
@@ -203,7 +204,15 @@ def _build_image_query(
         else:
             # Search for key existence
             stmt = stmt.where(Image.raw_header.has_key(header_key))
-            
+
+    # Frame type (F1): accepts a single value or a comma-separated list
+    # (e.g. "DARK,FLAT"). "ALL" (or omitted) means no filter.
+    if frame_type and frame_type.upper() != "ALL":
+        requested = [v.strip().upper() for v in frame_type.split(",") if v.strip()]
+        valid_types = [FrameType(v) for v in requested if v in FrameType.__members__]
+        if valid_types:
+            stmt = stmt.where(Image.frame_type.in_(valid_types))
+
     return stmt
 
 
@@ -240,6 +249,7 @@ async def list_images(
     telescope: Optional[str] = None,
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
+    frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -273,9 +283,10 @@ async def list_images(
         header_value=header_value,
         telescope=telescope,
         gain_min=gain_min,
-        gain_max=gain_max
+        gain_max=gain_max,
+        frame_type=frame_type
     )
-    
+
     # Count total
     # We use a subquery to correctly handle the distinct() and joins if present
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -337,6 +348,7 @@ async def export_images_csv(
     telescope: Optional[str] = None,
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
+    frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -373,9 +385,10 @@ async def export_images_csv(
         header_value=header_value,
         telescope=telescope,
         gain_min=gain_min,
-        gain_max=gain_max
+        gain_max=gain_max,
+        frame_type=frame_type
     )
-    
+
     # Apply Sorting
     sort_col = getattr(Image, sort_by, Image.capture_date)
     if sort_order.lower() == 'asc':
@@ -395,7 +408,7 @@ async def export_images_csv(
     headers = [
         "ID", "File Name", "File Path", "Format", "Size (Bytes)", "Hash",
         "Width", "Height",
-        "Subtype", "Plate Solved", "Solve Source", "Solve Provider",
+        "Subtype", "Frame Type", "Frame Type Source", "Plate Solved", "Solve Source", "Solve Provider",
         "RA", "Dec", "Field Radius", "Pixel Scale", "Rotation",
         "Exposure (s)", "Capture Date",
         "Camera", "Telescope", "Filter", "Gain", "Binning",
@@ -432,6 +445,8 @@ async def export_images_csv(
             img.width_pixels,
             img.height_pixels,
             img.subtype.value if img.subtype else "",
+            img.frame_type.value if img.frame_type else "",
+            img.frame_type_source or "",
             img.is_plate_solved,
             img.plate_solve_source or "",
             img.plate_solve_provider or "",
@@ -729,9 +744,43 @@ async def update_image(
     # Update plate_solve_source if provided
     if update_data.plate_solve_source is not None:
         image.plate_solve_source = update_data.plate_solve_source
-        
+
+    # Update frame_type if provided (F1): manual edits always win and
+    # survive re-indexing (frame_type_source == "MANUAL" is never overwritten
+    # by the indexer).
+    frame_type_became_non_light = False
+    frame_type_became_light = False
+    if update_data.frame_type is not None:
+        previous_frame_type = image.frame_type
+        if update_data.frame_type != previous_frame_type:
+            if update_data.frame_type != FrameType.LIGHT:
+                frame_type_became_non_light = True
+            elif previous_frame_type != FrameType.LIGHT:
+                frame_type_became_light = True
+        image.frame_type = update_data.frame_type
+        image.frame_type_source = "MANUAL"
+
+    if frame_type_became_non_light:
+        from app.models.matches import ImageCatalogMatch
+        from sqlalchemy import delete as sa_delete
+        await db.execute(
+            sa_delete(ImageCatalogMatch).where(
+                ImageCatalogMatch.image_id == image.id,
+                ImageCatalogMatch.match_source != 'MANUAL'
+            )
+        )
+
     await db.commit()
     await db.refresh(image)
+
+    # If the image became LIGHT again and is solved, re-run catalog matching.
+    if frame_type_became_light and image.is_plate_solved:
+        try:
+            from app.services.matching import CatalogMatcher
+            matcher = CatalogMatcher(db)
+            await matcher.match_image(image.id)
+        except Exception as e:
+            print(f"Failed to re-run catalog matching after frame_type change: {e}")
 
     # Trigger thumbnail regeneration if subtype changed (after commit so worker sees new value)
     if subtype_changed:
@@ -896,6 +945,7 @@ async def bulk_update_image_type(
     telescope: Optional[str] = None,
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
+    frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk update image type for all images matching the filters."""
@@ -933,9 +983,10 @@ async def bulk_update_image_type(
             header_value=header_value,
             telescope=telescope,
             gain_min=gain_min,
-            gain_max=gain_max
+            gain_max=gain_max,
+            frame_type=frame_type
         )
-        
+
         # Execute query to get all matching images (no pagination)
         result = await db.execute(stmt)
         images = result.scalars().all()
@@ -997,6 +1048,127 @@ async def bulk_update_image_type(
     }
 
 
+@router.put("/bulk/frame-type", response_model=dict)
+async def bulk_update_frame_type(
+    new_frame_type: FrameType = Query(..., description="New frame type to set"),
+    subtype: Optional[ImageSubtype] = None,
+    format: Optional[ImageFormat] = None,
+    is_plate_solved: Optional[str] = Query(None, description="Filter by plate solve status: 'solved', 'imported', 'unsolved', or boolean"),
+    rating: Optional[int] = Query(None, ge=0, le=5, description="Minimum rating (0-5 stars)"),
+    search: Optional[str] = Query(None, description="Search file names and object names"),
+    object_name: Optional[str] = None,
+    exposure_min: Optional[float] = None,
+    exposure_max: Optional[float] = None,
+    max_exposure_exclusive: bool = False,
+    rotation_min: Optional[float] = None,
+    rotation_max: Optional[float] = None,
+    pixel_scale_min: Optional[float] = None,
+    pixel_scale_max: Optional[float] = None,
+    pixel_scale_max_exclusive: bool = False,
+    filter: Optional[str] = None,
+    camera: Optional[str] = None,
+    ra: Optional[float] = Query(None, description="RA in degrees"),
+    dec: Optional[float] = Query(None, description="Dec in degrees"),
+    radius: Optional[float] = Query(None, description="Radius in degrees"),
+    path: Optional[str] = Query(None, description="Filter by file path prefix"),
+    start_date: Optional[Union[datetime, date]] = Query(None, description="Start of date range"),
+    end_date: Optional[Union[datetime, date]] = Query(None, description="End of date range"),
+    header_key: Optional[str] = None,
+    header_value: Optional[str] = None,
+    telescope: Optional[str] = None,
+    gain_min: Optional[float] = None,
+    gain_max: Optional[float] = None,
+    frame_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """Bulk set frame_type (F1) for all images matching the filters. Always marks frame_type_source='MANUAL'."""
+
+    updated_count = 0
+    failed_count = 0
+    errors = []
+
+    try:
+        stmt = _build_image_query(
+            subtype=subtype,
+            format=format,
+            is_plate_solved=is_plate_solved,
+            rating=rating,
+            search=search,
+            object_name=object_name,
+            exposure_min=exposure_min,
+            exposure_max=exposure_max,
+            max_exposure_exclusive=max_exposure_exclusive,
+            rotation_min=rotation_min,
+            rotation_max=rotation_max,
+            pixel_scale_min=pixel_scale_min,
+            pixel_scale_max=pixel_scale_max,
+            pixel_scale_max_exclusive=pixel_scale_max_exclusive,
+            filter=filter,
+            camera=camera,
+            ra=ra,
+            dec=dec,
+            radius=radius,
+            path=path,
+            start_date=start_date,
+            end_date=end_date,
+            header_key=header_key,
+            header_value=header_value,
+            telescope=telescope,
+            gain_min=gain_min,
+            gain_max=gain_max,
+            frame_type=frame_type
+        )
+
+        result = await db.execute(stmt)
+        images = result.scalars().all()
+
+        if not images:
+            return {
+                "updated_count": 0,
+                "failed_count": 0,
+                "total_count": 0,
+                "errors": []
+            }
+
+        became_non_light_ids = set()
+
+        for image in images:
+            try:
+                if image.frame_type != new_frame_type:
+                    if new_frame_type != FrameType.LIGHT:
+                        became_non_light_ids.add(image.id)
+                    image.frame_type = new_frame_type
+                image.frame_type_source = "MANUAL"
+                updated_count += 1
+            except Exception as e:
+                failed_count += 1
+                errors.append(f"Image {image.id}: {str(e)}")
+
+        if became_non_light_ids:
+            from app.models.matches import ImageCatalogMatch
+            from sqlalchemy import delete as sa_delete
+            await db.execute(
+                sa_delete(ImageCatalogMatch).where(
+                    ImageCatalogMatch.image_id.in_(became_non_light_ids),
+                    ImageCatalogMatch.match_source != 'MANUAL'
+                )
+            )
+
+        await db.commit()
+
+    except Exception as e:
+        await db.rollback()
+        errors.append(f"Database error: {str(e)}")
+        failed_count = -1
+
+    return {
+        "updated_count": updated_count,
+        "failed_count": failed_count,
+        "total_count": len(images) if 'images' in locals() else 0,
+        "errors": errors
+    }
+
+
 @router.post("/bulk/metadata", response_model=dict)
 async def bulk_sync_metadata(
     subtype: Optional[ImageSubtype] = None,
@@ -1026,6 +1198,7 @@ async def bulk_sync_metadata(
     telescope: Optional[str] = None,
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
+    frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
     db: AsyncSession = Depends(get_db)
 ):
     """Queue metadata re-extraction for all images matching the filters."""
@@ -1057,7 +1230,8 @@ async def bulk_sync_metadata(
             header_value=header_value,
             telescope=telescope,
             gain_min=gain_min,
-            gain_max=gain_max
+            gain_max=gain_max,
+            frame_type=frame_type
         )
         stmt = stmt.with_only_columns(Image.file_path).order_by(None)
         result = await db.execute(stmt)
