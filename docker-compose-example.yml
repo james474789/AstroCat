@@ -89,7 +89,7 @@ services:
       retries: 10
       start_period: 120s
     command: >
-      sh -c "python -m app.scripts.initialize_db && alembic stamp head && python -m app.data.seed &&  python -m app.scripts.seed_named_stars &&  /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"
+      sh -c "python -m app.scripts.initialize_db && alembic stamp head && python -m app.data.seed &&  python -m app.scripts.seed_named_stars &&  python -m app.scripts.backfill_frame_types &&  /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf"
     depends_on:
       db:
         condition: service_healthy

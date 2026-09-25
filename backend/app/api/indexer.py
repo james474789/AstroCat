@@ -133,8 +133,22 @@ async def trigger_bulk_metadata(payload: dict, background_tasks: BackgroundTasks
     logger.info(f"Triggering bulk metadata for path: {path}")
     from app.tasks.bulk import bulk_metadata_task
     task = bulk_metadata_task.delay(path)
-    
+
     return {"message": "Bulk metadata extraction started", "task_id": task.id}
+
+
+@router.post("/reclassify-frame-types")
+async def trigger_reclassify_frame_types(payload: dict = None):
+    """
+    Trigger a global frame_type/frame_type_source backfill (F1).
+    Uses stored raw_header/file_path -- no file IO, no mount path required.
+    payload: {"all": boolean}  # reclassify every row (except MANUAL), not just unclassified ones
+    """
+    reclassify_all = bool((payload or {}).get("all", False))
+    logger.info(f"Triggering frame type reclassification (all={reclassify_all})")
+    from app.tasks.indexer import backfill_frame_types
+    task = backfill_frame_types.delay(reclassify_all)
+    return {"message": "Frame type reclassification started", "task_id": task.id}
 
 
 
