@@ -1524,7 +1524,6 @@ async def rescan_image(image_id: int, force: bool = Query(False), db: AsyncSessi
         raise HTTPException(status_code=404, detail="Image not found")
 
     # Calibration frames are never plate-solvable (F1); refuse unless forced.
-    from app.models.image import FrameType
     if image.frame_type != FrameType.LIGHT and not force:
         raise HTTPException(
             status_code=409,
