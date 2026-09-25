@@ -130,6 +130,7 @@ export async function fetchImages(params = {}) {
         gain_max: params.gain_max,
         sort_by: params.sort_by,
         sort_order: params.sort_order,
+        frame_type: params.frame_type,
     };
 
     const queryString = buildQueryString(queryParams);
@@ -461,6 +462,31 @@ export async function triggerBulkMetadata(path) {
     }));
 }
 
+// ============ F1: Frame Types API ============
+
+export async function bulkUpdateFrameType(newFrameType, searchParams) {
+    // Pass search filters as query parameters, same pattern as bulkUpdateImageType.
+    const queryString = new URLSearchParams(searchParams).toString();
+    return handleResponse(await fetch(`${API_BASE_URL}/images/bulk/frame-type?new_frame_type=${encodeURIComponent(newFrameType)}&${queryString}`, {
+        method: 'PUT',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include'
+    }));
+}
+
+export async function fetchStatsByFrameType() {
+    return handleResponse(await fetch(`${API_BASE_URL}/stats/by-frame-type`, { credentials: 'include' }));
+}
+
+export async function triggerReclassifyFrameTypes(all = false) {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/reclassify-frame-types`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ all }),
+        credentials: 'include'
+    }));
+}
+
 // ============ Settings API ============
 
 export async function fetchSettings() {
@@ -631,4 +657,27 @@ export function formatSubtype(subtype) {
         'PLANETARY': 'Planetary'
     };
     return mapping[subtype] || subtype;
+}
+
+export function formatFrameType(frameType) {
+    if (!frameType) return 'Light';
+    const mapping = {
+        'LIGHT': 'Light',
+        'DARK': 'Dark',
+        'FLAT': 'Flat',
+        'BIAS': 'Bias',
+        'DARK_FLAT': 'Dark Flat'
+    };
+    return mapping[frameType] || frameType;
+}
+
+export function formatFrameTypeBadge(frameType) {
+    // Short form for compact badges (e.g. ImageCard).
+    const mapping = {
+        'DARK': 'DARK',
+        'FLAT': 'FLAT',
+        'BIAS': 'BIAS',
+        'DARK_FLAT': 'D-FLAT'
+    };
+    return mapping[frameType] || frameType;
 }

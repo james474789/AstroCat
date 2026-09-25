@@ -98,6 +98,12 @@
     color: white;
 }
 
+/* Calibration frame badge (F1): neutral grey/blue, distinct from processing-stage badges */
+.badge-calib {
+    background: rgba(100, 116, 139, 0.75);
+    color: white;
+}
+
 .badge-solved {
     background: rgba(34, 211, 238, 0.2);
     color: var(--color-accent);

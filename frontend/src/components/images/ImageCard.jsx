@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { formatExposure, formatBytes, formatDate, API_BASE_URL } from '../../api/client';
+import { formatExposure, formatBytes, formatDate, formatFrameTypeBadge, API_BASE_URL } from '../../api/client';
 import RatingStars from './RatingStars';
 import './ImageCard.css';
 
@@ -17,6 +17,8 @@ export default function ImageCard({ image, onContextMenu }) {
     const [imageError, setImageError] = useState(false);
 
     const badge = image.subtype ? subtypeBadges[image.subtype] : null;
+    // Frame type calibration badge (F1): shown for anything that isn't a LIGHT frame.
+    const isCalibrationFrame = image.frame_type && image.frame_type !== 'LIGHT';
 
     // Generate a gradient placeholder based on image ID
     const generatePlaceholder = (id) => {
@@ -66,6 +68,11 @@ export default function ImageCard({ image, onContextMenu }) {
                         {badge && (
                             <span className={`image-badge ${badge.className}`}>
                                 {badge.label}
+                            </span>
+                        )}
+                        {isCalibrationFrame && (
+                            <span className="image-badge badge-calib">
+                                {formatFrameTypeBadge(image.frame_type)}
                             </span>
                         )}
                         {image.is_plate_solved && image.subtype !== 'PLANETARY' && (
