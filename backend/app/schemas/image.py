@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict
-from app.models.image import ImageFormat, ImageSubtype
+from app.models.image import ImageFormat, ImageSubtype, FrameType
 from app.models.matches import CatalogType
 
 class CatalogMatchSchema(BaseModel):
@@ -80,6 +80,10 @@ class ImageBase(BaseModel):
     file_created: Optional[datetime] = None
     file_last_modified: Optional[datetime] = None
 
+    # Frame type (F1)
+    frame_type: FrameType = FrameType.LIGHT
+    frame_type_source: Optional[str] = None
+
 class ImageDetail(ImageBase):
     id: int
     file_path: str
@@ -140,7 +144,8 @@ class UpdateImageRequest(BaseModel):
     rating: Optional[int] = None
     rating_manually_edited: Optional[bool] = None
     plate_solve_source: Optional[str] = None
-    
+    frame_type: Optional[FrameType] = None
+
     model_config = ConfigDict(from_attributes=True)
     catalog_matches: List[CatalogMatchSchema] = [] # Optional for list view to save bandwidth?
     
