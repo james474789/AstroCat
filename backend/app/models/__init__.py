@@ -8,6 +8,7 @@ from app.models.catalog import MessierCatalog, NGCCatalog
 from app.models.matches import ImageCatalogMatch, CatalogType
 from app.models.user import User
 from app.models.system_stats import SystemStats
+from app.models.target import TargetGoal
 
 __all__ = [
     "Image",
@@ -20,5 +21,6 @@ __all__ = [
     "CatalogType",
     "User",
     "SystemStats",
+    "TargetGoal",
 ]
 
