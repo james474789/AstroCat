@@ -14,9 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as redis
 
 from app.database import get_db
-from app.models.image import Image, ImageSubtype
+from app.models.image import Image, ImageSubtype, FrameType
 from app.models.matches import ImageCatalogMatch
 from app.config import settings
+from app.utils.frame_filters import light_subs_clause, lights_clause
 
 router = APIRouter()
 
@@ -58,8 +59,10 @@ async def get_stats_overview(db: AsyncSession = Depends(get_db)):
     # Total images
     total_images = (await db.execute(select(func.count(Image.id)))).scalar() or 0
     
-    # Total exposure hours
-    total_exposure_seconds = (await db.execute(select(func.sum(Image.exposure_time_seconds)))).scalar() or 0
+    # Total exposure hours (F1: LIGHT sub-frames only -- excludes calibration frames)
+    total_exposure_seconds = (await db.execute(
+        select(func.sum(Image.exposure_time_seconds)).where(light_subs_clause())
+    )).scalar() or 0
     total_exposure_hours = total_exposure_seconds / 3600
     
     # Plate solved stats (filtered to masters and subs as requested)
@@ -99,6 +102,16 @@ async def get_stats_overview(db: AsyncSession = Depends(get_db)):
         )
     )).scalar() or 0
 
+    # Calibration frame counts (F1)
+    calibration_rows = (await db.execute(
+        select(Image.frame_type, func.count(Image.id))
+        .where(Image.frame_type != FrameType.LIGHT)
+        .group_by(Image.frame_type)
+    )).all()
+    calibration_counts = {ft.value: 0 for ft in FrameType if ft != FrameType.LIGHT}
+    for frame_type, count in calibration_rows:
+        calibration_counts[frame_type.value] = count
+
     return {
         "total_images": total_images,
         "total_exposure_hours": round(total_exposure_hours, 1),
@@ -108,7 +121,8 @@ async def get_stats_overview(db: AsyncSession = Depends(get_db)):
         "total_file_size_gb": round(total_file_size_gb, 2),
         "messier_coverage": messier_coverage,
         "ngc_coverage": ngc_coverage,
-        "storage_used_bytes": total_size_bytes
+        "storage_used_bytes": total_size_bytes,
+        "calibration_counts": calibration_counts
     }
 
 
@@ -119,12 +133,13 @@ async def get_stats_by_month(db: AsyncSession = Depends(get_db)):
     try:
         from sqlalchemy import text
         stmt = text("""
-            SELECT 
+            SELECT
                 to_char(capture_date, 'YYYY-MM') as month,
                 count(*) as count,
                 COALESCE(sum(exposure_time_seconds) / 3600, 0) as exposure_hours
-            FROM images 
+            FROM images
             WHERE capture_date IS NOT NULL
+              AND frame_type = 'LIGHT'
             GROUP BY to_char(capture_date, 'YYYY-MM')
             ORDER BY month DESC
             LIMIT 12
@@ -143,6 +158,29 @@ async def get_stats_by_month(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         print(f"Error in get_stats_by_month: {e}")
         return []
+
+
+@router.get("/by-frame-type")
+@cache_response(ttl_seconds=600)
+async def get_stats_by_frame_type(db: AsyncSession = Depends(get_db)):
+    """Get statistics grouped by frame type (F1: Light/Dark/Flat/Bias/Dark-Flat)."""
+    stmt = select(
+        Image.frame_type,
+        func.count(Image.id).label('count'),
+        func.sum(Image.exposure_time_seconds).label('seconds')
+    ).group_by(Image.frame_type)
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        {
+            "frame_type": row.frame_type.value if row.frame_type else "Unknown",
+            "count": row.count,
+            "total_exposure_hours": round((row.seconds or 0) / 3600, 1)
+        }
+        for row in rows
+    ]
 
 
 @router.get("/by-subtype")
@@ -203,6 +241,8 @@ async def get_top_objects(db: AsyncSession = Depends(get_db)):
         func.sum(Image.exposure_time_seconds).label('total_exposure_seconds')
     ).join(
         Image, Image.id == ImageCatalogMatch.image_id
+    ).where(
+        lights_clause()
     ).group_by(
         ImageCatalogMatch.catalog_designation,
         ImageCatalogMatch.catalog_type

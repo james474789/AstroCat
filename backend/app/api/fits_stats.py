@@ -6,7 +6,7 @@ from sqlalchemy import func, case, select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.image import Image
+from app.models.image import Image, FrameType
 from app.schemas.fits_stats import (
     FitsStatsResponse, 
     FitsStatsOverview, 
@@ -24,6 +24,7 @@ async def get_fits_stats(
     cameras: Optional[List[str]] = Query(None),
     telescopes: Optional[List[str]] = Query(None),
     objects: Optional[List[str]] = Query(None),
+    frame_type: Optional[str] = Query("LIGHT", description="Filter by frame type (LIGHT/DARK/FLAT/BIAS/DARK_FLAT), or ALL for no filter"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -37,6 +38,11 @@ async def get_fits_stats(
         conditions.append(Image.capture_date >= date_from)
     if date_to:
         conditions.append(Image.capture_date <= date_to)
+    if frame_type and frame_type.upper() != "ALL":
+        try:
+            conditions.append(Image.frame_type == FrameType(frame_type.upper()))
+        except ValueError:
+            pass
     if cameras:
         # Use ILIKE for partial matching on all provided camera strings (OR if multiple)
         cam_conditions = [Image.camera_name.ilike(f"%{c}%") for c in cameras if c]
