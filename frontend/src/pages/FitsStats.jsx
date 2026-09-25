@@ -76,7 +76,9 @@ export default function FitsStats() {
         date_from: '',
         date_to: '',
         cameras: '',
-        telescopes: ''
+        telescopes: '',
+        // F1: defaults to Lights only, like Search; "ALL" removes the filter.
+        frame_type: 'LIGHT'
     });
 
     // Debounced filters state for the actual query
@@ -402,6 +404,23 @@ export default function FitsStats() {
                         onChange={handleFilterChange}
                         className="filter-input"
                     />
+                </div>
+
+                <div className="filter-group">
+                    <label className="filter-label">Frame Type</label>
+                    <select
+                        name="frame_type"
+                        value={filters.frame_type}
+                        onChange={handleFilterChange}
+                        className="filter-input"
+                    >
+                        <option value="LIGHT">Lights (default)</option>
+                        <option value="ALL">All Frame Types</option>
+                        <option value="DARK">Darks</option>
+                        <option value="FLAT">Flats</option>
+                        <option value="BIAS">Bias</option>
+                        <option value="DARK_FLAT">Dark Flats</option>
+                    </select>
                 </div>
             </div>
 
