@@ -1339,16 +1339,24 @@ async def download_image(
 
 
 @router.post("/{image_id}/rescan", status_code=202)
-async def rescan_image(image_id: int, db: AsyncSession = Depends(get_db)):
+async def rescan_image(image_id: int, force: bool = Query(False), db: AsyncSession = Depends(get_db)):
     """Trigger Astrometry.net rescan."""
     # 1. Fetch Image
     stmt = select(Image).where(Image.id == image_id)
     result = await db.execute(stmt)
     image = result.scalar_one_or_none()
-    
+
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
-        
+
+    # Calibration frames are never plate-solvable (F1); refuse unless forced.
+    from app.models.image import FrameType
+    if image.frame_type != FrameType.LIGHT and not force:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Calibration frames ({image.frame_type.value}) are not plate-solved"
+        )
+
     # Check if already processing?
     # if image.astrometry_status in ['SUBMITTED', 'PROCESSING']:
     #      return {"status": "processing", "message": "Already processing", "start_rescan": False}
