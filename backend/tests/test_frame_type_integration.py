@@ -12,9 +12,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.sql.dml import Delete
 
+from app.config import settings
 from app.models.image import FrameType, Image, ImageSubtype
 from app.tasks.indexer import _process_image_impl
 from app.tasks.bulk import bulk_match_task, bulk_astrometry_task
+from app.scripts.backfill_frame_types import backfill_frame_types
 
 from app.worker import celery_app  # noqa: F401  (import order ensures app/worker loads)
 
@@ -164,3 +166,72 @@ class TestBulkSelectionExcludesNonLight:
         args, _ = fake_query.filter.call_args
         clause_strs = [str(a) for a in args]
         assert any("frame_type" in s for s in clause_strs), clause_strs
+
+
+class TestBackfillFrameTypes:
+    def test_backfill_updates_and_cleans_up_matches(self, monkeypatch):
+        monkeypatch.setattr(settings, "image_paths", "/data/mount1")
+
+        # Row 1: never classified, lives in a Darks/ directory -> becomes DARK.
+        row1 = (1, "/data/mount1/Darks/img1.fits", None, FrameType.LIGHT, None)
+        # Row 2: never classified, header says LIGHT -> stays LIGHT but gains a source.
+        row2 = (2, "/data/mount1/img2.fits", {"IMAGETYP": "LIGHT"}, FrameType.LIGHT, None)
+
+        select_result_1 = MagicMock()
+        select_result_1.all.return_value = [row1, row2]
+        select_result_2 = MagicMock()
+        select_result_2.all.return_value = []
+
+        fake_session = MagicMock()
+        fake_session.execute.side_effect = [select_result_1, MagicMock(), MagicMock(), select_result_2]
+
+        with patch("app.scripts.backfill_frame_types.SessionLocal") as mock_sl, \
+             patch("app.scripts.backfill_frame_types._clear_stats_cache") as mock_clear_cache:
+            mock_sl.return_value.__enter__.return_value = fake_session
+
+            summary = backfill_frame_types(dry_run=False, reclassify_all=False, batch_size=2)
+
+        assert summary["total"] == 2
+        assert summary["updated"] == 2
+        mock_clear_cache.assert_called_once()
+
+        # Calls: select, bulk update, cleanup delete, commit, select (empty) -> stop.
+        from sqlalchemy.sql.dml import Update, Delete
+        update_calls = [c for c in fake_session.execute.call_args_list if c.args and isinstance(c.args[0], Update)]
+        delete_calls = [c for c in fake_session.execute.call_args_list if c.args and isinstance(c.args[0], Delete)]
+        assert len(update_calls) == 1
+        assert len(delete_calls) == 1
+
+        # The bulk update payload marks row 1 DARK and row 2 LIGHT/HEADER.
+        payload = update_calls[0].args[1]
+        by_id = {row["id"]: row for row in payload}
+        assert by_id[1]["frame_type"] == FrameType.DARK
+        assert by_id[2]["frame_type"] == FrameType.LIGHT
+        assert by_id[2]["frame_type_source"] == "HEADER"
+
+        fake_session.commit.assert_called()
+
+    def test_dry_run_makes_no_writes(self, monkeypatch):
+        monkeypatch.setattr(settings, "image_paths", "/data/mount1")
+
+        row1 = (1, "/data/mount1/Darks/img1.fits", None, FrameType.LIGHT, None)
+        select_result_1 = MagicMock()
+        select_result_1.all.return_value = [row1]
+
+        fake_session = MagicMock()
+        fake_session.execute.side_effect = [select_result_1]
+
+        with patch("app.scripts.backfill_frame_types.SessionLocal") as mock_sl, \
+             patch("app.scripts.backfill_frame_types._clear_stats_cache") as mock_clear_cache:
+            mock_sl.return_value.__enter__.return_value = fake_session
+
+            summary = backfill_frame_types(dry_run=True, reclassify_all=False, batch_size=2)
+
+        assert summary["total"] == 1
+        assert summary["updated"] == 1
+        # Dry run: a single SELECT (the batch is smaller than batch_size, so
+        # the loop stops without a second page), no UPDATE/DELETE/commit, no
+        # cache clear.
+        assert fake_session.execute.call_count == 1
+        fake_session.commit.assert_not_called()
+        mock_clear_cache.assert_not_called()
