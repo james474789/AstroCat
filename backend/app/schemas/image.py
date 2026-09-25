@@ -80,6 +80,10 @@ class ImageBase(BaseModel):
     file_created: Optional[datetime] = None
     file_last_modified: Optional[datetime] = None
 
+    # Target (F2)
+    target_key: Optional[str] = None
+    target_source: Optional[str] = None
+
 class ImageDetail(ImageBase):
     id: int
     file_path: str
@@ -140,10 +144,14 @@ class UpdateImageRequest(BaseModel):
     rating: Optional[int] = None
     rating_manually_edited: Optional[bool] = None
     plate_solve_source: Optional[str] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
     catalog_matches: List[CatalogMatchSchema] = [] # Optional for list view to save bandwidth?
-    
+
+    # Target (F2): free text, resolved through the AliasIndex server-side.
+    # Empty string clears the target. Sets target_source='MANUAL'.
+    target_key: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 class BulkUpdateImageTypeRequest(BaseModel):
