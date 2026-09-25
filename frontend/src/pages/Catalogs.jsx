@@ -1,7 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchMessierCatalog, fetchNGCCatalog, fetchCaldwellCatalog, fetchNamedStarCatalog, formatRA, formatDec } from '../api/client';
+import { fetchMessierCatalog, fetchNGCCatalog, fetchCaldwellCatalog, fetchNamedStarCatalog, fetchTargetKeys, formatRA, formatDec } from '../api/client';
 import './Catalogs.css';
+
+// Mirrors the backend's app.services.targets.normalize_designation just
+// enough to check "does a target exist for this designation" (F2):
+// upper-case, strip separators, strip leading zeros off the trailing digits.
+function normalizeDesignation(s) {
+    if (!s) return '';
+    let text = s.trim().toUpperCase().replace(/[\s_-]+/g, '');
+    const match = text.match(/^(.*?)(\d+)$/);
+    if (match) {
+        const digits = match[2].replace(/^0+/, '') || '0';
+        text = match[1] + digits;
+    }
+    return text;
+}
 
 export default function Catalogs() {
     const [activeTab, setActiveTab] = useState('messier');
@@ -16,6 +30,14 @@ export default function Catalogs() {
     const [sortBy, setSortBy] = useState('default');
     const [sortOrder, setSortOrder] = useState('asc');
     const [counts, setCounts] = useState({ messier: 0, ngc: 0, caldwell: 0, stars: 0 });
+    const [targetKeySet, setTargetKeySet] = useState(new Set());
+
+    // Load the set of target keys once so cards can link to their Target page (F2).
+    useEffect(() => {
+        fetchTargetKeys()
+            .then((keys) => setTargetKeySet(new Set(keys)))
+            .catch((err) => console.error('Failed to load target keys:', err));
+    }, []);
 
     // Initial load for counts
     useEffect(() => {
@@ -284,6 +306,14 @@ export default function Catalogs() {
                                     >
                                         View Images →
                                     </Link>
+                                    {obj.image_count > 0 && targetKeySet.has(normalizeDesignation(obj.designation)) && (
+                                        <Link
+                                            to={`/targets/${encodeURIComponent(normalizeDesignation(obj.designation))}`}
+                                            className="view-images-link"
+                                        >
+                                            Target page →
+                                        </Link>
+                                    )}
                                 </div>
                             </div>
                         ))}
