@@ -727,3 +727,30 @@ def regenerate_thumbnails(self):
     except Exception as e:
         logger.error(f"Error during regenerate_thumbnails task: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}
+
+
+@celery_app.task(bind=True, name="app.tasks.indexer.backfill_frame_types",
+                 soft_time_limit=21600, time_limit=28800)
+def backfill_frame_types(self, reclassify_all: bool = False):
+    """
+    Celery wrapper around app.scripts.backfill_frame_types (F1).
+
+    Classifies frame_type/frame_type_source for rows that have never been
+    classified (or, with reclassify_all=True, every row except MANUAL ones)
+    using the raw_header/file_path already stored in the database -- no file
+    IO. Safe to re-run; it is a no-op once every row has a source.
+    """
+    from app.scripts.backfill_frame_types import backfill_frame_types as _run_backfill
+
+    logger.info(f"Starting frame type backfill (reclassify_all={reclassify_all})...")
+    try:
+        summary = _run_backfill(dry_run=False, reclassify_all=reclassify_all)
+        logger.info(f"Frame type backfill complete: scanned={summary['total']} updated={summary['updated']}")
+        return {
+            "status": "completed",
+            "scanned": summary["total"],
+            "updated": summary["updated"],
+        }
+    except Exception as e:
+        logger.error(f"Error during frame type backfill: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}

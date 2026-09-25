@@ -150,6 +150,7 @@ The automatic process populates:
 - **Messier Catalog** - 110 deep-sky objects
 - **NGC Catalog** - 7,840+ objects from the New General Catalogue
 - **Named Stars** - Common star names for reference
+- **Frame Types** - classifies every image as Light/Dark/Flat/Bias/Dark-Flat from stored header/filename/path data (no file IO); safe to re-run, a no-op once every row is classified
 
 #### 🔄 Manual Reseed (Optional)
 If you ever need to manually force a reseed or refresh the catalogs, you can use:
@@ -162,12 +163,14 @@ If you ever need to manually force a reseed or refresh the catalogs, you can use
 # If running from Docker Hub:
 docker compose exec backend python -m app.data.seed
 docker compose exec backend python -m app.scripts.seed_named_stars
+docker compose exec backend python -m app.scripts.backfill_frame_types
 ```
 
 **Linux / macOS**:
 ```bash
 docker compose exec backend python -m app.data.seed
 docker compose exec backend python -m app.scripts.seed_named_stars
+docker compose exec backend python -m app.scripts.backfill_frame_types
 ```
 
 ## 📁 Project Structure
