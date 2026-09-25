@@ -496,7 +496,14 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
             matcher = SyncCatalogMatcher(session)
             matches_count = matcher.match_image(image.id)
             logger.info(f"MATCHED {matches_count} objects for {file_path}")
-        
+
+        # 4. Assign Target (F2)
+        # README §4 pipeline ordering: F1 classify -> F16 footprint -> F2 target -> F7 session.
+        # F1's classifier/F16/F7 aren't on this branch yet, so this is just the F2 call,
+        # placed after catalog matching and before commit per the F2 spec (§3.6).
+        from app.services.targets import assign_target_sync
+        assign_target_sync(session, image)
+
         session.commit()
     
     return {"status": "completed", "file": file_path, "matches": matches_count}

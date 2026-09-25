@@ -282,7 +282,12 @@ async def _monitor_logic(submission_id: str | int, image_id: int):
             matcher = CatalogMatcher(session)
             await matcher.match_image(image.id)
             await session.commit()
-            
+
+            # Assign Target (F2), after catalog matching has run for this solve.
+            from app.services.targets import assign_target_async
+            await assign_target_async(session, image)
+            await session.commit()
+
             # --- Download Annotated Image ---
             try:
                 annotated_path = os.path.join(settings.thumbnail_cache_path, f"annotated_{image_id}.jpg")

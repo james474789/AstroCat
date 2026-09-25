@@ -235,7 +235,7 @@ async def redis_health():
         }
 
 
-from app.api import auth, images, catalogs, indexer, search, stats, fits_stats, admin, filesystem, users, settings as settings_api
+from app.api import auth, images, catalogs, indexer, search, stats, fits_stats, admin, filesystem, users, settings as settings_api, targets
 from app.api.dependencies import get_current_user
 
 
@@ -254,6 +254,7 @@ app.include_router(fits_stats.router, prefix="/api/stats/fits", tags=["fits-stat
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"], dependencies=[Depends(get_current_user)])
 app.include_router(settings_api.router, prefix="/api/settings", tags=["Settings"], dependencies=[Depends(get_current_user)])
 app.include_router(filesystem.router, prefix="/api/filesystem", tags=["Filesystem"], dependencies=[Depends(get_current_user)])
+app.include_router(targets.router, prefix="/api/targets", tags=["Targets"], dependencies=[Depends(get_current_user)])
 
 
 

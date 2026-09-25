@@ -57,6 +57,7 @@ def _build_image_query(
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = None,
+    target_key: Optional[str] = None,
 ):
     """
     Helper to build the SQLAlchemy select statement for images based on filters.
@@ -213,6 +214,13 @@ def _build_image_query(
         if valid_types:
             stmt = stmt.where(Image.frame_type.in_(valid_types))
 
+    # Target (F2). target_key=__none__ selects unassigned lights.
+    if target_key:
+        if target_key == "__none__":
+            stmt = stmt.where(Image.target_key.is_(None))
+        else:
+            stmt = stmt.where(Image.target_key == target_key)
+
     return stmt
 
 
@@ -250,6 +258,7 @@ async def list_images(
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
+    target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -284,7 +293,8 @@ async def list_images(
         telescope=telescope,
         gain_min=gain_min,
         gain_max=gain_max,
-        frame_type=frame_type
+        frame_type=frame_type,
+        target_key=target_key
     )
 
     # Count total
@@ -349,6 +359,7 @@ async def export_images_csv(
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
+    target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -386,7 +397,8 @@ async def export_images_csv(
         telescope=telescope,
         gain_min=gain_min,
         gain_max=gain_max,
-        frame_type=frame_type
+        frame_type=frame_type,
+        target_key=target_key
     )
 
     # Apply Sorting
@@ -770,6 +782,24 @@ async def update_image(
             )
         )
 
+    # Update target if provided (F2). Empty string clears it. Free text is
+    # resolved through the AliasIndex so "m 31" -> "M31"; unresolved text
+    # becomes an OBJ:<normalized> key. Always marks the source MANUAL so
+    # automation (indexer/astrometry/rematch) never overwrites it again.
+    target_changed = False
+    if update_data.target_key is not None:
+        from app.services.targets import get_alias_index_async, resolve_manual_target
+        text_value = update_data.target_key.strip()
+        if not text_value:
+            new_key = None
+        else:
+            alias_index = await get_alias_index_async(db)
+            new_key = resolve_manual_target(text_value, alias_index)
+        if image.target_key != new_key or image.target_source != "MANUAL":
+            target_changed = True
+        image.target_key = new_key
+        image.target_source = "MANUAL"
+
     await db.commit()
     await db.refresh(image)
 
@@ -781,6 +811,13 @@ async def update_image(
             await matcher.match_image(image.id)
         except Exception as e:
             print(f"Failed to re-run catalog matching after frame_type change: {e}")
+
+    if target_changed:
+        try:
+            from app.api.targets import _invalidate_targets_cache
+            await _invalidate_targets_cache()
+        except Exception as e:
+            print(f"Failed to invalidate targets cache: {e}")
 
     # Trigger thumbnail regeneration if subtype changed (after commit so worker sees new value)
     if subtype_changed:
@@ -946,6 +983,7 @@ async def bulk_update_image_type(
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
+    target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk update image type for all images matching the filters."""
@@ -984,13 +1022,14 @@ async def bulk_update_image_type(
             telescope=telescope,
             gain_min=gain_min,
             gain_max=gain_max,
-            frame_type=frame_type
+            frame_type=frame_type,
+            target_key=target_key
         )
 
         # Execute query to get all matching images (no pagination)
         result = await db.execute(stmt)
         images = result.scalars().all()
-        
+
         if not images:
             return {
                 "updated_count": 0,
@@ -998,7 +1037,7 @@ async def bulk_update_image_type(
                 "total_count": 0,
                 "errors": []
             }
-        
+
         # Track which images need thumbnail regeneration
         subtype_changed_ids = set()
         
@@ -1169,6 +1208,116 @@ async def bulk_update_frame_type(
     }
 
 
+@router.put("/bulk/target", response_model=dict)
+async def bulk_assign_target(
+    target: str = Query(..., description="Free text target to resolve and assign, e.g. 'M31' or a custom name"),
+    subtype: Optional[ImageSubtype] = None,
+    format: Optional[ImageFormat] = None,
+    is_plate_solved: Optional[str] = Query(None, description="Filter by plate solve status: 'solved', 'imported', 'unsolved', or boolean"),
+    rating: Optional[int] = Query(None, ge=0, le=5, description="Minimum rating (0-5 stars)"),
+    search: Optional[str] = Query(None, description="Search file names and object names"),
+    object_name: Optional[str] = None,
+    exposure_min: Optional[float] = None,
+    exposure_max: Optional[float] = None,
+    max_exposure_exclusive: bool = False,
+    rotation_min: Optional[float] = None,
+    rotation_max: Optional[float] = None,
+    pixel_scale_min: Optional[float] = None,
+    pixel_scale_max: Optional[float] = None,
+    pixel_scale_max_exclusive: bool = False,
+    filter: Optional[str] = None,
+    camera: Optional[str] = None,
+    ra: Optional[float] = Query(None, description="RA in degrees"),
+    dec: Optional[float] = Query(None, description="Dec in degrees"),
+    radius: Optional[float] = Query(None, description="Radius in degrees"),
+    path: Optional[str] = Query(None, description="Filter by file path prefix"),
+    start_date: Optional[Union[datetime, date]] = Query(None, description="Start of date range"),
+    end_date: Optional[Union[datetime, date]] = Query(None, description="End of date range"),
+    header_key: Optional[str] = None,
+    header_value: Optional[str] = None,
+    telescope: Optional[str] = None,
+    gain_min: Optional[float] = None,
+    gain_max: Optional[float] = None,
+    target_key: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Bulk manually assign a target to every image matching the filters (F2).
+    Needed to fix mis-attributed batches (e.g. a mosaic where header
+    resolution picked the wrong panel). Sets target_source='MANUAL' on
+    every affected image, so it survives future rescans/re-solves.
+    """
+    from app.services.targets import get_alias_index_async, resolve_manual_target
+
+    updated_count = 0
+    errors: List[str] = []
+
+    try:
+        stmt = _build_image_query(
+            subtype=subtype,
+            format=format,
+            is_plate_solved=is_plate_solved,
+            rating=rating,
+            search=search,
+            object_name=object_name,
+            exposure_min=exposure_min,
+            exposure_max=exposure_max,
+            max_exposure_exclusive=max_exposure_exclusive,
+            rotation_min=rotation_min,
+            rotation_max=rotation_max,
+            pixel_scale_min=pixel_scale_min,
+            pixel_scale_max=pixel_scale_max,
+            pixel_scale_max_exclusive=pixel_scale_max_exclusive,
+            filter=filter,
+            camera=camera,
+            ra=ra,
+            dec=dec,
+            radius=radius,
+            path=path,
+            start_date=start_date,
+            end_date=end_date,
+            header_key=header_key,
+            header_value=header_value,
+            telescope=telescope,
+            gain_min=gain_min,
+            gain_max=gain_max,
+            target_key=target_key
+        )
+
+        result = await db.execute(stmt)
+        images = result.scalars().all()
+
+        text_value = (target or "").strip()
+        if not text_value:
+            new_key = None
+        else:
+            alias_index = await get_alias_index_async(db)
+            new_key = resolve_manual_target(text_value, alias_index)
+
+        for image in images:
+            try:
+                image.target_key = new_key
+                image.target_source = "MANUAL"
+                updated_count += 1
+            except Exception as e:
+                errors.append(f"Image {image.id}: {str(e)}")
+
+        await db.commit()
+
+        from app.api.targets import _invalidate_targets_cache
+        await _invalidate_targets_cache()
+
+    except Exception as e:
+        await db.rollback()
+        errors.append(f"Database error: {str(e)}")
+
+    return {
+        "updated_count": updated_count,
+        "resolved_target_key": new_key if 'new_key' in locals() else None,
+        "errors": errors,
+    }
+
+
 @router.post("/bulk/metadata", response_model=dict)
 async def bulk_sync_metadata(
     subtype: Optional[ImageSubtype] = None,
@@ -1199,6 +1348,7 @@ async def bulk_sync_metadata(
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
+    target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
     db: AsyncSession = Depends(get_db)
 ):
     """Queue metadata re-extraction for all images matching the filters."""
@@ -1231,7 +1381,8 @@ async def bulk_sync_metadata(
             telescope=telescope,
             gain_min=gain_min,
             gain_max=gain_max,
-            frame_type=frame_type
+            frame_type=frame_type,
+            target_key=target_key
         )
         stmt = stmt.with_only_columns(Image.file_path).order_by(None)
         result = await db.execute(stmt)

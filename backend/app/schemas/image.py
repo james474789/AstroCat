@@ -84,6 +84,10 @@ class ImageBase(BaseModel):
     frame_type: FrameType = FrameType.LIGHT
     frame_type_source: Optional[str] = None
 
+    # Target (F2)
+    target_key: Optional[str] = None
+    target_source: Optional[str] = None
+
 class ImageDetail(ImageBase):
     id: int
     file_path: str
@@ -148,7 +152,11 @@ class UpdateImageRequest(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
     catalog_matches: List[CatalogMatchSchema] = [] # Optional for list view to save bandwidth?
-    
+
+    # Target (F2): free text, resolved through the AliasIndex server-side.
+    # Empty string clears the target. Sets target_source='MANUAL'.
+    target_key: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
 class BulkUpdateImageTypeRequest(BaseModel):

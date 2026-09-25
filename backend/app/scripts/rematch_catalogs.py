@@ -4,6 +4,7 @@ from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.image import Image
 from app.services.matching import CatalogMatcher
+from app.services.targets import assign_target_async
 
 async def rematch_image(image_id: int):
     """Trigger catalog matching for a specific image."""
@@ -12,7 +13,7 @@ async def rematch_image(image_id: int):
         stmt = select(Image).where(Image.id == image_id)
         result = await session.execute(stmt)
         image = result.scalar_one_or_none()
-        
+
         if not image:
             print(f"Error: Image {image_id} not found.")
             return
@@ -23,10 +24,14 @@ async def rematch_image(image_id: int):
 
         print(f"Matching catalogs for image {image_id} ({image.file_name})...")
         print(f"Current dimensions: {image.width_pixels} x {image.height_pixels}")
-        
+
         matcher = CatalogMatcher(session)
         count = await matcher.match_image(image_id)
-        
+
+        # Re-resolve target now that matches may have changed (F2).
+        await assign_target_async(session, image)
+        await session.commit()
+
         print(f"Success! Found and saved {count} astronomical objects.")
 
 if __name__ == "__main__":

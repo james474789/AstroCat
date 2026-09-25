@@ -32,6 +32,9 @@ export default function ImageDetail() {
     const imageRef = useRef(null);
     // Rating Management
     const [ratingManuallyEdited, setRatingManuallyEdited] = useState(false);
+    // Target editing (F2)
+    const [editingTarget, setEditingTarget] = useState(false);
+    const [targetInput, setTargetInput] = useState('');
 
     useEffect(() => {
         loadImage();
@@ -96,6 +99,20 @@ export default function ImageDetail() {
             setImage(updated);
         } catch (err) {
             console.error('Failed to update frame type:', err);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function handleTargetSave() {
+        setSaving(true);
+        try {
+            const updated = await updateImage(id, { target_key: targetInput });
+            setImage(updated);
+            setEditingTarget(false);
+        } catch (err) {
+            console.error('Failed to update target:', err);
+            alert('Failed to update target: ' + err.message);
         } finally {
             setSaving(false);
         }
@@ -771,6 +788,46 @@ export default function ImageDetail() {
                             <div className="metadata-item">
                                 <dt>Indexed</dt>
                                 <dd>{formatDateTime(image.indexed_at)}</dd>
+                            </div>
+                            <div className="metadata-item">
+                                <dt>Target</dt>
+                                <dd>
+                                    {editingTarget ? (
+                                        <span style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                            <input
+                                                type="text"
+                                                className="input"
+                                                style={{ maxWidth: '180px' }}
+                                                value={targetInput}
+                                                onChange={(e) => setTargetInput(e.target.value)}
+                                                placeholder="e.g. M31 (empty clears)"
+                                                autoFocus
+                                            />
+                                            <button className="btn btn-primary btn-sm" onClick={handleTargetSave} disabled={saving}>Save</button>
+                                            <button className="btn btn-secondary btn-sm" onClick={() => setEditingTarget(false)} disabled={saving}>Cancel</button>
+                                        </span>
+                                    ) : (
+                                        <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            {image.target_key ? (
+                                                <Link to={`/targets/${encodeURIComponent(image.target_key)}`}>{image.target_key}</Link>
+                                            ) : (
+                                                <span className="text-muted">Unassigned</span>
+                                            )}
+                                            {image.target_source && (
+                                                <span className="text-muted text-xs">
+                                                    ({image.target_source === 'MANUAL' ? 'manual' : `auto: ${image.target_source.toLowerCase()}`})
+                                                </span>
+                                            )}
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() => { setTargetInput(image.target_key || ''); setEditingTarget(true); }}
+                                                title="Edit target"
+                                            >
+                                                ✏️
+                                            </button>
+                                        </span>
+                                    )}
+                                </dd>
                             </div>
                         </dl>
                     </section>

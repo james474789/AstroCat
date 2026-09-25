@@ -68,6 +68,19 @@ Reference table for common star names and positions.
 | `magnitude` | Float | Apparent visual magnitude |
 | `constellation` | String | Constellation containing the star |
 
+### 6. `target_goals`
+Optional per-target, per-filter integration goals (F2 - Targets dashboard).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | Integer | Primary key |
+| `target_key` | String(64) | The target this goal applies to (see below) |
+| `filter_group` | String(20) | Normalized filter bucket (`Ha`, `OIII`, ...), or `ANY` for a target-wide goal |
+| `goal_seconds` | Float | Target integration time in seconds |
+| `created_at` / `updated_at` | DateTime | Bookkeeping |
+
+Unique on (`target_key`, `filter_group`).
+
 ## Recent Schema Additions
 
 The following columns were added to the `images` table for photography metadata:
@@ -79,6 +92,21 @@ The following columns were added to the `images` table for photography metadata:
 - `metering_mode` (String): Metering mode
 - `flash_fired` (Boolean): Flash status
 - `lens_model` (String): Lens identification
+
+The following columns were added to the `images` table for frame-type classification (F1):
+- `frame_type` (Enum): `LIGHT`, `DARK`, `FLAT`, `BIAS`, `DARK_FLAT`
+- `frame_type_source` (String): `HEADER`, `FILENAME`, `PATH`, `DEFAULT`, or `MANUAL`
+
+The following columns were added to the `images` table for target resolution (F2 - see
+`docs/features/TARGETS.md`):
+- `target_key` (String(64), indexed): the canonical target identifier for this image
+  (e.g. `M31`, `NGC7000`, or `OBJ:SH2155` for non-catalog objects). `NULL` means
+  unassigned; only ever set for `frame_type = LIGHT` rows.
+- `target_source` (String(20)): how `target_key` was determined -
+  `MANUAL` (user override, never touched by automation), `HEADER` (resolved from the
+  FITS/EXIF `OBJECT` header via the catalog alias index), `MATCH` (resolved from the
+  nearest central plate-solve catalog match), or `HEADER_RAW` (unresolved header text,
+  stored as an `OBJ:` key).
 
 ## Indexing Strategy
 
