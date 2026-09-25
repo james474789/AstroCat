@@ -17,6 +17,7 @@ docker exec AstroCat-backend python -m app.scripts.<script_name>
 | `normalize_existing` | Normalizes object designations (e.g. "M 42" → "M42") across catalogs and matches. |
 | `backfill_dimensions` | Populates missing `width_pixels`/`height_pixels` for images. |
 | `fix_thumbnail_collisions` | Detects and resolves filename collisions in the thumbnail cache. |
+| `backfill_frame_types` | (F1) Classifies `frame_type`/`frame_type_source` (Light/Dark/Flat/Bias/Dark-Flat) from stored `raw_header`/`file_path` -- no file IO. Resumable (only rows with `frame_type_source IS NULL` by default); `--all` reclassifies everything except `MANUAL` rows; `--dry-run` prints a summary without writing. Runs automatically on every backend startup (no-op once every row is classified). Also available as the Celery task `app.tasks.indexer.backfill_frame_types` and an Admin page "Reclassify frame types" button. |
 
 ## Catalog Management
 

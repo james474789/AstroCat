@@ -20,6 +20,8 @@ The central table storing all indexed image metadata.
 | `exposure_time_seconds`| Double | Total duration of exposure |
 | `subtype` | Enum | SUB_FRAME, INTEGRATION_MASTER, PLANETARY, etc. |
 | `astrometry_status`| String | Plate solving status (SUBMITTED, SOLVED, etc) |
+| `frame_type` | Enum | (F1) Acquisition frame type: LIGHT, DARK, FLAT, BIAS, DARK_FLAT. Orthogonal to `subtype` (processing stage). Defaults to LIGHT. |
+| `frame_type_source`| String | (F1) HEADER, FILENAME, PATH, DEFAULT, or MANUAL. NULL means never classified (the backfill's resume marker). MANUAL rows are never overwritten by the indexer. |
 
 ### 2. `messier_catalog`
 Static catalog of the 110 Messier objects.
@@ -83,4 +85,5 @@ The following columns were added to the `images` table for photography metadata:
 To maintain performance with large datasets, the following indexes are used:
 - **Spatial Indexes (GIST)**: On `center_location` and `field_boundary`.
 - **B-Tree Indexes**: On `file_path`, `file_hash`, and search criteria like `exposure_time_seconds` and `capture_date`.
+- **Frame Type (F1)**: `ix_images_frame_type` on `frame_type`, and a composite `ix_images_frame_subtype` on `(frame_type, subtype)` for the "lights only" stats predicate (see `docs/features/FRAME_TYPES.md`).
 
