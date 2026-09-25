@@ -31,6 +31,10 @@ Detailed technical analysis and specifications for specific features.
 - [Objects in Field Analysis](features/objects_in_field_technical_analysis.md)
 - [Indexer Scan Process](scanner.md)
 
+### [Feature Designs](design/)
+Proposed designs for upcoming features. Start with the coordination contract in [design/README.md](design/README.md).
+- [F1 Frame Types](design/F1-frame-types.md) · [F2 Targets](design/F2-target-integration.md) · [F7 Sessions](design/F7-imaging-sessions.md) · [F16 Mosaics](design/F16-mosaics.md)
+
 ### [Infrastructure](infrastructure/)
 Documentation related to deployment, security, and data integrity.
 - [Backup & Restore Guide](infrastructure/BACKUP_RESTORE.md)
