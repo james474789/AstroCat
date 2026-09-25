@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, NamedStarCatalog
 from app.schemas.catalog import MessierSchema, NGCSchema, CaldwellSchema, NamedStarSchema
 from app.schemas.common import PaginatedResponse
+from app.utils.frame_filters import lights_clause
 
 router = APIRouter()
 
@@ -39,7 +40,8 @@ async def list_messier(
         func.count(func.distinct(ImageCatalogMatch.image_id)).label("image_count"),
         func.coalesce(func.max(ImageCatalogMatch.angular_separation_degrees), 0).label("max_separation_degrees")
     ).join(Image, Image.id == ImageCatalogMatch.image_id).where(
-        ImageCatalogMatch.catalog_type == "MESSIER"
+        ImageCatalogMatch.catalog_type == "MESSIER",
+        lights_clause()
     ).group_by(ImageCatalogMatch.catalog_designation).subquery()
 
     # Base statement
@@ -128,7 +130,8 @@ async def list_ngc(
         func.count(func.distinct(ImageCatalogMatch.image_id)).label("image_count"),
         func.coalesce(func.max(ImageCatalogMatch.angular_separation_degrees), 0).label("max_separation_degrees")
     ).join(Image, Image.id == ImageCatalogMatch.image_id).where(
-        ImageCatalogMatch.catalog_type == "NGC"
+        ImageCatalogMatch.catalog_type == "NGC",
+        lights_clause()
     ).group_by(ImageCatalogMatch.catalog_designation).subquery()
 
     # Base statement for both count and data
@@ -219,7 +222,8 @@ async def list_caldwell(
         func.count(func.distinct(ImageCatalogMatch.image_id)).label("image_count"),
         func.coalesce(func.max(ImageCatalogMatch.angular_separation_degrees), 0).label("max_separation_degrees")
     ).join(Image, Image.id == ImageCatalogMatch.image_id).where(
-        ImageCatalogMatch.catalog_type == CatalogType.CALDWELL
+        ImageCatalogMatch.catalog_type == CatalogType.CALDWELL,
+        lights_clause()
     ).group_by(ImageCatalogMatch.catalog_designation).subquery()
 
     base_stmt = select(
@@ -318,7 +322,8 @@ async def list_named_stars(
         func.count(func.distinct(ImageCatalogMatch.image_id)).label("image_count"),
         func.coalesce(func.max(ImageCatalogMatch.angular_separation_degrees), 0).label("max_separation_degrees")
     ).join(Image, Image.id == ImageCatalogMatch.image_id).where(
-        ImageCatalogMatch.catalog_type == "NAMED_STAR"
+        ImageCatalogMatch.catalog_type == "NAMED_STAR",
+        lights_clause()
     ).group_by(ImageCatalogMatch.catalog_designation).subquery()
 
     base_stmt = select(
