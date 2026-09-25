@@ -9,7 +9,7 @@ from sqlalchemy import select, func
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from app.worker import celery_app
 from app.database import SessionLocal
-from app.models.image import Image
+from app.models.image import Image, FrameType
 from app.config import settings
 import redis
 import json
@@ -46,9 +46,13 @@ def bulk_match_task(self, mount_path: str):
     try:
         r.set("indexer:is_running", "1")
         with SessionLocal() as session:
-            # Get all images in path to track skipped ones
+            # Get all images in path to track skipped ones.
+            # LIGHT frames only (F1): flats/darks/bias can carry a copied WCS
+            # from a solved light captured alongside them, which would
+            # otherwise produce bogus catalog matches.
             images = session.query(Image.id, Image.is_plate_solved).filter(
-                Image.file_path.like(f"{mount_path}%")
+                Image.file_path.like(f"{mount_path}%"),
+                Image.frame_type == FrameType.LIGHT
             ).all()
             
             total = len(images)
@@ -135,8 +139,13 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False):
         r.set("indexer:is_running", "1")
 
         with SessionLocal() as session:
-            # Get all images in path (sync)
-            images = session.query(Image).filter(Image.file_path.like(f"{mount_path}%")).all()
+            # Get all images in path (sync).
+            # LIGHT frames only (F1): calibration frames always fail plate
+            # solving and would waste the Astrometry.net submission quota.
+            images = session.query(Image).filter(
+                Image.file_path.like(f"{mount_path}%"),
+                Image.frame_type == FrameType.LIGHT
+            ).all()
 
             total = len(images)
             logger.info(f"[BULK RESCAN] Found {total} images for mount={mount_path}")

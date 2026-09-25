@@ -16,9 +16,11 @@ from datetime import datetime, date
 
 from app.worker import celery_app
 from app.database import SessionLocal
-from app.models.image import Image
+from app.models.image import Image, FrameType, ImageSubtype
+from app.models.matches import ImageCatalogMatch
 from app.extractors.factory import get_extractor, determine_format
 from app.services.matching import SyncCatalogMatcher
+from app.services.frame_type import classify_frame_type
 from app.config import settings
 from sqlalchemy import select, func, delete, update
 from sqlalchemy.exc import OperationalError
@@ -271,6 +273,12 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
         except OSError:
             file_stats = {"file_size_bytes": 0}
 
+    # Frame type classification (F1): header -> filename -> directory -> default.
+    # Cheap and needs no additional file IO (raw_header is already in metadata,
+    # or None on the minimal-record/extraction-failed path, which still lets
+    # filename/path classification work).
+    ft = classify_frame_type(metadata.get("raw_header"), file_path)
+
     logger.info(f"PROCESSING: {file_path}")
 
     # Check for PixInsight Annotation File
@@ -396,6 +404,11 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
             # Update thumbnail if we generated one
             if thumbnail_path:
                 image.thumbnail_path = thumbnail_path
+
+            # Frame type (F1): never overwrite a manually-set classification.
+            if image.frame_type_source != "MANUAL":
+                image.frame_type = ft.frame_type
+                image.frame_type_source = ft.source
         else:
             image = Image(
                 file_path=str(file_path),
@@ -456,14 +469,30 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
                 pixinsight_annotation_path=pixinsight_annotation_path,
                 
                 # Metadata extraction diagnostics (set when extraction failed)
-                extraction_error=extraction_error
+                extraction_error=extraction_error,
+
+                # Frame type (F1): new rows only get the master-hint subtype upgrade.
+                frame_type=ft.frame_type,
+                frame_type_source=ft.source,
+                subtype=ImageSubtype.INTEGRATION_MASTER if ft.is_master_hint else ImageSubtype.SUB_FRAME
             )
             session.add(image)
             session.flush() # Get ID
             
-        # 3. Match Catalogs (if plate solved)
+        # 3. Match Catalogs (if plate solved, LIGHT frames only)
         matches_count = 0
-        if image.is_plate_solved:
+        if image.frame_type != FrameType.LIGHT:
+            # Flats/darks/bias can carry a copied WCS from the light they were
+            # captured alongside, which would produce bogus catalog matches.
+            # Strip any existing non-manual matches when a row is (or becomes)
+            # non-LIGHT.
+            session.execute(
+                delete(ImageCatalogMatch).where(
+                    ImageCatalogMatch.image_id == image.id,
+                    ImageCatalogMatch.match_source != 'MANUAL'
+                )
+            )
+        elif image.is_plate_solved:
             matcher = SyncCatalogMatcher(session)
             matches_count = matcher.match_image(image.id)
             logger.info(f"MATCHED {matches_count} objects for {file_path}")
