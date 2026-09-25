@@ -7,6 +7,8 @@ import ImageDetail from './pages/ImageDetail';
 import MetadataViewer from './pages/MetadataViewer';
 import MetadataSearch from './pages/MetadataSearch';
 import Catalogs from './pages/Catalogs';
+import Targets from './pages/Targets';
+import TargetDetail from './pages/TargetDetail';
 import Stats from './pages/Stats';
 import FitsStats from './pages/FitsStats';
 import Admin from './pages/Admin';
@@ -100,6 +102,8 @@ const AppRoutes = () => {
                   <Route path="/metadata-search" element={<MetadataSearch />} />
                   <Route path="/catalogs" element={<Catalogs />} />
                   <Route path="/catalogs/:type/:designation" element={<Catalogs />} />
+                  <Route path="/targets" element={<Targets />} />
+                  <Route path="/targets/:targetKey" element={<TargetDetail />} />
                   <Route path="/stats" element={<Stats />} />
                   <Route path="/stats/fits" element={<FitsStats />} />
                   <Route path="/admin" element={<ErrorBoundary><Admin /></ErrorBoundary>} />

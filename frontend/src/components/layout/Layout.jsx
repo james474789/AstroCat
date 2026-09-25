@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut } from 'lucide-react';
+import { LogOut, Crosshair } from 'lucide-react';
 
 import logo from '../../assets/logo.png';
 import './Layout.css';
@@ -70,11 +70,15 @@ const PinIcon = ({ pinned }) => (
     </svg>
 );
 
+const TargetsIcon = () => <Crosshair size={20} strokeWidth={2} />;
+
 const navItems = [
     { path: '/', label: 'Dashboard', icon: DashboardIcon, end: true },
     { path: '/search', label: 'Search', icon: SearchIcon },
     { path: '/metadata-search', label: 'Metadata Search', icon: FileTextIcon },
     { path: '/catalogs', label: 'Catalogs', icon: CatalogIcon },
+    // F2: inserted after Catalogs per docs/design/README.md §4 (Targets, Sessions, Mosaics order)
+    { path: '/targets', label: 'Targets', icon: TargetsIcon },
     { path: '/stats', label: 'Statistics', icon: StatsIcon, end: true },
     { path: '/stats/fits', label: 'FITS Analytics', icon: AnalyticsIcon },
     { path: '/admin', label: 'Admin', icon: AdminIcon },

@@ -1,0 +1,221 @@
+.target-detail-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.target-detail-page .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+.target-detail-page .breadcrumb a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+/* Hero */
+.target-hero {
+    display: flex;
+    gap: 1.5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.target-hero-image {
+    width: 220px;
+    height: 220px;
+    flex-shrink: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--color-background);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.target-hero-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.target-hero-placeholder {
+    font-size: 3rem;
+    opacity: 0.5;
+}
+
+.target-hero-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.target-hero-title {
+    font-size: 1.6rem;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.target-hero-facts {
+    display: flex;
+    gap: 0.75rem;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+.target-hero-stats {
+    display: flex;
+    gap: 1.75rem;
+    flex-wrap: wrap;
+}
+
+.hero-stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.hero-stat-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.hero-stat-label {
+    font-size: 0.7rem;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.target-hero-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: auto;
+}
+
+/* Sections */
+.target-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+}
+
+.target-section .section-title {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: var(--color-text-primary);
+    font-size: 1.05rem;
+}
+
+/* Filter table */
+.target-filter-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.target-filter-table th {
+    text-align: left;
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0.5rem 0.6rem;
+}
+
+.target-filter-table td {
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+}
+
+.filter-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.goal-input {
+    width: 90px;
+}
+
+.goal-progress {
+    position: relative;
+    width: 120px;
+    height: 16px;
+    background: var(--color-background);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.goal-progress-bar {
+    height: 100%;
+}
+
+.goal-progress-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    color: var(--color-text-primary);
+    text-shadow: 0 0 3px rgba(0,0,0,0.6);
+}
+
+.target-goals-actions {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.target-masters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    .target-hero {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .target-hero-image {
+        width: 160px;
+        height: 160px;
+    }
+
+    .target-hero-facts,
+    .target-hero-stats {
+        justify-content: center;
+    }
+
+    .target-hero-actions {
+        justify-content: center;
+        margin-top: 0.5rem;
+    }
+
+    .target-filter-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+}

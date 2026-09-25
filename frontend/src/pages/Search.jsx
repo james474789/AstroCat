@@ -87,6 +87,7 @@ export default function Search() {
         sort_by: searchParams.get('sort_by') || 'capture_date',
         sort_order: searchParams.get('sort_order') || 'desc',
         path: searchParams.get('path') || '',
+        target_key: searchParams.get('target_key') || '',
     });
 
     // Local state for RA input to allow HH:MM editing
@@ -124,6 +125,7 @@ export default function Search() {
             sort_by: searchParams.get('sort_by') || 'capture_date',
             sort_order: searchParams.get('sort_order') || 'desc',
             path: searchParams.get('path') || '',
+            target_key: searchParams.get('target_key') || '',
         });
 
         // Sync RA input display from URL param
@@ -168,6 +170,7 @@ export default function Search() {
             if (searchParams.get('sort_by')) params.sort_by = searchParams.get('sort_by');
             if (searchParams.get('sort_order')) params.sort_order = searchParams.get('sort_order');
             if (searchParams.get('path')) params.path = searchParams.get('path');
+            if (searchParams.get('target_key')) params.target_key = searchParams.get('target_key');
 
             const data = await fetchImages(params);
             setImages(data.items);
@@ -262,6 +265,7 @@ export default function Search() {
             sort_by: 'capture_date',
             sort_order: 'desc',
             path: '',
+            target_key: '',
         });
         setRaInput('');
         setSearchParams(new URLSearchParams());

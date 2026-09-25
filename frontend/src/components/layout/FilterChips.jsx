@@ -30,6 +30,7 @@ export default function FilterChips({ filters, onRemove }) {
         is_plate_solved: { label: 'Plate Solved', format: (v) => v === 'true' ? 'Solved Only' : 'Unsolved Only' },
         start_date: { label: 'From', format: (v) => v },
         end_date: { label: 'Until', format: (v) => v },
+        target_key: { label: 'Target', format: (v) => v === '__none__' ? 'Unassigned' : v },
     };
 
     // Get active filters
