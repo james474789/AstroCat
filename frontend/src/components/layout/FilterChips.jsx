@@ -30,16 +30,35 @@ export default function FilterChips({ filters, onRemove }) {
         is_plate_solved: { label: 'Plate Solved', format: (v) => v === 'true' ? 'Solved Only' : 'Unsolved Only' },
         start_date: { label: 'From', format: (v) => v },
         end_date: { label: 'Until', format: (v) => v },
+        frame_type: {
+            label: 'Frame Type', format: (v) => {
+                const names = { DARK: 'Darks', FLAT: 'Flats', BIAS: 'Bias', DARK_FLAT: 'Dark Flats' };
+                return names[v] || v;
+            }
+        },
     };
 
-    // Get active filters
+    // Get active filters (frame_type is handled separately below: unlike
+    // other filters, its default '' state still shows a "Lights only" chip)
     const activeFilters = Object.entries(filters)
-        .filter(([key, value]) => value && key !== 'sort_by' && key !== 'sort_order')
+        .filter(([key, value]) => value && key !== 'sort_by' && key !== 'sort_order' && key !== 'frame_type')
         .map(([key, value]) => ({
             key,
             label: filterLabels[key]?.label || key,
             display: filterLabels[key]?.format(value) || value,
         }));
+
+    // F1: the Lights default is a normal (removable) filter state. "ALL"
+    // means no filter, so it gets no chip.
+    if (!filters.frame_type || filters.frame_type === 'LIGHT') {
+        activeFilters.unshift({ key: 'frame_type', label: 'Frame Type', display: 'Lights only' });
+    } else if (filters.frame_type !== 'ALL') {
+        activeFilters.unshift({
+            key: 'frame_type',
+            label: filterLabels.frame_type.label,
+            display: filterLabels.frame_type.format(filters.frame_type),
+        });
+    }
 
     if (activeFilters.length === 0) return null;
 

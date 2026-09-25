@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fetchImages, API_BASE_URL, bulkUpdateImageType, bulkSyncMetadata } from '../api/client';
+import { fetchImages, API_BASE_URL, bulkUpdateImageType, bulkSyncMetadata, bulkUpdateFrameType } from '../api/client';
 import ImageCard from '../components/images/ImageCard';
 import FilterSection from '../components/layout/FilterSection';
 import FilterChips from '../components/layout/FilterChips';
@@ -46,6 +46,11 @@ export default function Search() {
     const [bulkChangeMessage, setBulkChangeMessage] = useState('');
     const [syncMetadataLoading, setSyncMetadataLoading] = useState(false);
     const [syncMetadataMessage, setSyncMetadataMessage] = useState('');
+    // F1: bulk "Set frame type..." action
+    const [bulkFrameTypeModalOpen, setBulkFrameTypeModalOpen] = useState(false);
+    const [bulkFrameTypeValue, setBulkFrameTypeValue] = useState('DARK');
+    const [bulkFrameTypeLoading, setBulkFrameTypeLoading] = useState(false);
+    const [bulkFrameTypeMessage, setBulkFrameTypeMessage] = useState('');
 
     useEffect(() => {
         localStorage.setItem('thumbnailSize', thumbnailSize);
@@ -87,6 +92,9 @@ export default function Search() {
         sort_by: searchParams.get('sort_by') || 'capture_date',
         sort_order: searchParams.get('sort_order') || 'desc',
         path: searchParams.get('path') || '',
+        // F1: '' means the default (Lights only, not written to the URL).
+        // 'ALL' means no filter. Otherwise DARK/FLAT/BIAS/DARK_FLAT.
+        frame_type: searchParams.get('frame_type') || '',
     });
 
     // Local state for RA input to allow HH:MM editing
@@ -124,6 +132,7 @@ export default function Search() {
             sort_by: searchParams.get('sort_by') || 'capture_date',
             sort_order: searchParams.get('sort_order') || 'desc',
             path: searchParams.get('path') || '',
+            frame_type: searchParams.get('frame_type') || '',
         });
 
         // Sync RA input display from URL param
@@ -168,6 +177,9 @@ export default function Search() {
             if (searchParams.get('sort_by')) params.sort_by = searchParams.get('sort_by');
             if (searchParams.get('sort_order')) params.sort_order = searchParams.get('sort_order');
             if (searchParams.get('path')) params.path = searchParams.get('path');
+            // F1: default to Lights only when no frame_type URL param is present.
+            // "ALL" is sent through as-is (backend treats it as no filter).
+            params.frame_type = searchParams.get('frame_type') || 'LIGHT';
 
             const data = await fetchImages(params);
             setImages(data.items);
@@ -262,14 +274,26 @@ export default function Search() {
             sort_by: 'capture_date',
             sort_order: 'desc',
             path: '',
+            // F1: "Clear filters" resets to the Lights default, not All.
+            frame_type: '',
         });
         setRaInput('');
         setSearchParams(new URLSearchParams());
     }
 
-    function handleExportCsv() {
-        // Use current searchParams which represent the active view
+    // F1: current searchParams with the implicit Lights default made explicit,
+    // so CSV export and bulk actions operate on the same scope the grid shows.
+    function effectiveSearchParams() {
         const params = new URLSearchParams(searchParams);
+        if (!params.get('frame_type')) {
+            params.set('frame_type', 'LIGHT');
+        }
+        return params;
+    }
+
+    function handleExportCsv() {
+        // Use current search scope (including the implicit Lights default)
+        const params = effectiveSearchParams();
         const url = `${API_BASE_URL}/images/export_csv?${params.toString()}`;
         // Trigger download
         window.location.href = url;
@@ -280,7 +304,7 @@ export default function Search() {
         setSyncMetadataMessage('');
 
         try {
-            const result = await bulkSyncMetadata(searchParams);
+            const result = await bulkSyncMetadata(effectiveSearchParams());
             setSyncMetadataMessage(`Queued metadata sync for ${result.queued} image(s).`);
         } catch (error) {
             console.error('Failed to sync metadata:', error);
@@ -327,7 +351,7 @@ export default function Search() {
 
         try {
             // Pass current search params to update all matching images
-            const result = await bulkUpdateImageType(bulkChangeSubtype, searchParams);
+            const result = await bulkUpdateImageType(bulkChangeSubtype, effectiveSearchParams());
 
             if (result.updated_count > 0) {
                 setBulkChangeMessage(`✓ Successfully updated ${result.updated_count} image(s)`);
@@ -346,6 +370,47 @@ export default function Search() {
             setBulkChangeMessage(`Error: ${error.message}`);
         } finally {
             setBulkChangeLoading(false);
+        }
+    };
+
+    // F1: human-readable description of the frame-type scope the current
+    // filters apply to, used in the bulk "Set frame type..." confirm dialog.
+    function currentFrameTypeScopeLabel() {
+        const ft = searchParams.get('frame_type') || 'LIGHT';
+        if (ft === 'ALL') return 'all frame types';
+        if (ft === 'LIGHT') return 'Lights only';
+        const names = { DARK: 'Darks', FLAT: 'Flats', BIAS: 'Bias', DARK_FLAT: 'Dark Flats' };
+        return `${names[ft] || ft} only`;
+    }
+
+    const handleBulkChangeFrameType = async () => {
+        if (!bulkFrameTypeValue || images.length === 0) {
+            setBulkFrameTypeMessage('No valid selection');
+            return;
+        }
+
+        setBulkFrameTypeLoading(true);
+        setBulkFrameTypeMessage('');
+
+        try {
+            const result = await bulkUpdateFrameType(bulkFrameTypeValue, effectiveSearchParams());
+
+            if (result.updated_count > 0) {
+                setBulkFrameTypeMessage(`✓ Successfully updated ${result.updated_count} image(s)`);
+                setTimeout(() => {
+                    loadImages();
+                    setBulkFrameTypeModalOpen(false);
+                }, 1500);
+            } else if (result.failed_count > 0) {
+                setBulkFrameTypeMessage(`✗ Failed to update ${result.failed_count} image(s)`);
+            } else {
+                setBulkFrameTypeMessage('No images were updated');
+            }
+        } catch (error) {
+            console.error('Error updating frame types:', error);
+            setBulkFrameTypeMessage(`Error: ${error.message}`);
+        } finally {
+            setBulkFrameTypeLoading(false);
         }
     };
 
@@ -387,6 +452,17 @@ export default function Search() {
                     </button>
                     <button
                         className="btn btn-secondary"
+                        onClick={() => {
+                            setBulkFrameTypeModalOpen(true);
+                            setBulkFrameTypeMessage('');
+                        }}
+                        title="Set frame type for all results"
+                        disabled={images.length === 0}
+                    >
+                        🌓 Set Frame Type…
+                    </button>
+                    <button
+                        className="btn btn-secondary"
                         onClick={() => setShowFilters(!showFilters)}
                     >
                         {showFilters ? 'Hide Filters' : 'Show Filters'}
@@ -414,6 +490,16 @@ export default function Search() {
                         <FilterChips
                             filters={filters}
                             onRemove={(key) => {
+                                if (key === 'frame_type') {
+                                    // Removing the "Lights only" chip switches to All;
+                                    // removing an explicit type (Darks, etc.) reverts to
+                                    // the Lights default. See F1-frame-types.md §3.10.
+                                    const isDefaultLights = !filters.frame_type || filters.frame_type === 'LIGHT';
+                                    const updatedFilters = { ...filters, frame_type: isDefaultLights ? 'ALL' : '' };
+                                    setFilters(updatedFilters);
+                                    applyCurrentFilters(updatedFilters);
+                                    return;
+                                }
                                 const updatedFilters = { ...filters, [key]: '' };
                                 setFilters(updatedFilters);
                                 if (key === 'ra') {
@@ -455,6 +541,26 @@ export default function Search() {
                                     <option value="INTEGRATION_MASTER">Masters</option>
                                     <option value="INTEGRATION_DEPRECATED">Deprecated</option>
                                     <option value="PLANETARY">Planetary</option>
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label className="label">Frame Type</label>
+                                <select
+                                    className="input select"
+                                    value={filters.frame_type || ''}
+                                    onChange={(e) => {
+                                        const updatedFilters = { ...filters, frame_type: e.target.value };
+                                        setFilters(updatedFilters);
+                                        applyCurrentFilters(updatedFilters);
+                                    }}
+                                >
+                                    <option value="">Lights (default)</option>
+                                    <option value="ALL">All Frame Types</option>
+                                    <option value="DARK">Darks</option>
+                                    <option value="FLAT">Flats</option>
+                                    <option value="BIAS">Bias</option>
+                                    <option value="DARK_FLAT">Dark Flats</option>
                                 </select>
                             </div>
 
@@ -878,6 +984,100 @@ export default function Search() {
                                 style={{ minWidth: '100px' }}
                             >
                                 {bulkChangeLoading ? 'Updating...' : 'Update'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {bulkFrameTypeModalOpen && (
+                <div
+                    className="modal-overlay"
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 2000
+                    }}
+                    onClick={() => !bulkFrameTypeLoading && setBulkFrameTypeModalOpen(false)}
+                >
+                    <div
+                        className="modal-content"
+                        style={{
+                            backgroundColor: 'var(--color-bg-secondary)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: '8px',
+                            padding: '24px',
+                            maxWidth: '420px',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <h3 style={{ marginTop: 0, marginBottom: '16px', color: 'var(--color-text-primary)' }}>
+                            Set Frame Type
+                        </h3>
+
+                        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '8px', fontSize: '0.9rem' }}>
+                            This will set the frame type for all {totalCount.toLocaleString()} matching image(s) in your search results, and mark it as a manual override that survives re-indexing.
+                        </p>
+                        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '16px', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                            Current filter scope: <strong>{currentFrameTypeScopeLabel()}</strong>. To relabel mislabelled frames, choose "All Frame Types" or the current (wrong) type in the Frame Type filter first.
+                        </p>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label className="label" style={{ display: 'block', marginBottom: '8px' }}>
+                                New Frame Type
+                            </label>
+                            <select
+                                className="input select"
+                                value={bulkFrameTypeValue}
+                                onChange={(e) => setBulkFrameTypeValue(e.target.value)}
+                                disabled={bulkFrameTypeLoading}
+                                style={{ width: '100%' }}
+                            >
+                                <option value="LIGHT">Light</option>
+                                <option value="DARK">Dark</option>
+                                <option value="FLAT">Flat</option>
+                                <option value="BIAS">Bias</option>
+                                <option value="DARK_FLAT">Dark Flat</option>
+                            </select>
+                        </div>
+
+                        {bulkFrameTypeMessage && (
+                            <div style={{
+                                padding: '12px',
+                                marginBottom: '16px',
+                                borderRadius: '4px',
+                                backgroundColor: bulkFrameTypeMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
+                                color: bulkFrameTypeMessage.includes('✓') ? '#4CAF50' : '#F44336',
+                                fontSize: '0.9rem'
+                            }}>
+                                {bulkFrameTypeMessage}
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setBulkFrameTypeModalOpen(false)}
+                                disabled={bulkFrameTypeLoading}
+                                style={{ minWidth: '100px' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleBulkChangeFrameType}
+                                disabled={bulkFrameTypeLoading}
+                                style={{ minWidth: '100px' }}
+                            >
+                                {bulkFrameTypeLoading ? 'Updating...' : 'Update'}
                             </button>
                         </div>
                     </div>
