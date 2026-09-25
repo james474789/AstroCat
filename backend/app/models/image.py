@@ -26,6 +26,15 @@ class ImageSubtype(str, enum.Enum):
     PLANETARY = "PLANETARY"                    # Planetary/Lunar/Solar images
 
 
+class FrameType(str, enum.Enum):
+    """Acquisition frame type (orthogonal to ImageSubtype, which is processing stage)."""
+    LIGHT = "LIGHT"
+    DARK = "DARK"
+    FLAT = "FLAT"
+    BIAS = "BIAS"           # includes "Offset" (Sony/ZWO/PixInsight terminology)
+    DARK_FLAT = "DARK_FLAT" # a.k.a. flat-dark
+
+
 class ImageFormat(str, enum.Enum):
     """Supported image file formats."""
     FITS = "FITS"
@@ -153,7 +162,12 @@ class Image(Base):
     # Populated when metadata extraction failed and only a minimal record
     # (path/name/format/size/dates) could be created for the file.
     extraction_error = Column(String(500), nullable=True)
-    
+
+    # Frame type (F1)
+    frame_type = Column(Enum(FrameType, name="frametype"), nullable=False,
+                        default=FrameType.LIGHT, server_default="LIGHT", index=True)
+    frame_type_source = Column(String(20), nullable=True)  # HEADER | FILENAME | PATH | DEFAULT | MANUAL
+
     # Timestamps
     indexed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -170,6 +184,7 @@ class Image(Base):
         Index('ix_images_ra_dec', 'ra_center_degrees', 'dec_center_degrees'),
         Index('ix_images_subtype_capture', 'subtype', 'capture_date'),
         Index('ix_images_format_solved', 'file_format', 'is_plate_solved'),
+        Index('ix_images_frame_subtype', 'frame_type', 'subtype'),
     )
     
     def __repr__(self):

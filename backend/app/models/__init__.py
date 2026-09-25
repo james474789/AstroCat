@@ -3,7 +3,7 @@ AstroCat Database Models
 Exports all models for use throughout the application.
 """
 
-from app.models.image import Image, ImageSubtype, ImageFormat
+from app.models.image import Image, ImageSubtype, ImageFormat, FrameType
 from app.models.catalog import MessierCatalog, NGCCatalog
 from app.models.matches import ImageCatalogMatch, CatalogType
 from app.models.user import User
@@ -13,6 +13,7 @@ __all__ = [
     "Image",
     "ImageSubtype",
     "ImageFormat",
+    "FrameType",
     "MessierCatalog",
     "NGCCatalog",
     "ImageCatalogMatch",
