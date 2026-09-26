@@ -5,9 +5,11 @@ Aggregated per-target integration dashboard: list, unassigned summary, detail, g
 See docs/design/F2-target-integration.md §3.5/3.7.
 """
 
+import hashlib
 import json
 import math
 import logging
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +24,7 @@ from app.models.target import TargetGoal
 from app.schemas.target import TargetGoalInput
 from app.services.targets import normalize_designation
 from app.utils.filter_names import normalize_filter, filter_sort_key
+from app.utils.path_security import validate_path_safety
 from app.utils.rig_optics import (
     build_filter_rig_rows, valid_pixel_scale, parse_pixel_size, known_pixel_size, binning_factor,
 )
@@ -31,7 +34,76 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 CACHE_KEY_LIST = "cache:targets:list"
+CACHE_KEY_LIST_PREFIX = "cache:targets:list:"
 CACHE_TTL_LIST = 120
+
+
+def _cache_key_for_path(path: Optional[str]) -> str:
+    """Redis key for the targets list, scoped to `path` (root list when path is falsy)."""
+    if not path:
+        return CACHE_KEY_LIST
+    digest = hashlib.sha1(path.encode("utf-8")).hexdigest()
+    return f"{CACHE_KEY_LIST_PREFIX}{digest}"
+
+
+def _normalize_path_prefix(path: str) -> str:
+    """
+    Turn a folder path into a prefix that only matches paths *under* it, e.g.
+    "/data/2025" -> "/data/2025/", so it can't also match "/data/2025-backup".
+    Handles both '/' and '\\' separators since file_path may use either
+    depending on the platform that indexed it (see filesystem.py list_directory).
+    """
+    if path.endswith("/") or path.endswith("\\"):
+        return path
+    return path + ("\\" if "\\" in path and "/" not in path else "/")
+
+
+def _path_clause(path: Optional[str]):
+    """SQLAlchemy predicate restricting Image.file_path to under `path` (both separators)."""
+    if not path:
+        return None
+    prefix = _normalize_path_prefix(path)
+    alt_prefix = prefix.replace("/", "\\") if "/" in prefix else prefix.replace("\\", "/")
+    if alt_prefix == prefix:
+        return Image.file_path.startswith(prefix)
+    return Image.file_path.startswith(prefix) | Image.file_path.startswith(alt_prefix)
+
+
+def _escape_like(value: str) -> str:
+    """Escape LIKE wildcards so a folder name containing % or _ is matched literally."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _path_like_sql(path: Optional[str]) -> Optional[str]:
+    """
+    A `file_path LIKE :path_prefix ESCAPE '\\' OR file_path LIKE :path_alt_prefix ESCAPE '\\'`
+    fragment for the raw-SQL queries below, or None when unscoped. Bind params
+    are returned separately since text() params can't be built from a plain string.
+    """
+    if not path:
+        return None
+    return "(file_path LIKE :path_prefix ESCAPE '\\' OR file_path LIKE :path_alt_prefix ESCAPE '\\')"
+
+
+def _path_like_params(path: Optional[str]) -> dict:
+    if not path:
+        return {}
+    prefix = _normalize_path_prefix(path)
+    alt_prefix = prefix.replace("/", "\\") if "/" in prefix else prefix.replace("\\", "/")
+    return {
+        "path_prefix": _escape_like(prefix) + "%",
+        "path_alt_prefix": _escape_like(alt_prefix) + "%",
+    }
+
+
+def _validate_folder_path(path: str) -> None:
+    """Reject any path outside the configured image roots (mirrors filesystem.py)."""
+    allowed_roots = [Path(p).resolve() for p in settings.image_paths_list]
+    if not validate_path_safety(path, allowed_roots):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Path not within allowed directories or contains unsafe elements",
+        )
 
 
 def _light_subs_clause():
@@ -53,11 +125,16 @@ async def _get_redis():
 
 
 async def _invalidate_targets_cache():
+    """Drop the root list plus every per-folder cache entry (each keyed by path hash)."""
     r = await _get_redis()
     if not r:
         return
     try:
-        await r.delete(CACHE_KEY_LIST)
+        keys = [CACHE_KEY_LIST]
+        async for key in r.scan_iter(match=f"{CACHE_KEY_LIST_PREFIX}*"):
+            keys.append(key)
+        if keys:
+            await r.delete(*keys)
         await r.close()
     except Exception as e:
         logger.warning(f"Targets cache: failed to invalidate: {e}")
@@ -176,13 +253,19 @@ async def _fetch_obj_display_names(db: AsyncSession, obj_keys: List[str]) -> Dic
 # Core aggregation
 # ---------------------------------------------------------------------------
 
-async def _compute_targets_list(db: AsyncSession) -> List[dict]:
+async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) -> List[dict]:
     """
     Build the full folded targets list (§3.5): one row per (target_key, raw
     filter_name), folded into per-target summaries with a per-filter
-    breakdown. This is the function cached under cache:targets:list.
+    breakdown. This is the function cached under cache:targets:list (or a
+    per-folder variant when `path` is given - see _cache_key_for_path).
+
+    When `path` is set, every stat (seconds, subs, nights, rigs, masters,
+    cover image, ...) is scoped to images whose file_path is under that
+    folder - i.e. folder-scoped totals, not just folder-scoped membership.
     """
     light_clause = _light_subs_clause()
+    path_clause = _path_clause(path)
 
     stmt = (
         select(
@@ -196,6 +279,8 @@ async def _compute_targets_list(db: AsyncSession) -> List[dict]:
         .where(light_clause, Image.target_key.isnot(None))
         .group_by(Image.target_key, Image.filter_name)
     )
+    if path_clause is not None:
+        stmt = stmt.where(path_clause)
     rows = (await db.execute(stmt)).all()
 
     if not rows:
@@ -227,13 +312,15 @@ async def _compute_targets_list(db: AsyncSession) -> List[dict]:
     keys = list(targets.keys())
 
     # Nights (README §2.2: simple date-boundary count, no dependency on F7 sessions)
-    nights_stmt = text("""
+    path_like_sql = _path_like_sql(path)
+    nights_stmt = text(f"""
         SELECT target_key, count(distinct date(capture_date - interval '12 hours')) as nights
         FROM images
         WHERE target_key = ANY(:keys) AND frame_type = 'LIGHT' AND subtype = 'SUB_FRAME'
+        {f"AND {path_like_sql}" if path_like_sql else ""}
         GROUP BY target_key
     """)
-    for r in (await db.execute(nights_stmt, {"keys": keys})).all():
+    for r in (await db.execute(nights_stmt, {"keys": keys, **_path_like_params(path)})).all():
         targets[r.target_key]["nights"] = r.nights
 
     # Rigs
@@ -246,6 +333,8 @@ async def _compute_targets_list(db: AsyncSession) -> List[dict]:
         .where(light_clause, Image.target_key.in_(keys))
         .group_by(Image.target_key)
     )
+    if path_clause is not None:
+        rigs_stmt = rigs_stmt.where(path_clause)
     for r in (await db.execute(rigs_stmt)).all():
         targets[r.target_key]["cameras"] = sorted([c for c in (r.cameras or []) if c])
         targets[r.target_key]["telescopes"] = sorted([tt for tt in (r.telescopes or []) if tt])
@@ -260,6 +349,8 @@ async def _compute_targets_list(db: AsyncSession) -> List[dict]:
         )
         .group_by(Image.target_key)
     )
+    if path_clause is not None:
+        masters_stmt = masters_stmt.where(path_clause)
     for r in (await db.execute(masters_stmt)).all():
         targets[r.target_key]["master_count"] = r.cnt
 
@@ -273,22 +364,25 @@ async def _compute_targets_list(db: AsyncSession) -> List[dict]:
         )
         .group_by(Image.target_key)
     )
+    if path_clause is not None:
+        planetary_stmt = planetary_stmt.where(path_clause)
     for r in (await db.execute(planetary_stmt)).all():
         targets[r.target_key]["planetary_count"] = r.cnt
 
     # Cover image: highest-rated master, else most recent master, else most recent light w/ thumbnail
-    cover_stmt = text("""
+    cover_stmt = text(f"""
         SELECT DISTINCT ON (target_key) target_key, id
         FROM images
         WHERE target_key = ANY(:keys)
           AND frame_type = 'LIGHT'
           AND thumbnail_path IS NOT NULL
+          {f"AND {path_like_sql}" if path_like_sql else ""}
         ORDER BY target_key,
           (subtype = 'INTEGRATION_MASTER') DESC,
           CASE WHEN subtype = 'INTEGRATION_MASTER' THEN COALESCE(rating, -1) ELSE -1 END DESC,
           capture_date DESC NULLS LAST
     """)
-    for r in (await db.execute(cover_stmt, {"keys": keys})).all():
+    for r in (await db.execute(cover_stmt, {"keys": keys, **_path_like_params(path)})).all():
         targets[r.target_key]["cover_image_id"] = r.id
 
     # Display metadata
@@ -351,23 +445,28 @@ async def _compute_targets_list(db: AsyncSession) -> List[dict]:
     return results
 
 
-async def get_cached_targets_list(db: AsyncSession) -> List[dict]:
-    """Read-through Redis cache around _compute_targets_list (§3.5, TTL 120s)."""
+async def get_cached_targets_list(db: AsyncSession, path: Optional[str] = None) -> List[dict]:
+    """
+    Read-through Redis cache around _compute_targets_list (§3.5, TTL 120s).
+    Each distinct `path` gets its own cache entry (see _cache_key_for_path);
+    _invalidate_targets_cache clears all of them together.
+    """
+    cache_key = _cache_key_for_path(path)
     r = await _get_redis()
     if r:
         try:
-            cached = await r.get(CACHE_KEY_LIST)
+            cached = await r.get(cache_key)
             if cached:
                 await r.close()
                 return json.loads(cached)
         except Exception as e:
             logger.warning(f"Targets cache read failed: {e}")
 
-    result = await _compute_targets_list(db)
+    result = await _compute_targets_list(db, path=path)
 
     if r:
         try:
-            await r.setex(CACHE_KEY_LIST, CACHE_TTL_LIST, json.dumps(result))
+            await r.setex(cache_key, CACHE_TTL_LIST, json.dumps(result))
             await r.close()
         except Exception as e:
             logger.warning(f"Targets cache write failed: {e}")
@@ -388,13 +487,16 @@ async def list_targets(
     filter: Optional[str] = Query(None, description="Normalized filter bucket, e.g. Ha"),
     has_master: Optional[bool] = Query(None),
     catalog: Optional[str] = Query(None, description="MESSIER|NGC|IC|CALDWELL|SH2|OTHER"),
+    path: Optional[str] = Query(None, description="Scope to images whose file_path is under this folder"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=10000),
     keys_only: bool = Query(False, description="Return only target_key values (lightweight)"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Paginated, filterable/sortable list of targets (§3.7)."""
-    items = await get_cached_targets_list(db)
+    """Paginated, filterable/sortable list of targets (§3.7), optionally scoped to a folder."""
+    if path:
+        _validate_folder_path(path)
+    items = await get_cached_targets_list(db, path=path)
 
     if keys_only:
         return {"keys": [t["target_key"] for t in items]}
@@ -447,13 +549,21 @@ async def list_targets(
 
 
 @router.get("/unassigned/summary")
-async def unassigned_summary(db: AsyncSession = Depends(get_db)):
+async def unassigned_summary(
+    path: Optional[str] = Query(None, description="Scope to images whose file_path is under this folder"),
+    db: AsyncSession = Depends(get_db),
+):
     """Count and total exposure of LIGHT subs with no target assigned."""
+    if path:
+        _validate_folder_path(path)
     light_clause = _light_subs_clause()
     stmt = select(
         func.count(Image.id),
         func.coalesce(func.sum(Image.exposure_time_seconds), 0),
     ).where(light_clause, Image.target_key.is_(None))
+    path_clause = _path_clause(path)
+    if path_clause is not None:
+        stmt = stmt.where(path_clause)
     count, total_seconds = (await db.execute(stmt)).one()
     return {"count": count or 0, "total_seconds": float(total_seconds or 0)}
 
