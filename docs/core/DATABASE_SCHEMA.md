@@ -81,6 +81,23 @@ Optional per-target, per-filter integration goals (F2 - Targets dashboard).
 
 Unique on (`target_key`, `filter_group`).
 
+### 7. Equipment & sites (R0)
+See `docs/features/EQUIPMENT.md` and `backend/app/models/equipment.py` (Alembic `e8a0c4f51008`).
+
+| Table | Key columns |
+|-------|-------------|
+| `cameras` | `name` (unique), `maker`, `sensor_width_px`/`sensor_height_px`, `pixel_size_um` (unbinned), `is_color`, `is_cooled`, `match_patterns` (JSONB, lowercase keys matched against `images.camera_name`), `source` (`DETECTED`/`TELESCOPIUS`/`MANUAL`/`SEED`), `external_ref` (e.g. `telescopius:<id>`), `notes` |
+| `optics` | `name` (unique), `kind` (`TELESCOPE`/`LENS`), `aperture_mm`, `focal_length_mm`, `source`, `external_ref`, `notes` |
+| `filters` | `name` (unique), `band` (`normalize_filter` bucket or `Other`), `bandwidth_nm`, `match_patterns`, `source`, `external_ref` |
+| `rigs` | `name` (unique), `camera_id` -> cameras, `optic_id` -> optics, `modifier_name`/`modifier_factor` (0.8 reducer, 2.0 Barlow), `binning`, `is_active`, `is_mounted`, `mount_name`, `measured_scale_arcsec`/`measured_count` (cached by the assignment task) |
+| `rig_filters` | (`rig_id`, `filter_id`) primary key, both `ON DELETE CASCADE` |
+| `sites` | `name` (unique), `latitude`/`longitude` (east-positive), `elevation_m`, `timezone` (IANA), `bortle`, `sqm`, `typical_seeing_arcsec` (default 2.5), `is_default`, `horizon` (JSONB `[[az, alt], ...]`), `horizon_source` (`LEARNED`/`IMPORTED`/`MANUAL`) |
+
+Partial unique indexes: `uq_rigs_mounted ON rigs (is_mounted) WHERE is_mounted` and
+`uq_sites_default ON sites (is_default) WHERE is_default` (at most one mounted rig / one
+default site; the API also clears the others in the same transaction). All tables carry
+`created_at` / `updated_at`.
+
 ## Recent Schema Additions
 
 The following columns were added to the `images` table for photography metadata:
@@ -131,6 +148,15 @@ from FITS/XISF `SITELAT`/`SITELONG` (decimal or sexagesimal such as `"56d0m0.000
 `OBSGEO-B`/`OBSGEO-L`, or EXIF GPS; the name from `SITENAME`/`OBSERVAT`. Out-of-range or
 exactly (0, 0) coordinates are stored as `NULL`.
 
+Equipment and site assignment (R0 - see `docs/features/EQUIPMENT.md`):
+- `rig_id` (Integer, FK `rigs.id` `ON DELETE SET NULL`, indexed): the rig that took the frame.
+- `rig_source` (String(10)): `AUTO` (assignment task / indexer) or `MANUAL` (user override
+  via `PUT /api/images/{id}`, never touched by automation); `NULL` when unassigned.
+- `site_id` (Integer, FK `sites.id` `ON DELETE SET NULL`, indexed): nearest site within
+  10 km of the image coordinates (or the default site, see the feature doc).
+- Once a site is assigned, `FITS_LOCAL` / `EXIF_LOCAL` rows get `capture_date_utc` from the
+  site timezone (sources that are already UTC or carry an offset are never changed).
+
 ## Indexing Strategy
 
 To maintain performance with large datasets, the following indexes are used:
@@ -138,4 +164,4 @@ To maintain performance with large datasets, the following indexes are used:
 - **B-Tree Indexes**: On `file_path`, `file_hash`, and search criteria like `exposure_time_seconds` and `capture_date`.
 - **Frame Type (F1)**: `ix_images_frame_type` on `frame_type`, and a composite `ix_images_frame_subtype` on `(frame_type, subtype)` for the "lights only" stats predicate (see `docs/features/FRAME_TYPES.md`).
 - **Capture time (P0)**: `ix_images_capture_date_utc` on `capture_date_utc` (Alembic `d7f9b3e41007`).
-
+- **Equipment (R0)**: `ix_images_rig_id`, `ix_images_site_id` (Alembic `e8a0c4f51008`).

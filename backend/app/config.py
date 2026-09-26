@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     local_astrometry_url: str = ""
     local_astrometry_api_key: str = ""
 
+    # Telescopius equipment import (R0, optional). Env only: never stored,
+    # returned by the API, or logged.
+    telescopius_api_key: Optional[str] = None
+
     # API Settings
     api_prefix: str = "/api"
     

@@ -34,6 +34,7 @@ rawpy==0.19.1
 numpy==1.26.3
 xisf==0.9.5
 tifffile==2023.12.9
+tzdata==2025.2  # zoneinfo database for site timezones (R0); the slim image has none
 
 # -------------------------------------------
 # Logging (multi-process safe rotation)
