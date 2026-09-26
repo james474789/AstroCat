@@ -252,6 +252,11 @@ _CATALOG_PRIORITY = {"MESSIER": 0, "NGC": 1, "IC": 1, "CALDWELL": 2, "SH2": 3}
 
 _LIGHT_VALUES = {"LIGHT"}
 
+# A MATCH candidate must lie within this fraction of the field radius from
+# the image center. 0.5 still rejects edge objects but tolerates offset
+# framing (mosaic panels, off-center compositions).
+MATCH_CENTRAL_FRACTION = 0.5
+
 
 def _as_str(value) -> str:
     """Accept either an enum member (with .value) or a plain string."""
@@ -295,7 +300,7 @@ def resolve_target(
 
     # 3. MATCH — central object among plate-solved catalog matches.
     if matches and field_radius:
-        threshold = 0.35 * field_radius
+        threshold = MATCH_CENTRAL_FRACTION * field_radius
         candidates = []
         for m in matches:
             catalog_type, designation, separation_deg, is_in_field, magnitude = m

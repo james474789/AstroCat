@@ -31,8 +31,12 @@ field contains the object" (unchanged).
    after ` - `/`(` are tried too, so `M31 Panel 2` and `M42 (Orion)` resolve.
 3. **MATCH** - for plate-solved images, the nearest **central** catalog match
    (excluding `NAMED_STAR`) among `is_in_field` matches, only if its separation
-   is ≤ 0.35 × the field radius. Ties break on catalog priority (Messier > NGC/IC
-   > Caldwell) then brighter magnitude.
+   is ≤ 0.5 × the field radius (`MATCH_CENTRAL_FRACTION`; was 0.35, widened to
+   catch mosaic panels and offset framing). Ties break on catalog priority
+   (Messier > NGC/IC > Caldwell) then brighter magnitude. Images with no stored
+   radius (e.g. sidecar `.ini` solves that omit it) get one derived from pixel
+   scale × image half-diagonal (`app/utils/field_geometry.py`); see
+   `scripts/backfill_field_radius.py` for existing rows.
 4. **HEADER_RAW** - header text that didn't resolve becomes `OBJ:<normalized>`.
 5. Otherwise `target_key = NULL` ("Unassigned").
 
