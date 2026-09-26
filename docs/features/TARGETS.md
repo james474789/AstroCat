@@ -17,7 +17,9 @@ field contains the object" (unchanged).
   for unassigned. For catalog objects it's the canonical designation (`M31`,
   `NGC7000`, `C14`); for anything else it's `OBJ:<normalized header text>`
   (`OBJ:SH2155`, `OBJ:CYGNUSWALL`).
-- `images.target_source`: `MANUAL` | `HEADER` | `MATCH` | `HEADER_RAW` | `NULL`.
+- `images.target_source`: `MANUAL` | `HEADER` | `MATCH` | `HEADER_RAW` | `NONE` |
+  `NULL`. `NONE` (P0) means "resolved, no target"; `NULL` means "never resolved"
+  (or a non-LIGHT frame).
 - `target_goals` table: optional per-target, per-filter (or `ANY`) integration
   goals in seconds.
 
@@ -37,11 +39,41 @@ field contains the object" (unchanged).
    radius (e.g. sidecar `.ini` solves that omit it) get one derived from pixel
    scale × image half-diagonal (`app/utils/field_geometry.py`); see
    `scripts/backfill_field_radius.py` for existing rows.
+   The chosen designation is canonicalised through the alias index (P0), so a
+   solved frame of `NGC3031` is keyed `M81`, `C11` becomes `NGC7635`, and
+   `Sh2-131` becomes `IC1396` - the same key a header `OBJECT` would give.
 4. **HEADER_RAW** - header text that didn't resolve becomes `OBJ:<normalized>`.
-5. Otherwise `target_key = NULL` ("Unassigned").
+5. Otherwise `target_key = NULL`, `target_source = 'NONE'` ("Unassigned").
 
 Only `frame_type = LIGHT` images get a target; everything else is cleared to
-`(NULL, NULL)` unless it's `MANUAL`. `PLANETARY` images get a target like any
+`(NULL, NULL)` unless it's `MANUAL`.
+
+### Canonicalisation (P0)
+
+- **Canonical keys.** Messier wins over NGC/IC (`NGC224` -> `M31`), Caldwell
+  objects resolve through their source designation (`C11` -> `NGC7635`,
+  `C20` -> `NGC7000`), and header and MATCH resolution produce the same key.
+- **Sh2 cross-IDs.** `services/targets.py::sh2_cross_id_details` pairs each
+  Sharpless region with the NGC/IC nebula it is, and `build_alias_index`
+  registers the Sh2 designation under that nebula's canonical key. Rule: the
+  NGC/IC `object_type` is one of `HII`, `EmN`, `Neb`, `Cl+N`, `SNR`, `RfN`;
+  centre separation < `max(0.25°, 0.25 × max(size_sh2, size_ngc))`; and
+  `min(size)/max(size) ≥ 1/3` unless the NGC/IC object is `Cl+N` (IC1396 is a
+  14′ cluster inside the 170′ Sh2-131). The closest qualifying row wins.
+  `SH2_CROSS_ID_OVERRIDES` pins known pairs (Sh2-117 -> NGC7000, Sh2-125 ->
+  IC5146, Sh2-131 -> IC1396, Sh2-162 -> NGC7635, Sh2-190 -> IC1805) and can
+  suppress a pair (value `None`).
+- **Existing rows.** `scripts/recanonicalize_targets.py` re-keys non-MANUAL
+  lights whose key now resolves to a different canonical key (and `OBJ:` keys
+  that now resolve, which become `HEADER`), merges `target_goals` keeping the
+  larger goal per filter group, and clears `cache:targets:*`. It runs once as
+  data migration `0004_canonicalize_target_keys`, whose Admin summary lists
+  every key remap (`remaps`) and every Sh2 pair applied (`sh2_cross_ids`, with
+  `via: rule|override`).
+- **NONE sentinel.** The same migration stamps every never-resolved light
+  with `target_source = 'NONE'` when it has no target, so the incremental
+  `backfill_targets` (on rescans) is a true no-op. The API's unassigned filter
+  (`target_key=__none__`) still keys on `target_key IS NULL`. `PLANETARY` images get a target like any
 other light but are excluded from integration sums (shown as `planetary_count`
 instead). Masters are excluded from integration sums too - integration comes
 from subs only, per the design decision that a master's header-derived

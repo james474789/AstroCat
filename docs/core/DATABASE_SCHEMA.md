@@ -106,7 +106,30 @@ The following columns were added to the `images` table for target resolution (F2
   `MANUAL` (user override, never touched by automation), `HEADER` (resolved from the
   FITS/EXIF `OBJECT` header via the catalog alias index), `MATCH` (resolved from the
   nearest central plate-solve catalog match), or `HEADER_RAW` (unresolved header text,
-  stored as an `OBJ:` key).
+  stored as an `OBJ:` key). Since P0, `NONE` means a LIGHT frame went through the
+  resolver and has no target (`target_key IS NULL`); `NULL` now only means "never
+  resolved" (and non-LIGHT frames).
+
+The following columns were added to the `images` table for capture-time provenance (P0 -
+see `docs/design/P0-R0-equipment-sites.md` §3.2, `backend/app/utils/capture_time.py`).
+`capture_date` keeps its existing meaning (header/EXIF date, else file mtime):
+- `capture_date_utc` (DateTime, naive UTC, indexed): trustworthy UTC capture time, or
+  `NULL` when it can't be derived. Use this, not `capture_date`, for astronomy.
+- `capture_time_source` (String(20)): where the capture time came from -
+  `FITS_UTC` (FITS/XISF `DATE-OBS`; `capture_date_utc` = `DATE-OBS`),
+  `FITS_LOCAL` (only `DATE-LOC`; UTC `NULL` until a site timezone is known),
+  `GPS_UTC` (EXIF `GPSDate` + `GPSTimeStamp`),
+  `EXIF_OFFSET` (EXIF `DateTimeOriginal` - `OffsetTimeOriginal`),
+  `EXIF_LOCAL` (EXIF `DateTimeOriginal` only; UTC `NULL` until a site timezone is known),
+  `FILE_MTIME` (indexer fell back to the file mtime; never used for astronomy), or
+  `OTHER` (the date came from another field such as FITS `DATE` or EXIF `Image DateTime`;
+  UTC `NULL`).
+
+Per-image site (P0 §3.3): the existing `site_latitude` / `site_longitude` / `site_name`
+columns are now populated by the indexer and data migration `0006_image_site_coordinates`,
+from FITS/XISF `SITELAT`/`SITELONG` (decimal or sexagesimal such as `"56d0m0.000s N"`),
+`OBSGEO-B`/`OBSGEO-L`, or EXIF GPS; the name from `SITENAME`/`OBSERVAT`. Out-of-range or
+exactly (0, 0) coordinates are stored as `NULL`.
 
 ## Indexing Strategy
 
@@ -114,4 +137,5 @@ To maintain performance with large datasets, the following indexes are used:
 - **Spatial Indexes (GIST)**: On `center_location` and `field_boundary`.
 - **B-Tree Indexes**: On `file_path`, `file_hash`, and search criteria like `exposure_time_seconds` and `capture_date`.
 - **Frame Type (F1)**: `ix_images_frame_type` on `frame_type`, and a composite `ix_images_frame_subtype` on `(frame_type, subtype)` for the "lights only" stats predicate (see `docs/features/FRAME_TYPES.md`).
+- **Capture time (P0)**: `ix_images_capture_date_utc` on `capture_date_utc` (Alembic `d7f9b3e41007`).
 
