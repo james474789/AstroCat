@@ -202,3 +202,29 @@ def infer_goals(history: Mapping[str, TargetHistory], kind_of: Mapping[str, str]
     everything = [x for v in samples.values() for x in v]
     median_all = float(statistics.median(everything)) if len(everything) >= GOAL_MIN_SAMPLES else None
     return GoalModel(explicit_goals(goal_rows, as_of), by_kind, median_all)
+
+
+# ---------------------------------------------------------------------------
+# Key folding and narrowband hints (R1 tuning)
+# ---------------------------------------------------------------------------
+
+def remap_rows(rows: Sequence[HistoryRow], key_map: Mapping[str, str]) -> List[HistoryRow]:
+    """Rows with stray keys replaced by their pool key (order preserved). History mapping only."""
+    if not key_map:
+        return list(rows)
+    return [r._replace(key=key_map[r.key]) if r.key in key_map else r for r in rows]
+
+
+def narrowband_keys(rows: Iterable[HistoryRow], min_share: float = 0.5) -> Set[str]:
+    """Keys with at least `min_share` of their seconds in narrowband classes."""
+    nb: Dict[str, float] = defaultdict(float)
+    total: Dict[str, float] = defaultdict(float)
+    for r in rows:
+        if not r.key or not r.seconds or r.seconds <= 0:
+            continue
+        secs = float(r.seconds)
+        total[r.key] += secs
+        for cls, share in filter_classes(normalize_filter(r.filter_name), r.is_color):
+            if cls in NARROWBAND:
+                nb[r.key] += secs * share
+    return {k for k, t in total.items() if t > 0 and nb[k] / t >= min_share}
