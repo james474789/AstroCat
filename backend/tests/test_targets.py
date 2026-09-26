@@ -249,3 +249,75 @@ def test_resolve_target_match_without_field_radius_is_skipped():
         alias_index=AliasIndex(),
     )
     assert (key, source) == (None, None)
+
+
+# ---------------------------------------------------------------------------
+# Folder-scoped targets list (path prefix helpers, F-targets-folder-nav)
+#
+# Pure-function tests only, per the module docstring above - these exercise
+# the string/SQL-fragment builders in app.api.targets directly rather than
+# hitting a real Postgres session.
+# ---------------------------------------------------------------------------
+
+from app.api.targets import (
+    _normalize_path_prefix,
+    _path_clause,
+    _path_like_sql,
+    _path_like_params,
+    _cache_key_for_path,
+    _escape_like,
+)
+
+
+def test_normalize_path_prefix_adds_trailing_separator():
+    assert _normalize_path_prefix("/data/2025") == "/data/2025/"
+    assert _normalize_path_prefix("/data/2025/") == "/data/2025/"
+
+
+def test_normalize_path_prefix_windows_separator():
+    assert _normalize_path_prefix("C:\\data\\2025") == "C:\\data\\2025\\"
+    assert _normalize_path_prefix("C:\\data\\2025\\") == "C:\\data\\2025\\"
+
+
+def test_path_clause_none_when_no_path():
+    assert _path_clause(None) is None
+    assert _path_clause("") is None
+
+
+def test_path_clause_does_not_match_sibling_with_shared_prefix():
+    # /data/2025 must not match /data/2025-backup/foo.fits - this is the same
+    # separator-boundary bug FolderTree.isPathParent guards against on the frontend.
+    clause = _path_clause("/data/2025")
+    compiled = str(clause.compile(compile_kwargs={"literal_binds": True}))
+    assert "/data/2025/%%" in compiled or "/data/2025/" in compiled
+    assert "/data/2025-backup" not in compiled
+
+
+def test_path_like_sql_and_params_escape_wildcards():
+    # A folder literally named "100%_done" must not act as a SQL wildcard.
+    sql = _path_like_sql("/data/100%_done")
+    params = _path_like_params("/data/100%_done")
+    assert sql is not None
+    assert params["path_prefix"] == "/data/100\\%\\_done/%"
+
+
+def test_path_like_sql_none_when_no_path():
+    assert _path_like_sql(None) is None
+    assert _path_like_params(None) == {}
+
+
+def test_escape_like_escapes_percent_underscore_backslash():
+    assert _escape_like("100%_done\\x") == "100\\%\\_done\\\\x"
+
+
+def test_cache_key_for_path_differs_per_path_and_is_stable():
+    root_key = _cache_key_for_path(None)
+    key_a = _cache_key_for_path("/data/2025")
+    key_b = _cache_key_for_path("/data/2026")
+    key_a_again = _cache_key_for_path("/data/2025")
+
+    assert root_key == "cache:targets:list"
+    assert key_a != root_key
+    assert key_a != key_b
+    assert key_a == key_a_again
+    assert key_a.startswith("cache:targets:list:")
