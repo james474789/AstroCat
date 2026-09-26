@@ -171,6 +171,7 @@ def build_alias_index(
     messier_rows: Sequence = (),
     ngc_rows: Sequence = (),
     caldwell_rows: Sequence = (),
+    sh2_rows: Sequence = (),
     star_rows: Sequence = (),
 ) -> AliasIndex:
     """
@@ -180,7 +181,7 @@ def build_alias_index(
     Processing order matters: Messier first, then NGC/IC (so canonical
     Messier keys exist for objects with both), then Caldwell (so
     source_designation can resolve through the NGC/Messier aliases already
-    registered), then named stars last (header-resolution only).
+    registered), then Sh2, then named stars last (header-resolution only).
     """
     index = AliasIndex()
 
@@ -214,6 +215,16 @@ def build_alias_index(
         if aliases_str:
             for alias in aliases_str.split(","):
                 index.add_alias(alias.strip(), canonical)
+        for name in _split_common_names(getattr(row, "common_name", None)):
+            index.add_alias(name, canonical)
+
+    # Sh2
+    for row in sh2_rows:
+        source_designation = getattr(row, "source_designation", None)
+        resolved = index.resolve(source_designation) if source_designation else None
+        canonical = resolved or normalize_designation(row.designation)
+        index.add_alias(row.designation, canonical)
+        index.add_alias(source_designation, canonical)
         for name in _split_common_names(getattr(row, "common_name", None)):
             index.add_alias(name, canonical)
 
@@ -326,25 +337,27 @@ _alias_index_cache = {"index": None, "loaded_at": 0.0}
 
 
 def _build_alias_index_sync(session) -> AliasIndex:
-    from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, NamedStarCatalog
+    from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, Sh2Catalog, NamedStarCatalog
     from sqlalchemy import select
 
     messier_rows = session.execute(select(MessierCatalog)).scalars().all()
     ngc_rows = session.execute(select(NGCCatalog)).scalars().all()
     caldwell_rows = session.execute(select(CaldwellCatalog)).scalars().all()
+    sh2_rows = session.execute(select(Sh2Catalog)).scalars().all()
     star_rows = session.execute(select(NamedStarCatalog)).scalars().all()
-    return build_alias_index(messier_rows, ngc_rows, caldwell_rows, star_rows)
+    return build_alias_index(messier_rows, ngc_rows, caldwell_rows, sh2_rows, star_rows)
 
 
 async def _build_alias_index_async(db) -> AliasIndex:
-    from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, NamedStarCatalog
+    from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, Sh2Catalog, NamedStarCatalog
     from sqlalchemy import select
 
     messier_rows = (await db.execute(select(MessierCatalog))).scalars().all()
     ngc_rows = (await db.execute(select(NGCCatalog))).scalars().all()
     caldwell_rows = (await db.execute(select(CaldwellCatalog))).scalars().all()
+    sh2_rows = (await db.execute(select(Sh2Catalog))).scalars().all()
     star_rows = (await db.execute(select(NamedStarCatalog))).scalars().all()
-    return build_alias_index(messier_rows, ngc_rows, caldwell_rows, star_rows)
+    return build_alias_index(messier_rows, ngc_rows, caldwell_rows, sh2_rows, star_rows)
 
 
 def _cache_is_stale() -> bool:
