@@ -132,6 +132,13 @@ class ImageDetail(ImageBase):
     # Matches
     catalog_matches: List[CatalogMatchSchema] = []
 
+    # Equipment & site (R0). site_name above is the assigned site's name when
+    # site_id is set (else the header's site name).
+    rig_id: Optional[int] = None
+    rig_name: Optional[str] = None
+    rig_source: Optional[str] = None  # AUTO | MANUAL
+    site_id: Optional[int] = None
+
     model_config = ConfigDict(from_attributes=True, extra='ignore')
 
 class ImageList(ImageBase):
@@ -156,6 +163,10 @@ class UpdateImageRequest(BaseModel):
     # Target (F2): free text, resolved through the AliasIndex server-side.
     # Empty string clears the target. Sets target_source='MANUAL'.
     target_key: Optional[str] = None
+
+    # Rig override (R0): an int sets rig_source='MANUAL'; an explicit null
+    # clears rig_id and rig_source; omit the field to leave the rig alone.
+    rig_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -58,6 +58,8 @@ def _build_image_query(
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = None,
     target_key: Optional[str] = None,
+    rig_id: Optional[int] = None,
+    site_id: Optional[int] = None,
 ):
     """
     Helper to build the SQLAlchemy select statement for images based on filters.
@@ -221,7 +223,33 @@ def _build_image_query(
         else:
             stmt = stmt.where(Image.target_key == target_key)
 
+    # Equipment & site (R0)
+    if rig_id is not None:
+        stmt = stmt.where(Image.rig_id == rig_id)
+    if site_id is not None:
+        stmt = stmt.where(Image.site_id == site_id)
+
     return stmt
+
+
+async def _attach_equipment_names(db: AsyncSession, image: Image) -> Image:
+    """
+    R0: add rig_name / site_name for ImageDetail. site_name becomes the
+    assigned site's name (the header value is kept when no site is assigned).
+    The image is detached first so these display values are never flushed.
+    """
+    from app.models.equipment import Rig, Site
+
+    rig_name = site_name = None
+    if image.rig_id is not None:
+        rig_name = (await db.execute(select(Rig.name).where(Rig.id == image.rig_id))).scalar()
+    if image.site_id is not None:
+        site_name = (await db.execute(select(Site.name).where(Site.id == image.site_id))).scalar()
+    db.expunge(image)
+    image.rig_name = rig_name
+    if site_name:
+        image.site_name = site_name
+    return image
 
 
 @router.get("/", response_model=PaginatedResponse[ImageList])
@@ -259,6 +287,8 @@ async def list_images(
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
     target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
+    rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
+    site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -294,7 +324,9 @@ async def list_images(
         gain_min=gain_min,
         gain_max=gain_max,
         frame_type=frame_type,
-        target_key=target_key
+        target_key=target_key,
+        rig_id=rig_id,
+        site_id=site_id
     )
 
     # Count total
@@ -360,6 +392,8 @@ async def export_images_csv(
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
     target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
+    rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
+    site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -398,7 +432,9 @@ async def export_images_csv(
         gain_min=gain_min,
         gain_max=gain_max,
         frame_type=frame_type,
-        target_key=target_key
+        target_key=target_key,
+        rig_id=rig_id,
+        site_id=site_id
     )
 
     # Apply Sorting
@@ -718,7 +754,7 @@ async def get_image(image_id: int, db: AsyncSession = Depends(get_db)):
             print(f"Error calculating WCS overlays: {e}")
             # Continue without overlays rather than failing request
 
-    return image
+    return await _attach_equipment_names(db, image)
 
 
 @router.put("/{image_id}", response_model=ImageDetail)
@@ -800,6 +836,21 @@ async def update_image(
         image.target_key = new_key
         image.target_source = "MANUAL"
 
+    # Rig override (R0): an int sets a MANUAL rig; an explicit null clears the
+    # rig and its source (automation may then assign one again). An absent
+    # field leaves the rig alone.
+    rig_changed = False
+    if "rig_id" in update_data.model_fields_set:
+        if update_data.rig_id is None:
+            new_rig, new_source = None, None
+        else:
+            from app.models.equipment import Rig
+            if await db.get(Rig, update_data.rig_id) is None:
+                raise HTTPException(status_code=400, detail="Unknown rig_id")
+            new_rig, new_source = update_data.rig_id, "MANUAL"
+        rig_changed = image.rig_id != new_rig or image.rig_source != new_source
+        image.rig_id, image.rig_source = new_rig, new_source
+
     await db.commit()
     await db.refresh(image)
 
@@ -812,7 +863,7 @@ async def update_image(
         except Exception as e:
             print(f"Failed to re-run catalog matching after frame_type change: {e}")
 
-    if target_changed:
+    if target_changed or rig_changed:
         try:
             from app.api.targets import _invalidate_targets_cache
             await _invalidate_targets_cache()
@@ -949,7 +1000,7 @@ async def update_image(
         except Exception as e:
             print(f"Error calculating WCS overlays: {e}")
 
-    return image
+    return await _attach_equipment_names(db, image)
 
 
 @router.put("/bulk/subtype", response_model=dict)
@@ -984,6 +1035,8 @@ async def bulk_update_image_type(
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
     target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
+    rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
+    site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk update image type for all images matching the filters."""
@@ -1023,7 +1076,9 @@ async def bulk_update_image_type(
             gain_min=gain_min,
             gain_max=gain_max,
             frame_type=frame_type,
-            target_key=target_key
+            target_key=target_key,
+            rig_id=rig_id,
+            site_id=site_id
         )
 
         # Execute query to get all matching images (no pagination)
@@ -1118,6 +1173,8 @@ async def bulk_update_frame_type(
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = None,
+    rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
+    site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk set frame_type (F1) for all images matching the filters. Always marks frame_type_source='MANUAL'."""
@@ -1155,7 +1212,9 @@ async def bulk_update_frame_type(
             telescope=telescope,
             gain_min=gain_min,
             gain_max=gain_max,
-            frame_type=frame_type
+            frame_type=frame_type,
+            rig_id=rig_id,
+            site_id=site_id
         )
 
         result = await db.execute(stmt)
@@ -1239,6 +1298,8 @@ async def bulk_assign_target(
     gain_min: Optional[float] = None,
     gain_max: Optional[float] = None,
     target_key: Optional[str] = None,
+    rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
+    site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1281,7 +1342,9 @@ async def bulk_assign_target(
             telescope=telescope,
             gain_min=gain_min,
             gain_max=gain_max,
-            target_key=target_key
+            target_key=target_key,
+            rig_id=rig_id,
+            site_id=site_id
         )
 
         result = await db.execute(stmt)
@@ -1349,6 +1412,8 @@ async def bulk_sync_metadata(
     gain_max: Optional[float] = None,
     frame_type: Optional[str] = Query(None, description="Filter by frame type: LIGHT/DARK/FLAT/BIAS/DARK_FLAT, comma-separated, or ALL for no filter"),
     target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
+    rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
+    site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     db: AsyncSession = Depends(get_db)
 ):
     """Queue metadata re-extraction for all images matching the filters."""
@@ -1382,7 +1447,9 @@ async def bulk_sync_metadata(
             gain_min=gain_min,
             gain_max=gain_max,
             frame_type=frame_type,
-            target_key=target_key
+            target_key=target_key,
+            rig_id=rig_id,
+            site_id=site_id
         )
         stmt = stmt.with_only_columns(Image.file_path).order_by(None)
         result = await db.execute(stmt)

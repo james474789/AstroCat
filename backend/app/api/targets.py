@@ -27,6 +27,7 @@ from app.utils.filter_names import normalize_filter, filter_sort_key
 from app.utils.path_security import validate_path_safety
 from app.utils.rig_optics import (
     build_filter_rig_rows, valid_pixel_scale, parse_pixel_size, known_pixel_size, binning_factor,
+    build_filter_rig_rows_with_rigs,
 )
 from app.config import settings
 
@@ -568,6 +569,38 @@ async def unassigned_summary(
     return {"count": count or 0, "total_seconds": float(total_seconds or 0)}
 
 
+async def _declared_rig_info(db: AsyncSession, rig_ids) -> tuple:
+    """
+    ({rig_id: {"name", "camera", "focal_length"}}, camera_lookup) for the
+    By Filter & Rig table (R0 §4.8). camera_lookup maps a header camera name
+    to the unbinned pixel size of the first matching Camera row.
+    """
+    from app.models.equipment import Camera, Optic, Rig
+    from app.services.equipment_assignment import camera_matches
+    from app.utils.optics import effective_focal_mm
+
+    cameras = (await db.execute(
+        select(Camera.name, Camera.match_patterns, Camera.pixel_size_um).where(Camera.pixel_size_um.isnot(None))
+    )).all()
+
+    def camera_lookup(name):
+        for c in cameras:
+            if camera_matches(name, c.match_patterns or []):
+                return c.pixel_size_um
+        return None
+
+    rigs = {}
+    if rig_ids:
+        rows = (await db.execute(
+            select(Rig.id, Rig.name, Rig.modifier_factor, Camera.name.label("camera"), Optic.focal_length_mm)
+            .join(Camera, Camera.id == Rig.camera_id).join(Optic, Optic.id == Rig.optic_id)
+            .where(Rig.id.in_(list(rig_ids)))
+        )).all()
+        rigs = {r.id: {"name": r.name, "camera": r.camera,
+                       "focal_length": effective_focal_mm(r.focal_length_mm, r.modifier_factor)} for r in rows}
+    return rigs, camera_lookup
+
+
 @router.get("/{target_key}")
 async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db)):
     """Full detail for one target: filter x rig matrix, nightly timeline, masters, goals, catalog info."""
@@ -592,20 +625,24 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
             scale_bucket.label("scale"),
             header_pix.label("pix"),
             func.coalesce(Image.binning, header_bin).label("bin"),
+            Image.rig_id,
             func.count(Image.id).label("subs"),
             func.sum(Image.exposure_time_seconds).label("secs"),
         )
         .where(light_clause, Image.target_key == target_key)
         .group_by(Image.filter_name, Image.camera_name, scale_bucket, header_pix,
-                  func.coalesce(Image.binning, header_bin))
+                  func.coalesce(Image.binning, header_bin), Image.rig_id)
     )
     rig_rows = (await db.execute(rig_stmt)).all()
+    # R0 (§4.8): declared rigs label their subs; the cameras table supplies
+    # pixel sizes before the seed table for the fallback clustering.
+    declared_rigs, camera_lookup = await _declared_rig_info(db, {r.rig_id for r in rig_rows if r.rig_id})
     rig_buckets = []
     for r in rig_rows:
         # Header XPIXSZ is already the binned size; table sizes are unbinned.
         pix = parse_pixel_size(r.pix)
         if pix is None:
-            known = known_pixel_size(r.camera_name)
+            known = known_pixel_size(r.camera_name, camera_lookup)
             pix = known * binning_factor(r.bin) if known else None
         rig_buckets.append({
             "filter": normalize_filter(r.filter_name),
@@ -614,9 +651,10 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
             "pixel_size_um": pix,
             "subs": r.subs or 0,
             "seconds": float(r.secs or 0),
+            "rig_id": r.rig_id,
         })
     by_filter_rig = sorted(
-        build_filter_rig_rows(rig_buckets),
+        build_filter_rig_rows_with_rigs(rig_buckets, declared_rigs),
         key=lambda e: (filter_sort_key(e["filter"]), -e["seconds"]),
     )
 
