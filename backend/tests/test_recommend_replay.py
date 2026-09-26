@@ -143,7 +143,7 @@ def test_report_shape_matches_contract():
     assert set(rep["metrics"]) == keys
     assert set(rep["baselines"]) == {"recency", "altitude", "random"}
     assert all(set(v) == keys for v in rep["baselines"].values())
-    assert set(rep["breakdown"]) == {"tier", "moon", "year", "rig_known"}
+    assert set(rep["breakdown"]) == {"tier", "moon", "year", "rig_known", "site_class", "source"}
     assert set(rep["breakdown"]["moon"]) == {"<0.25", ">0.75"}
     assert rep["misses"] == [{"night": "2026-01-02", "target_key": "Q", "reason": NOT_IN_POOL}]
     assert rep["params"]["weights"]["observability"] == 0.25
@@ -181,6 +181,113 @@ def test_run_replay_end_to_end_and_grid():
 
     grid = weight_grid(Weights(), factors=(1.0, 2.0), keys=("momentum",))
     assert len(grid) == 2 and grid[1].momentum == 0.3
-    top = grid_search(nights[:4], data.inputs_for, Params(), weights=grid, top=2)
-    assert len(top) == 2
+    res = grid_search(nights[:4], data.inputs_for, Params(), weights=grid, top=2)
+    top = res["top"]
+    assert len(top) == 2 and res["evaluated"] == 2 and res["moon_stage"] == []
     assert top[0]["metrics"]["hit@5"] >= top[1]["metrics"]["hit@5"]
+    assert set(top[0]["recency"]) >= {"hit@5", "mrr"}
+
+
+# --- tuning round: headline set, pair classes, miss details, grid ---------------------
+
+from app.services.recommend.replay import (  # noqa: E402
+    HOME, REMOTE, SOURCE_HEADER, SOURCE_MATCH, UNKNOWN_SITE, PairRow, classify_pairs, headline, moon_bb_grid,
+    pair_counts, tuning_grid, TUNING_SPACE,
+)
+
+
+def test_classify_pairs_home_remote_unknown_and_source():
+    n = date(2025, 3, 1)
+    rows = [PairRow("M42", n, 56.0, "HEADER", 3000), PairRow("M42", n, None, "MATCH", 1000),
+            PairRow("NGC3372", n, -30.5, "MATCH", 3600),
+            PairRow("M81", n, None, "HEADER_RAW", 3600), PairRow("M81", n, 56.1, "HEADER", 100),
+            PairRow("OBJ:IC13961", n, 55.4, "MANUAL", 1800)]
+    info = classify_pairs(rows, [56.0], key_map={"OBJ:IC13961": "IC1396"})
+    assert info[("M42", n)] == (HOME, SOURCE_HEADER)
+    assert info[("NGC3372", n)] == (REMOTE, SOURCE_MATCH)
+    assert info[("M81", n)] == (UNKNOWN_SITE, SOURCE_HEADER)
+    assert info[("IC1396", n)] == (HOME, SOURCE_HEADER)       # folded key, within 1.5 deg
+
+
+def test_headline_excludes_remote_pairs():
+    o_home = _outcome(date(2025, 1, 1), {"A"}, ["A", "B"])
+    o_home.pair_class = {"A": HOME}
+    o_mixed = _outcome(date(2025, 1, 2), {"B", "Z"}, ["B"], in_pool={"B", "Z"})
+    o_mixed.pair_class = {"B": UNKNOWN_SITE, "Z": REMOTE}
+    o_remote = _outcome(date(2025, 1, 3), {"Q"}, ["A"], in_pool={"Q"})
+    o_remote.pair_class = {"Q": REMOTE}
+    outs = [o_home, o_mixed, o_remote]
+    m = aggregate(outs, lambda o: o.ranked, headline)
+    assert m["nights"] == 2 and m["hit@1"] == 1.0 and m["feasible_recall"] == 1.0
+    r = aggregate(outs, lambda o: o.ranked, lambda o, k: o.pair_class.get(k) == REMOTE)
+    assert r["nights"] == 2 and r["hit@10"] == 0.0 and r["feasible_recall"] == 0.0
+    rep = build_report(outs, Params())
+    assert rep["nights"] == 2 and rep["nights_total"] == 3
+    assert rep["remote"]["nights"] == 2
+    assert pair_counts(outs)["site_class"] == {HOME: 1, REMOTE: 2, UNKNOWN_SITE: 1}
+    assert set(rep["breakdown"]["site_class"]) == {HOME, REMOTE, UNKNOWN_SITE}
+
+
+def test_misses_carry_details_and_classes():
+    from app.services.recommend.candidates import CandidatePool
+    from _recommend_helpers import cand
+
+    pool = CandidatePool([cand("NGC7000", 314.7, 44.3, 120.0, "EMISSION"),
+                          cand("SOUTH", 100.0, -60.0, 30.0, "GALAXY")])
+    rows = [row("NGC7000", date(2025, 9, 1)), row("SOUTH", date(2025, 9, 2)), row("NGC7000", date(2025, 9, 2))]
+    data = ReplayData(pool=pool, rows=sort_rows(rows), masters={}, goal_rows=[], sites={1: SITE},
+                      default_site_id=1, horizons={1: FLAT}, rig_specs={1: NB_RIG}, active_rig_ids=[1],
+                      pair_info={("SOUTH", date(2025, 9, 2)): (REMOTE, SOURCE_MATCH)})
+    outcomes = run_replay(replay_nights(data.rows), data.inputs_for, pair_info=data.pair_info)
+    miss = next(m for o in outcomes for m in o.misses if m["target_key"] == "SOUTH")
+    assert miss["reason"] == "BELOW_HORIZON" and miss["site_class"] == REMOTE and miss["source"] == SOURCE_MATCH
+    d = miss["details"]
+    assert d["rig_id"] == 1 and (d["max_alt_deg"] is None or d["max_alt_deg"] < 15)
+    assert {"mode", "moon_sep_min_deg", "required_sep_deg", "usable_hours", "target_px"} <= set(d)
+    rep = build_report(outcomes, Params())
+    assert rep["miss_reasons"].get("BELOW_HORIZON") is None          # remote misses leave the headline
+    assert rep["remote"]["miss_reasons"] == {"BELOW_HORIZON": 1}
+
+
+def test_tuning_grid_space_and_sampling():
+    combos = tuning_grid()
+    assert len(combos) == 288
+    taus = {tau for _, tau in combos}
+    assert taus == set(TUNING_SPACE["momentum_tau_days"])
+    w, tau = combos[0]
+    assert w.urgency == 0.075 and w.momentum in TUNING_SPACE["momentum"]
+    sample = tuning_grid(max_combos=20, seed=3)
+    assert len(sample) == 20 and sample[0] == combos[0] and sample == tuning_grid(max_combos=20, seed=3)
+
+
+def test_moon_bb_grid():
+    rules = moon_bb_grid()
+    assert [r["BB"] for r in rules] == [(60.0, 14.0), (90.0, 14.0), (120.0, 14.0)]
+    assert all(r["OSC"] == r["BB"] and r["HA"] == (40.0, 10.0) for r in rules)
+
+
+def test_grid_with_moon_stage():
+    data = _data(_history_rows(), rigs=(NB_RIG, OSC_RIG, BB_RIG))
+    nights = replay_nights(data.rows)[:3]
+    combos = tuning_grid(max_combos=2)
+    res = grid_search(nights, data.inputs_for, Params(), combos=combos, moon_rules=moon_bb_grid(), top=5)
+    assert len(res["moon_stage"]) == 3 and res["evaluated"] == 2 and len(res["top"]) == 2
+    assert {row["moon_rules"]["BB"]["D"] for row in res["moon_stage"]} == {60.0, 90.0, 120.0}
+
+
+def test_grid_warm_keep_matches_cold():
+    data = _data(_history_rows(), rigs=(NB_RIG, OSC_RIG, BB_RIG))
+    nights = replay_nights(data.rows)[:3]
+    combos = tuning_grid(max_combos=3)
+    cold = grid_search(nights, data.inputs_for, Params(), combos=combos)
+    keep = {}
+    run_replay(nights, data.inputs_for, keep=keep)
+    calls = []
+
+    def counting(nr):
+        calls.append(nr)
+        return data.inputs_for(nr)
+
+    warm = grid_search(nights, counting, Params(), combos=combos, warm_keep=keep)
+    assert calls == []
+    assert [r["metrics"] for r in warm["top"]] == [r["metrics"] for r in cold["top"]]
