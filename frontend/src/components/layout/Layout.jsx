@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { LogOut, Crosshair } from 'lucide-react';
+import TelescopeIcon from '../icons/TelescopeIcon';
 
 import logo from '../../assets/logo.png';
 import './Layout.css';
@@ -71,6 +72,7 @@ const PinIcon = ({ pinned }) => (
 );
 
 const TargetsIcon = () => <Crosshair size={20} strokeWidth={2} />;
+const EquipmentIcon = () => <TelescopeIcon size={20} strokeWidth={2} />;
 
 const navItems = [
     { path: '/', label: 'Dashboard', icon: DashboardIcon, end: true },
@@ -79,6 +81,8 @@ const navItems = [
     { path: '/catalogs', label: 'Catalogs', icon: CatalogIcon },
     // F2: inserted after Catalogs per docs/design/README.md §4 (Targets, Sessions, Mosaics order)
     { path: '/targets', label: 'Targets', icon: TargetsIcon },
+    // R0: Equipment goes after Targets (docs/design/P0-R0-equipment-sites.md §4.9)
+    { path: '/equipment', label: 'Equipment', icon: EquipmentIcon },
     { path: '/stats', label: 'Statistics', icon: StatsIcon, end: true },
     { path: '/stats/fits', label: 'FITS Analytics', icon: AnalyticsIcon },
     { path: '/admin', label: 'Admin', icon: AdminIcon },

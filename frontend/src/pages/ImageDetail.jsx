@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { fetchImage, updateImage, rescanImage, fetchAnnotation, regenerateImageThumbnail, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
+import { useQuery } from '@tanstack/react-query';
+import { fetchImage, updateImage, rescanImage, fetchAnnotation, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
 import './ImageDetail.css';
 
@@ -39,6 +40,14 @@ export default function ImageDetail() {
     useEffect(() => {
         loadImage();
     }, [id]);
+
+    // R0: rig list for the Equipment section's override select
+    const rigsQuery = useQuery({
+        queryKey: ['equipment'],
+        queryFn: fetchEquipment,
+        staleTime: 60 * 1000,
+    });
+    const rigs = rigsQuery.data?.rigs || [];
 
     async function loadImage() {
         try {
@@ -99,6 +108,20 @@ export default function ImageDetail() {
             setImage(updated);
         } catch (err) {
             console.error('Failed to update frame type:', err);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    // R0: rig override (docs/design/P0-R0-equipment-sites.md §4.9)
+    async function handleRigChange(newRigId) {
+        setSaving(true);
+        try {
+            const updated = await updateImage(id, { rig_id: newRigId === '' ? null : Number(newRigId) });
+            setImage(updated);
+        } catch (err) {
+            console.error('Failed to update rig:', err);
+            alert('Failed to update rig: ' + err.message);
         } finally {
             setSaving(false);
         }
@@ -813,7 +836,7 @@ export default function ImageDetail() {
                                             ) : (
                                                 <span className="text-muted">Unassigned</span>
                                             )}
-                                            {image.target_source && (
+                                            {image.target_source && image.target_source !== 'NONE' && (
                                                 <span className="text-muted text-xs">
                                                     ({image.target_source === 'MANUAL' ? 'manual' : `auto: ${image.target_source.toLowerCase()}`})
                                                 </span>
@@ -924,6 +947,36 @@ export default function ImageDetail() {
                             <div className="metadata-item">
                                 <dt>Telescope/Lens</dt>
                                 <dd>{image.telescope_name || 'Unknown'}</dd>
+                            </div>
+                            {/* R0: rig, with an inline override select (docs/design/P0-R0-equipment-sites.md §4.9) */}
+                            <div className="metadata-item">
+                                <dt>Rig</dt>
+                                <dd>
+                                    <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        {image.rig_name ? (
+                                            <span>
+                                                {image.rig_name}
+                                                <span className="text-muted text-xs" style={{ marginLeft: '0.4rem' }}>
+                                                    ({image.rig_source === 'MANUAL' ? 'manual' : 'auto'})
+                                                </span>
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted">Unassigned</span>
+                                        )}
+                                        <select
+                                            className="input"
+                                            style={{ maxWidth: '200px' }}
+                                            value={image.rig_id ?? ''}
+                                            onChange={(e) => handleRigChange(e.target.value)}
+                                            disabled={saving}
+                                        >
+                                            <option value="">None / auto</option>
+                                            {rigs.map((r) => (
+                                                <option key={r.id} value={r.id}>{r.name}</option>
+                                            ))}
+                                        </select>
+                                    </span>
+                                </dd>
                             </div>
                         </dl>
                     </section>
