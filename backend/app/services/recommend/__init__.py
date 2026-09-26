@@ -15,7 +15,7 @@ shared by every rig and by weight re-scoring (replay --grid).
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -77,7 +77,7 @@ class Params:
     moon_hard_fraction: float = MOON_HARD_FRACTION
     bright_broadband_factor: float = BRIGHT_BROADBAND_FACTOR
     include_excluded: bool = False
-    light: bool = False            # replay: ranked list only (no lanes, reasons or curves)
+    light: bool = False            # replay: ranked LightPicks only (no lanes, reasons, curves or verdict)
 
 
 @dataclass
@@ -90,6 +90,16 @@ class PreparedNight:
     weeks_left: np.ndarray
     moon_rules_key: tuple
     useful: np.ndarray
+
+
+class LightPick(NamedTuple):
+    """A ranked pick in replay (light) mode."""
+    key: str
+    score: float
+    usable_hours: float
+    last_imaged: Optional[date]
+    rig_index: int
+    idx: int
 
 
 @dataclass
@@ -205,6 +215,16 @@ def recommend(inputs: EngineInputs, params: Optional[Params] = None,
         best, best_score, furthest = best_rigs(evals)
         feasible = np.flatnonzero(best >= 0)
         order = feasible[np.argsort(-best_score[feasible], kind="stable")]
+        if params.light:
+            # Replay fast path: only what the metrics and baselines need.
+            usable = prep.feats.usable_h
+            hist_get = inputs.history.get
+            for i in order:
+                key = pool.candidates[i].key
+                h = hist_get(key)
+                ranked.append(LightPick(key, float(best_score[i]), float(usable[i]),
+                                        h.last_night if h else None, int(best[i]), int(i)))
+            order = []
         for i in order:
             ev = evals[int(best[i])]
             alts = []
@@ -231,6 +251,8 @@ def recommend(inputs: EngineInputs, params: Optional[Params] = None,
             hero.reasons = pick_reasons(hero, ctx.tier)
     if not inputs.rigs:
         v = ("DONT_BOTHER", [{"code": "NO_RIGS", "text": "No rig with a known pixel scale and field of view"}])
+    elif params.light:
+        v = ("", [])
     else:
         v = verdict(hero, ctx.tier)
     return Result(context=ctx, hero=hero, verdict=v, lanes=lanes, excluded_counts=counts, ranked=ranked,
