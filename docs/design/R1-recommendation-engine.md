@@ -611,3 +611,47 @@ Same pattern as R0 (HANDOVER-recommendations §3):
 5. **Inferred goals are in R1** (the simple median, per kind). Palette completeness waits for R2.
 6. **The replay test doesn't auto-tune.** Weight changes are proposed to the owner with the report.
 7. **The `night_of` switch also applies to Targets**, so both pages agree on what a "night" is.
+
+## 14. B1 implementation notes (backend, `feat/r1-engine-backend`)
+
+Where the shipped backend differs from, or adds to, the text above. The §7 shapes are kept;
+every change to them is additive.
+
+- **Exclusion order:** `TIER` (no usable class) is checked before `MOON`. With no usable
+  class the available hours are always 0, so in the §4.5 order `MOON` would hide `TIER`.
+- **Replay majorities are strict:** a night's rig (or site) is its majority only with > 50% of
+  the night's seconds; otherwise the ±365-day / default fallbacks apply.
+- **`prior`** uses the most familiar catalog among a candidate's aliases (NGC7000 is also C20,
+  so 0.9), not only the catalog the key comes from. `Candidate.catalog` still names the key's
+  catalog.
+- **`project`:** the marginal-gain term uses the hours in the classes usable tonight (else
+  all hours); the goal comparisons (`< goal`, `>= 1.5 x goal`) use total hours.
+- **Inferred goal:** the all-kinds median also needs >= 3 samples, else the 10 h default.
+- **`MOON_MARGINAL`** names the usable class the Moon cuts least among those below half the
+  usable time (e.g. OIII next to a fine Ha).
+- **Seasonal urgency:** `weeks_left` is 1-based (the first failing week, +7 d = 1); future
+  nights use their own darkness tier on a 30-minute grid, without the Moon.
+- **Default date:** from 06:00 local solar time the default is the coming night; before that,
+  the current night (so a mid-session request stays on tonight).
+- **History rows** are pre-aggregated in SQL per (key, night, filter, camera colour, rig,
+  site) with the best valid pixel scale; the pool is cached in process (rebuilt with the alias
+  index or when the imaged keys change), not in `recs:inputs`.
+- **Result cache key** includes `per_lane`: `recs:result:<site>:<rig>:<night>:<per_lane>:<hist_version>`.
+  `hist_version` also includes the light-sub count and the latest goal update.
+- **Learned horizon** moved to `services/site_horizon.py` (shared SQL, computation and Redis key
+  with the Sites API); the key's TTL is now 24 h for both.
+- **Additive response fields:** `context.tier_thresholds`, `context.dark_hours`,
+  `context.moon_rules`; per pick `lane`, `catalog`, `magnitude`. Timestamps are ISO UTC with a
+  `Z` suffix. The pick curve covers sunset to sunrise (Sun < 0°) in 15-minute samples.
+- **Verdict reason codes** beyond the pick chips: `NO_PICKS`, `NO_RIGS`, `SHORT`.
+- **Target endpoint:** the key may be a name or alias (resolved through the alias index); the
+  body adds `rig_mode` and `skipped_rigs`. 404 when the key isn't a candidate.
+- **Errors:** no site, unknown `site_id` or unknown rig id → 404; a malformed `rig` → 400.
+- **Replay report** (the orchestrator's contract): `generated_at, nights, params, metrics,
+  baselines, breakdown, misses`, plus `actual_pairs`, `pool_coverage`, `miss_reasons`,
+  `beats_baselines`, `seed`, `since/until`, `runtime_seconds` and `grid_top` with `--grid`.
+  `feasible_recall` is over actual pairs whose key is in the candidate pool; targets outside
+  the pool (e.g. `OBJ:` keys) are listed as `NOT_IN_POOL` misses and measured by
+  `pool_coverage`. The learned horizon used for replay is today's (static, like the catalog).
+- **New-file UTC:** the indexer hook also applies the default-site rule, so new site-less
+  local-clock files get UTC immediately.
