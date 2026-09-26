@@ -146,7 +146,7 @@ def test_resolve_target_match_picks_central_object_not_bright_offcenter():
         frame_type="LIGHT",
         object_name=None,
         matches=matches,
-        field_radius=1.0,  # threshold = 0.35
+        field_radius=1.0,  # threshold = 0.5
         current_source=None,
         alias_index=AliasIndex(),
     )
@@ -154,7 +154,7 @@ def test_resolve_target_match_picks_central_object_not_bright_offcenter():
 
 
 def test_resolve_target_match_radius_guard_rejects_edge_objects():
-    # Only match is well outside 0.35 * field_radius -> no MATCH, falls through.
+    # Only match is well outside 0.5 * field_radius -> no MATCH, falls through.
     matches = [
         MatchInfo("MESSIER", "M31", 0.9, True, 3.4),
     ]
@@ -162,11 +162,28 @@ def test_resolve_target_match_radius_guard_rejects_edge_objects():
         frame_type="LIGHT",
         object_name=None,
         matches=matches,
-        field_radius=1.0,  # threshold = 0.35
+        field_radius=1.0,  # threshold = 0.5
         current_source=None,
         alias_index=AliasIndex(),
     )
     assert (key, source) == (None, None)
+
+
+def test_resolve_target_match_accepts_moderately_offset_object():
+    # 0.4 * radius was rejected under the old 0.35 cutoff; mosaic panels and
+    # offset framing land here, so it now resolves.
+    matches = [
+        MatchInfo("IC", "IC5068", 0.4, True, None),
+    ]
+    key, source = resolve_target(
+        frame_type="LIGHT",
+        object_name=None,
+        matches=matches,
+        field_radius=1.0,  # threshold = 0.5
+        current_source=None,
+        alias_index=AliasIndex(),
+    )
+    assert (key, source) == ("IC5068", "MATCH")
 
 
 def test_resolve_target_match_ignores_named_star():

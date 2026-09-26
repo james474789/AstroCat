@@ -21,6 +21,7 @@ from app.models.matches import ImageCatalogMatch
 from app.extractors.factory import get_extractor, determine_format
 from app.services.matching import SyncCatalogMatcher
 from app.services.frame_type import classify_frame_type
+from app.utils.field_geometry import effective_field_radius
 from app.config import settings
 from sqlalchemy import select, func, delete, update
 from sqlalchemy.exc import OperationalError
@@ -331,6 +332,13 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
         existing = result.scalar_one_or_none()
         
         wcs = metadata.get("wcs", {})
+        # Sidecar solves often omit the radius; derive it from scale x diagonal.
+        field_radius = effective_field_radius(
+            wcs.get("radius_degrees"),
+            metadata.get("width_pixels"),
+            metadata.get("height_pixels"),
+            wcs.get("pixel_scale"),
+        )
         
         if existing:
             image = existing
@@ -373,7 +381,7 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
                 image.plate_solve_source = metadata.get("plate_solve_source")
                 image.ra_center_degrees = wcs.get("ra_center")
                 image.dec_center_degrees = wcs.get("dec_center")
-                image.field_radius_degrees = wcs.get("radius_degrees")
+                image.field_radius_degrees = field_radius
                 image.pixel_scale_arcsec = wcs.get("pixel_scale")
                 image.rotation_degrees = wcs.get("rotation")
             else:
@@ -452,7 +460,7 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
                 plate_solve_source=metadata.get("plate_solve_source"),
                 ra_center_degrees=wcs.get("ra_center"),
                 dec_center_degrees=wcs.get("dec_center"),
-                field_radius_degrees=wcs.get("radius_degrees"),
+                field_radius_degrees=field_radius,
                 pixel_scale_arcsec=wcs.get("pixel_scale"),
                 rotation_degrees=wcs.get("rotation"),
                 
