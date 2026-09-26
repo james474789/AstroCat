@@ -17,14 +17,18 @@ from typing import Optional
 FILTER_DISPLAY_ORDER = ["L", "R", "G", "B", "Ha", "OIII", "SII", "Hb", "Duo", "None"]
 
 # CSS colors for each canonical bucket (used by the frontend Targets.css).
+# Narrowband hues follow the common bicolor/SHO display convention: Ha and SII
+# (both deep-red emission lines) render as two distinct reds, OIII (blue
+# channel in the Hubble palette) renders as blue. L is the only neutral/grey
+# bucket; Other/None stay grey as the "unclassified" fallback.
 FILTER_COLORS = {
     "L": "#d0d4dc",
     "R": "#e05050",
     "G": "#50c070",
     "B": "#5080e0",
     "Ha": "#c8283c",
-    "OIII": "#28b4b4",
-    "SII": "#8c1e3c",
+    "OIII": "#2f80ed",
+    "SII": "#a83246",
     "Hb": "#3cc8ff",
     "Duo": "#b060c0",
     "None": "#a0a0a0",
@@ -60,9 +64,9 @@ _L_SET = {"l", "lum", "luminance", "clear", "uvir"}
 _R_SET = {"r", "red"}
 _G_SET = {"g", "green"}
 _B_SET = {"b", "blue"}
-_HA_SET = {"ha", "halpha"}
-_OIII_SET = {"oiii", "o3"}
-_SII_SET = {"sii", "s2"}
+_HA_SET = {"ha", "halpha", "h"}
+_OIII_SET = {"oiii", "o3", "o"}
+_SII_SET = {"sii", "s2", "s"}
 _HB_SET = {"hb", "hbeta"}
 
 _NONE_UPPER = {"NOFILTER", "OSC", "NONE"}

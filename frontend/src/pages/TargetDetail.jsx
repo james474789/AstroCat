@@ -9,7 +9,7 @@ import './TargetDetail.css';
 
 const FILTER_COLORS = {
     L: '#d0d4dc', R: '#e05050', G: '#50c070', B: '#5080e0',
-    Ha: '#c8283c', OIII: '#28b4b4', SII: '#8c1e3c', Hb: '#3cc8ff',
+    Ha: '#c8283c', OIII: '#2f80ed', SII: '#a83246', Hb: '#3cc8ff',
     Duo: '#b060c0', None: '#a0a0a0', Other: '#707070',
 };
 
