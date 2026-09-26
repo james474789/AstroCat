@@ -9,6 +9,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 from app.extractors.base import BaseExtractor
 from app.extractors.fits_extractor import FITSExtractor
+from app.utils.header_values import parse_sexagesimal
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,9 @@ class XISFExtractor(BaseExtractor):
             metadata["object_name"] = header_dict.get("OBJECT")
             
             # Site
-            metadata["site_lat"] = fits_ext._parse_float(header_dict.get("SITELAT"))
-            metadata["site_long"] = fits_ext._parse_float(header_dict.get("SITELONG"))
+            metadata["site_lat"] = parse_sexagesimal(header_dict.get("SITELAT"))
+            metadata["site_long"] = parse_sexagesimal(header_dict.get("SITELONG"))
+            metadata["site_name"] = header_dict.get("SITENAME") or header_dict.get("OBSERVAT")
             
             # WCS Extraction
             wcs_info = fits_ext._extract_wcs(header_dict)
