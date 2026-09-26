@@ -316,11 +316,12 @@ def _refresh_measured(session) -> int:
 
 
 def _invalidate_targets_cache() -> None:
-    """Drop every cache:targets:* key (the targets list and its per-folder variants)."""
+    """Drop every cache:targets:* key (the targets list and its per-folder variants) and recs:* (R1)."""
     try:
         r = _redis()
-        keys = list(r.scan_iter(match="cache:targets:*"))
-        if keys:
-            r.delete(*keys)
+        for pattern in ("cache:targets:*", "recs:*"):
+            keys = list(r.scan_iter(match=pattern))
+            if keys:
+                r.delete(*keys)
     except Exception as e:
         logger.warning(f"Equipment assign: targets cache invalidation failed: {e}")
