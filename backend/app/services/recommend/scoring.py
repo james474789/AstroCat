@@ -9,9 +9,14 @@ Per rig, per candidate:
   mode       the best class by Moon-clear hours among rig classes that are
              useful for the target kind (and allowed by the tier);
   framing    ratio = size / short side of the FOV, px = size*60/scale;
-  feasibility (first failure recorded): BELOW_HORIZON, TOO_SMALL, TOO_BIG,
-             TIER (no usable class), MOON (< 0.5 h clear);
-  components observability, framing, project, momentum, urgency, prior;
+  feasibility (first failure recorded), generous so only clear-cut cases go:
+             BELOW_HORIZON (< 0.5 h above max(15, limit - 10)), TOO_SMALL
+             (< 15 px), TOO_BIG (> 4 x the short side), TIER (no usable
+             class; only the NONE tier removes classes), MOON (< 0.5 h clear
+             of half the required distance);
+  components observability, framing, project, momentum, urgency, prior,
+             recency_rank; the full rules (real limit, full Moon distance,
+             BRIGHT broadband x 0.3) drive them;
   score      sum(w_i * c_i).
 
 Note on the exclusion order: the spec lists MOON before TIER, but with no

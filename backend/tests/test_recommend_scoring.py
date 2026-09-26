@@ -245,3 +245,57 @@ def test_moon_rules_defaults_match_spec():
     w = Weights().as_dict()
     assert w == {"observability": 0.25, "framing": 0.20, "project": 0.20, "momentum": 0.15, "urgency": 0.15,
                  "prior": 0.10, "recency_rank": 0.0}
+
+
+# --- tuning round: generous hard filters -------------------------------------------------
+
+def test_too_small_and_too_big_thresholds():
+    # NB_RIG: 2.46"/px, short side 231.6'. 15 px = 0.615'; 4 x short side = 926'.
+    pool = CandidatePool([cand("P14", 314.7, 44.3, 0.57, "GALAXY"), cand("P16", 314.7, 44.3, 0.66, "GALAXY"),
+                          cand("R39", 314.7, 44.3, 900.0, "EMISSION"), cand("R41", 314.7, 44.3, 950.0, "EMISSION")])
+    res = recommend(make_inputs(pool=pool, rigs=[NB_RIG], night=date(2026, 10, 10)), Params())
+    assert res.excluded == {"P14": "TOO_SMALL", "R41": "TOO_BIG"}
+
+
+def test_low_targets_survive_the_hard_horizon_but_score_lower():
+    """Orion-like: culminating ~28 deg under a 32 deg floor survives (hard limit 22); ~10 deg does not."""
+    from app.services.recommend.context import HorizonSpec
+
+    floor = HorizonSpec(points=[], source="LEARNED", floor_deg=32.0)
+    pool = CandidatePool([cand("LOW", 83.8, -6.0, 60.0, "EMISSION"),       # max alt ~28 at 56N
+                          cand("VERYLOW", 83.8, -24.0, 60.0, "EMISSION"),  # max alt ~10
+                          cand("HIGH", 83.8, 22.0, 60.0, "EMISSION")])
+    res = recommend(make_inputs(pool=pool, rigs=[NB_RIG], night=date(2026, 1, 15), horizon=floor), Params())
+    picks = {p.key: p for p in res.ranked}
+    assert "LOW" in picks and res.excluded.get("VERYLOW") == "BELOW_HORIZON"
+    low, high = picks["LOW"], picks["HIGH"]
+    assert low.usable_hours == 0.0 and low.components["observability"] == 0.0
+    assert low.score < high.score
+    assert any(r["code"] == "LOW" for r in pick_reasons_for(low, res))
+
+
+def pick_reasons_for(p, res):
+    from app.services.recommend.lanes import pick_reasons
+    return pick_reasons(p, res.context.tier)
+
+
+def test_moon_hard_fraction_param_changes_feasibility():
+    pool = CandidatePool([cand("GAL", 314.7, 44.3, 60.0, "GALAXY")])
+    assert "GAL" in {p.key for p in recommend(make_inputs(pool=pool, rigs=[NB_RIG]), Params()).ranked}
+    strict = recommend(make_inputs(pool=pool, rigs=[NB_RIG]), Params(moon_hard_fraction=1.0))
+    assert strict.excluded == {"GAL": "MOON"}
+
+
+def test_momentum_tau_param_and_recency_rank_weight():
+    rows = ngc7000_rows() + [HistoryRow("M31", FULL_MOON_NIGHT - timedelta(days=100), "L", 7200.0),
+                             HistoryRow("M31", FULL_MOON_NIGHT - timedelta(days=99), "L", 7200.0)]
+    inputs = make_inputs(rows=rows, rigs=[NB_RIG, OSC_RIG], night=date(2026, 10, 10))
+    short = recommend(inputs, Params(momentum_tau_days=10))
+    long = recommend(inputs, Params(momentum_tau_days=45))
+    s = {p.key: p for p in short.ranked}["NGC7000"].components["momentum"]
+    l_ = {p.key: p for p in long.ranked}["NGC7000"].components["momentum"]
+    assert s == 0.0 and l_ > 0.3                  # 46 days: beyond 3 x 10, within 3 x 45
+    ranked = recommend(inputs, Params(weights=Weights(recency_rank=0.5))).ranked
+    comps = {p.key: p.components["recency_rank"] for p in ranked}
+    assert comps["NGC7000"] == 1.0 and comps.get("M31", 0.5) == 0.5
+    assert all(v == 0.0 for k, v in comps.items() if k not in ("NGC7000", "M31"))

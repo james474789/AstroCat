@@ -26,10 +26,11 @@ from app.services.recommend import (
     RIG_MODE_ALL, RIG_MODE_ALL_FALLBACK, RIG_MODE_MOUNTED, RIG_MODE_SINGLE, EngineInputs, Params, explain_target,
     recommend, result_to_dict,
 )
-from app.services.recommend.candidates import CandidatePool, build_candidates
+from app.services.recommend.candidates import CandidatePool, build_pool_parts, fold_map
 from app.services.recommend.context import HorizonSpec, SiteSpec, resolve_horizon
 from app.services.recommend.history import (
-    CLASS_BB, CLASS_OSC, GoalRow, HistoryRow, band_classes, build_history, filter_classes, infer_goals, sort_rows,
+    CLASS_BB, CLASS_OSC, GoalRow, HistoryRow, band_classes, build_history, filter_classes, infer_goals,
+    narrowband_keys, remap_rows, sort_rows,
 )
 from app.services.recommend.scoring import RigSpec
 from app.utils.filter_names import normalize_filter
@@ -65,6 +66,19 @@ MASTERS_SQL = text(f"""
     WHERE images.frame_type = 'LIGHT' AND images.subtype = 'INTEGRATION_MASTER'
       AND images.target_key IS NOT NULL AND images.capture_date IS NOT NULL
     GROUP BY 1
+""")
+
+# Replay only: per (target, night, rounded latitude, target_source) seconds, to
+# classify actual pairs as HOME / REMOTE / UNKNOWN_SITE and header vs MATCH.
+PAIRS_SQL = text(f"""
+    SELECT images.target_key AS key, {NIGHT_SQL} AS night,
+           round(CAST(images.site_latitude AS numeric), 1) AS lat, images.target_source AS source,
+           sum(images.exposure_time_seconds) AS seconds
+    FROM images {NIGHT_JOIN_SQL}
+    WHERE images.frame_type = 'LIGHT' AND images.subtype = 'SUB_FRAME'
+      AND images.target_key IS NOT NULL AND images.target_source IS DISTINCT FROM 'NONE'
+      AND images.exposure_time_seconds > 0 AND images.capture_date IS NOT NULL
+    GROUP BY 1, 2, 3, 4
 """)
 
 GOALS_SQL = text("SELECT target_key, filter_group, goal_seconds, created_at FROM target_goals")
@@ -243,24 +257,63 @@ def load_history_inputs(session, version: Optional[str] = None, r=None) -> Histo
 # Candidate pool
 # ---------------------------------------------------------------------------
 
-_pool_memo: Dict[str, Any] = {"index_id": None, "imaged": None, "pool": None}
+@dataclass
+class PoolData:
+    """The candidate pool plus history re-keyed onto it (stray keys folded; `images` is untouched)."""
+    pool: CandidatePool
+    rows: List[HistoryRow]
+    masters: Dict[str, date]
+    goal_rows: List[GoalRow]
+    key_map: Dict[str, str]
+
+    def fold_stats(self, raw_rows: Sequence[HistoryRow] = ()) -> Dict[str, Any]:
+        folded = [r for r in raw_rows if r.key in self.key_map]
+        return {"keys": len(self.key_map), "rows": len(folded),
+                "hours": round(sum(float(r.seconds or 0) for r in folded) / 3600.0, 1),
+                "map": dict(sorted(self.key_map.items()))}
 
 
-def load_pool(session, imaged_keys: frozenset) -> CandidatePool:
+_pool_memo: Dict[str, Any] = {"index_id": None, "version": None, "data": None}
+
+
+def build_pool_data(messier, caldwell, ngc, sh2, index, hist: "HistoryInputs") -> PoolData:
+    """Pure part of load_pool_data (catalog rows + alias index + history)."""
+    imaged = hist.imaged_keys
+    candidates, dup_map = build_pool_parts(messier, caldwell, ngc, sh2, index, imaged, narrowband_keys(hist.rows))
+    pool = CandidatePool(candidates, dup_map)
+    key_map = fold_map(imaged, pool.index, index.resolve, dup_map)
+    rows = remap_rows(hist.rows, key_map)
+    masters: Dict[str, date] = {}
+    for k, v in hist.masters.items():
+        k2 = key_map.get(k, k)
+        if v is not None and (k2 not in masters or v < masters[k2]):
+            masters[k2] = v
+    goals = [g._replace(key=key_map.get(g.key, g.key)) for g in hist.goal_rows]
+    return PoolData(pool=pool, rows=rows, masters=masters, goal_rows=goals, key_map=key_map)
+
+
+def load_pool_data(session, hist: "HistoryInputs") -> PoolData:
     from app.models.catalog import CaldwellCatalog, MessierCatalog, NGCCatalog, Sh2Catalog
     from app.services.targets import get_alias_index_sync
 
     index = get_alias_index_sync(session)
-    if (_pool_memo["pool"] is not None and _pool_memo["index_id"] == id(index)
-            and _pool_memo["imaged"] == imaged_keys):
-        return _pool_memo["pool"]
+    data = _pool_memo["data"]
+    if data is not None and _pool_memo["index_id"] == id(index) and _pool_memo["version"] == hist.version \
+            and hist.version:
+        return data
     messier = session.execute(select(MessierCatalog)).scalars().all()
     ngc = session.execute(select(NGCCatalog)).scalars().all()
     caldwell = session.execute(select(CaldwellCatalog)).scalars().all()
     sh2 = session.execute(select(Sh2Catalog)).scalars().all()
-    pool = CandidatePool(build_candidates(messier, caldwell, ngc, sh2, index, imaged_keys))
-    _pool_memo.update(index_id=id(index), imaged=imaged_keys, pool=pool)
-    return pool
+    data = build_pool_data(messier, caldwell, ngc, sh2, index, hist)
+    if data.key_map:
+        logger.info(f"Recommendations: folded {len(data.key_map)} stray history keys into pool keys")
+    _pool_memo.update(index_id=id(index), version=hist.version, data=data)
+    return data
+
+
+def load_pool(session, hist: "HistoryInputs") -> CandidatePool:
+    return load_pool_data(session, hist).pool
 
 
 # ---------------------------------------------------------------------------
@@ -416,10 +469,11 @@ def default_night(now_utc: datetime, lon: float) -> date:
 def build_inputs(session, site: SiteSpec, night: date, rig: str, version: Optional[str] = None, r=None,
                  as_of: Optional[date] = None) -> Tuple[EngineInputs, str]:
     hist_inputs = load_history_inputs(session, version, r)
-    pool = load_pool(session, hist_inputs.imaged_keys)
-    history = build_history(hist_inputs.rows, as_of=as_of, masters=hist_inputs.masters, presorted=True)
-    goals = infer_goals(history, {c.key: c.kind for c in pool.candidates}, hist_inputs.goal_rows, as_of)
-    records = load_rigs(session, hist_inputs.rows)
+    data = load_pool_data(session, hist_inputs)
+    pool = data.pool
+    history = build_history(data.rows, as_of=as_of, masters=data.masters, presorted=True)
+    goals = infer_goals(history, {c.key: c.kind for c in pool.candidates}, data.goal_rows, as_of)
+    records = load_rigs(session, data.rows)
     specs, mode, skipped = select_rigs(records, rig)
     horizon = site_horizon(session, site, r)
     inputs = EngineInputs(candidates=pool, history=history, site=site, horizon=horizon, rigs=specs, goals=goals,
@@ -477,9 +531,21 @@ def get_target_explanation(key: str, night: Optional[date] = None, site_id: Opti
                 if k and k in pool.index:
                     resolved = k
                     break
+                if k and k in pool.dup_map:
+                    resolved = pool.dup_map[k]
+                    break
         if resolved is None:
             raise RecommendationError(404, f"'{key}' is not in the candidate pool")
         body = explain_target(inputs, Params(rig_mode=mode), resolved)
     body["rig_mode"] = mode
     body["skipped_rigs"] = inputs.skipped_rigs
     return body
+
+
+def query_pair_rows(session) -> list:
+    """Replay: PairRow(key, night, lat, source, seconds) per (target, night, latitude, source)."""
+    from app.services.recommend.replay import PairRow
+
+    return [PairRow(r["key"], _as_date(r["night"]), float(r["lat"]) if r["lat"] is not None else None,
+                    r["source"], float(r["seconds"] or 0.0))
+            for r in session.execute(PAIRS_SQL).mappings().all()]
