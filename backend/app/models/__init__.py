@@ -9,6 +9,7 @@ from app.models.matches import ImageCatalogMatch, CatalogType
 from app.models.user import User
 from app.models.system_stats import SystemStats
 from app.models.target import TargetGoal
+from app.models.data_migration import DataMigration
 
 __all__ = [
     "Image",
@@ -22,5 +23,6 @@ __all__ = [
     "User",
     "SystemStats",
     "TargetGoal",
+    "DataMigration",
 ]
 

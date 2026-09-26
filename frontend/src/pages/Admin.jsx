@@ -15,6 +15,8 @@ import {
     triggerMountRescan,
     triggerReclassifyFrameTypes,
     triggerBackfillTargets,
+    fetchDataMigrations,
+    runDataMigrations,
     downloadBackup,
     uploadBackup,
     fetchUsers,
@@ -46,6 +48,8 @@ function Admin() {
     const [cacheActionLoading, setCacheActionLoading] = useState(false);
     const [reclassifyLoading, setReclassifyLoading] = useState(false);
     const [backfillTargetsLoading, setBackfillTargetsLoading] = useState(false);
+    const [dataMigrations, setDataMigrations] = useState({ running: false, items: [] });
+    const [dataMigrationStarting, setDataMigrationStarting] = useState(null); // id being queued
     const [systemSettings, setSystemSettings] = useState({ astrometry_provider: 'nova' });
     const [settingsLoading, setSettingsLoading] = useState(false);
     const [bulkActionLoading, setBulkActionLoading] = useState({}); // { [path]: 'match' | 'rescan' | null }
@@ -76,7 +80,8 @@ function Admin() {
             loadData().catch(err => console.error('Failed to load stats:', err)),
             loadCacheStats().catch(err => console.error('Failed to load cache stats:', err)),
             loadSystemSettings().catch(err => console.error('Failed to load settings:', err)),
-            loadUsers().catch(err => console.error('Failed to load users:', err))
+            loadUsers().catch(err => console.error('Failed to load users:', err)),
+            loadDataMigrations().catch(err => console.error('Failed to load data migrations:', err))
         ]);
 
         // Start polling only after initial load
@@ -89,6 +94,15 @@ function Admin() {
             if (fetchAdminStatsRef.current) clearInterval(fetchAdminStatsRef.current);
         };
     }, []);
+
+    // Refresh data migration status while a run is in progress
+    useEffect(() => {
+        if (!dataMigrations.running) return;
+        const timer = setInterval(() => {
+            loadDataMigrations().catch(err => console.error('Failed to load data migrations:', err));
+        }, 5000);
+        return () => clearInterval(timer);
+    }, [dataMigrations.running]);
 
     // Secondary slow poll (Workers) - only if stats loaded
     useEffect(() => {
@@ -219,6 +233,24 @@ function Admin() {
             showToast(`Failed to start reclassification: ${err.message}`, 'error');
         } finally {
             setReclassifyLoading(false);
+        }
+    }
+
+    async function loadDataMigrations() {
+        setDataMigrations(await fetchDataMigrations());
+    }
+
+    async function handleRunDataMigration(id) {
+        setDataMigrationStarting(id);
+        try {
+            await runDataMigrations(id);
+            showToast('Data migration started in background.', 'success', 2500);
+            setDataMigrations(prev => ({ ...prev, running: true }));
+        } catch (err) {
+            console.error('Failed to start data migration:', err);
+            showToast(`Failed to start data migration: ${err.message}`, 'error');
+        } finally {
+            setDataMigrationStarting(null);
         }
     }
 
@@ -1017,6 +1049,42 @@ function Admin() {
                                 <button className="btn btn-secondary" onClick={handleBackfillTargets} disabled={backfillTargetsLoading}>
                                     {backfillTargetsLoading ? 'Starting...' : '🎯 Re-resolve all targets'}
                                 </button>
+                            </div>
+                        </div>
+                        <div className="cache-card" style={{ marginTop: '1rem', flexDirection: 'column', alignItems: 'stretch' }}>
+                            <div className="cache-info">
+                                <div className="cache-stat">
+                                    <span className="cache-label">Data migrations: one-off repairs that run automatically, once, in the background after an upgrade. Failed ones retry on the next restart. Re-run one here if needed.</span>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
+                                {dataMigrations.items.map(m => {
+                                    const statusColor = m.status === 'applied' ? '#4ade80' : m.status === 'failed' ? '#f87171' : '#fbbf24';
+                                    return (
+                                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: '#1e293b', borderRadius: '0.4rem', flexWrap: 'wrap' }}>
+                                            <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                                <div style={{ color: '#e2e8f0', fontSize: '0.85rem' }}>{m.description}</div>
+                                                <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '0.2rem', wordBreak: 'break-word' }}>
+                                                    <code>{m.id}</code>
+                                                    {m.applied_at && <> · {new Date(m.applied_at).toLocaleString()}</>}
+                                                    {m.duration_seconds != null && <> · {m.duration_seconds.toFixed(1)}s</>}
+                                                    {m.result && <> · {m.result}</>}
+                                                </div>
+                                            </div>
+                                            <span style={{ color: statusColor, fontSize: '0.8rem', textTransform: 'capitalize' }}>{m.status}</span>
+                                            <button
+                                                className="btn btn-secondary"
+                                                onClick={() => handleRunDataMigration(m.id)}
+                                                disabled={dataMigrations.running || dataMigrationStarting !== null}
+                                            >
+                                                {dataMigrationStarting === m.id ? 'Starting...' : m.status === 'pending' ? 'Run now' : 'Run again'}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                                {dataMigrations.running && (
+                                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Running in background...</span>
+                                )}
                             </div>
                         </div>
                     </section>

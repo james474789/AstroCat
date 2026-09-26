@@ -165,6 +165,37 @@ async def trigger_backfill_targets(payload: dict = None):
     return {"message": "Target backfill started", "task_id": task.id}
 
 
+@router.get("/data-migrations")
+async def get_data_migrations():
+    """List one-off data migrations with their recorded status (pending/applied/failed)."""
+    from app.database import AsyncSessionLocal
+    from app.services.data_migrations import list_data_migrations
+
+    async with AsyncSessionLocal() as db:
+        return await list_data_migrations(db)
+
+
+@router.post("/data-migrations/run")
+async def trigger_data_migrations(payload: dict = None):
+    """
+    Queue a data migration run.
+    payload: {"id": str}  # re-run that entry regardless of status; omit to run all pending
+    """
+    from fastapi import HTTPException
+    from app.services.data_migrations import get_spec, is_running
+    from app.tasks.maintenance import run_data_migrations
+
+    only_id = (payload or {}).get("id")
+    if only_id is not None and get_spec(only_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown data migration '{only_id}'")
+    if is_running():
+        raise HTTPException(status_code=409, detail="Data migrations are already running")
+
+    logger.info(f"Triggering data migrations (id={only_id or 'pending'})")
+    task = run_data_migrations.delay(only_id)
+    return {"message": "Data migrations started", "task_id": task.id}
+
+
 
 @router.get("/status")
 async def get_indexer_status():
