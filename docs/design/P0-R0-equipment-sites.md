@@ -111,6 +111,7 @@ capture_time_source = Column(String(20), nullable=True)          # see table
 | `EXIF_OFFSET` | EXIF `DateTimeOriginal` + `OffsetTimeOriginal` | local − offset |
 | `EXIF_LOCAL` | EXIF `DateTimeOriginal` only | `NULL` until the site's timezone is known (R0 fills it) |
 | `FILE_MTIME` | indexer fallback used | `NULL`. **Never used for astronomy.** |
+| `OTHER` | *(added in implementation)* `capture_date` came from another field (FITS `DATE`, EXIF `Image DateTime`) | `NULL` |
 
 Pure API:
 - `derive_capture_time(metadata: dict, raw_header: dict, used_mtime_fallback: bool) -> (utc: datetime|None, source: str)`
