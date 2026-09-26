@@ -258,6 +258,8 @@ app.include_router(targets.router, prefix="/api/targets", tags=["Targets"], depe
 from app.api import equipment  # noqa: E402  (R0)
 app.include_router(equipment.router, prefix="/api/equipment", tags=["Equipment"], dependencies=[Depends(get_current_user)])
 app.include_router(equipment.sites_router, prefix="/api/sites", tags=["Sites"], dependencies=[Depends(get_current_user)])
+from app.api import recommendations  # noqa: E402  (R1)
+app.include_router(recommendations.router, prefix="/api/recommendations", tags=["Recommendations"], dependencies=[Depends(get_current_user)])
 
 
 

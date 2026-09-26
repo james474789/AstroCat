@@ -156,6 +156,12 @@ Equipment and site assignment (R0 - see `docs/features/EQUIPMENT.md`):
   10 km of the image coordinates (or the default site, see the feature doc).
 - Once a site is assigned, `FITS_LOCAL` / `EXIF_LOCAL` rows get `capture_date_utc` from the
   site timezone (sources that are already UTC or carry an offset are never changed).
+- `capture_utc_basis` (String(20), R1 - Alembic `f9b1d5a62009`): how `capture_date_utc` of a
+  `FITS_LOCAL` / `EXIF_LOCAL` row was derived: `CAMERA_UTC` (the camera's clock runs on UTC),
+  `SITE_TZ` (the row's own site timezone) or `DEFAULT_SITE_TZ` (the row has no site, so the
+  default site's timezone was used); `NULL` when no UTC could be derived. Written by the
+  equipment assignment task and the indexer hook; existing rows are filled by data migration
+  `0008_fill_utc_default_site`. `capture_time_source` is unchanged.
 
 ## Indexing Strategy
 

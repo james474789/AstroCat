@@ -234,14 +234,22 @@ def _infer_clock_modes(session) -> Dict[str, str]:
 
 
 def _fill_capture_utc(session, sites, clock_modes: Dict[str, str], scope: str, summary: Dict[str, Any]) -> None:
-    """FITS_LOCAL / EXIF_LOCAL rows: capture_date_utc from the site timezone (NULL without a site)."""
+    """
+    FITS_LOCAL / EXIF_LOCAL rows: capture_date_utc + capture_utc_basis.
+    A UTC-clock camera -> CAMERA_UTC; else the row's site timezone (SITE_TZ);
+    else, for a row with no site, the default site's timezone (DEFAULT_SITE_TZ,
+    R1 §3.2). NULL when none applies.
+    """
     from sqlalchemy import text
-    from app.services.equipment_assignment import fill_capture_utc, local_capture_time
+    from app.services.equipment_assignment import capture_utc_with_basis, local_capture_time
     from app.services.equipment_detection import normalize_camera_name
 
     tz_by_site = {s.id: s.timezone for s in sites}
+    default = next((s for s in sites if s.is_default), None)
+    default_tz = default.timezone if default is not None else None
+    by_basis: Dict[str, int] = defaultdict(int)
     stmt = text("""
-        SELECT id, camera_name, capture_date, capture_date_utc, capture_time_source, site_id,
+        SELECT id, camera_name, capture_date, capture_date_utc, capture_utc_basis, capture_time_source, site_id,
                raw_header->'DATE-LOC' AS date_loc,
                COALESCE(raw_header->'EXIF:EXIF DateTimeOriginal', raw_header->'PIL:DateTimeOriginal') AS exif_original,
                COALESCE(raw_header->'EXIF:EXIF OffsetTimeOriginal', raw_header->'PIL:OffsetTimeOriginal') AS offset_value
@@ -261,15 +269,22 @@ def _fill_capture_utc(session, sites, clock_modes: Dict[str, str], scope: str, s
             local = local_capture_time(row["capture_time_source"], row["capture_date"],
                                        row["date_loc"], row["exif_original"])
             clock = clock_modes.get(normalize_camera_name(row["camera_name"]) or "")
-            utc = fill_capture_utc(row["capture_time_source"], local, tz_by_site.get(row["site_id"]),
-                                   clock_mode=clock, offset_value=row["offset_value"])
-            if utc != row["capture_date_utc"]:
-                params.append({"utc": utc, "id": row["id"]})
-                if utc is not None:
+            site_id = row["site_id"]
+            utc, basis = capture_utc_with_basis(
+                row["capture_time_source"], local, tz_by_site.get(site_id) if site_id is not None else None,
+                default_tz=default_tz if site_id is None else None,
+                clock_mode=clock, offset_value=row["offset_value"])
+            if basis:
+                by_basis[basis] += 1
+            if utc != row["capture_date_utc"] or basis != row.get("capture_utc_basis"):
+                params.append({"utc": utc, "basis": basis, "id": row["id"]})
+                if utc is not None and utc != row["capture_date_utc"]:
                     summary["utc_filled"] += 1
         if params:
-            session.execute(text("UPDATE images SET capture_date_utc = :utc WHERE id = :id"), params)
+            session.execute(text("UPDATE images SET capture_date_utc = :utc, capture_utc_basis = :basis "
+                                 "WHERE id = :id"), params)
         session.commit()
+    summary["utc_by_basis"] = dict(by_basis)
 
 
 def _refresh_measured(session) -> int:
@@ -301,11 +316,12 @@ def _refresh_measured(session) -> int:
 
 
 def _invalidate_targets_cache() -> None:
-    """Drop every cache:targets:* key (the targets list and its per-folder variants)."""
+    """Drop every cache:targets:* key (the targets list and its per-folder variants) and recs:* (R1)."""
     try:
         r = _redis()
-        keys = list(r.scan_iter(match="cache:targets:*"))
-        if keys:
-            r.delete(*keys)
+        for pattern in ("cache:targets:*", "recs:*"):
+            keys = list(r.scan_iter(match=pattern))
+            if keys:
+                r.delete(*keys)
     except Exception as e:
         logger.warning(f"Equipment assign: targets cache invalidation failed: {e}")

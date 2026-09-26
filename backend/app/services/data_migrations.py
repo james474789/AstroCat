@@ -78,6 +78,35 @@ def _image_site_coordinates():
     return backfill_image_sites(process_all=False)
 
 
+# --- R1 data prerequisites (docs/design/R1-recommendation-engine.md §3.2) ---
+
+def _fill_utc_default_site():
+    """
+    Re-run equipment assignment over everything so site-less local-time rows
+    get capture_date_utc (camera UTC clock, else the default site's zone) and
+    every filled row records its capture_utc_basis. Idempotent.
+    """
+    from sqlalchemy import select
+    from app.database import SessionLocal
+    from app.models.equipment import Site
+
+    with SessionLocal() as session:
+        has_default = session.execute(select(Site.id).where(Site.is_default.is_(True))).first() is not None
+    if not has_default:
+        return {"skipped": "no default site"}
+
+    from app.tasks.equipment import run_assignment
+    summary = run_assignment("all")
+    return {
+        "utc_by_basis": summary.get("utc_by_basis", {}),
+        "utc_filled": summary.get("utc_filled", 0),
+        "rig_changed": summary.get("rig_changed", 0),
+        "site_changed": summary.get("site_changed", 0),
+        "clock_modes": summary.get("clock_modes", {}),
+        "status": summary.get("status"),
+    }
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -113,6 +142,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0007_split_barnards_loop",
         "Undo the Sh2-276 (Barnard's Loop) -> NGC1981 cross-ID merge from 0004 by re-resolving lights keyed NGC1981.",
         _split_barnards_loop,
+    ),
+    DataMigrationSpec(
+        "0008_fill_utc_default_site",
+        "Derive UTC capture times for local-clock frames without a site (camera UTC clock, else the default site's timezone) and record how each UTC time was derived.",
+        _fill_utc_default_site,
     ),
 ]
 
