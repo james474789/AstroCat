@@ -597,7 +597,6 @@ function SiteModal({ site, onClose, onSave }) {
         <ModalShell title={site ? 'Edit Site' : 'Add Site'} onClose={onClose}>
             <form onSubmit={handleSubmit} className="equip-form">
                 {error && <div className="form-error">{error}</div>}
-                <p className="form-hint">Use a generic placeholder location if this repository is public — avoid committing your real observing coordinates anywhere else in the project.</p>
                 <label>Name
                     <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 </label>
