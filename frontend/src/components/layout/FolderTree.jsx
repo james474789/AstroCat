@@ -119,7 +119,7 @@ function FolderNode({ item, level, selectedPath, onSelect, onContextMenu }) {
     );
 }
 
-export default function FolderTree({ selectedPath, onSelect }) {
+export default function FolderTree({ selectedPath, onSelect, showContextMenu = true }) {
     const [roots, setRoots] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -163,6 +163,7 @@ export default function FolderTree({ selectedPath, onSelect }) {
     }
 
     const handleContextMenu = (e, path) => {
+        if (!showContextMenu) return;
         e.preventDefault();
         setContextMenu({
             x: e.clientX,
