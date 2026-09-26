@@ -5,6 +5,7 @@ Background task processing for image indexing and thumbnail generation.
 
 from celery.signals import setup_logging, worker_ready
 from celery import Celery
+from celery.schedules import crontab
 from app.config import settings
 from app.logging_config import setup_logging as configure_logging
 
@@ -25,6 +26,7 @@ celery_app = Celery(
         "app.tasks.sync_ratings",
         "app.tasks.maintenance",
         "app.tasks.equipment",
+        "app.tasks.recommend",
     ]
 )
 
@@ -64,6 +66,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.indexer.update_mount_stats",
         "schedule": 60.0,  # Run every 60 seconds
     },
+    "precompute-tonight-recommendations": {  # R1: warm tonight's recommendations
+        "task": "app.tasks.recommend.precompute_tonight",
+        "schedule": crontab(hour=12, minute=0),
+    },
 }
 
 
@@ -74,6 +80,7 @@ celery_app.conf.task_routes = {
     "app.tasks.bulk.*": {"queue": "indexer"},
     "app.tasks.maintenance.*": {"queue": "indexer"},
     "app.tasks.equipment.*": {"queue": "celery"},  # R0: the default queue
+    "app.tasks.recommend.*": {"queue": "celery"},  # R1: the default queue
 }
 
 

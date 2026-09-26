@@ -37,6 +37,7 @@ from app.schemas.equipment import (
     CameraCreate, CameraUpdate, DetectApply, FilterCreate, FilterUpdate, HorizonUpdate, OpticCreate,
     OpticUpdate, RigCreate, RigUpdate, SiteCreate, SiteUpdate,
 )
+from app.services.site_horizon import HORIZON_CACHE_KEY, HORIZON_CACHE_TTL  # shared with the recommender
 from app.utils.filter_names import normalize_filter
 from app.utils.optics import DEFAULT_SEEING_ARCSEC, pixel_scale, rig_optics_summary
 
@@ -47,8 +48,7 @@ sites_router = APIRouter()
 
 DETECT_CACHE_KEY = "cache:equipment:detect:{flag}"
 DETECT_CACHE_TTL = 600
-HORIZON_CACHE_KEY = "cache:equipment:horizon:{site_id}"
-HORIZON_CACHE_TTL = 3600
+RECS_CACHE_PATTERN = "recs:*"
 
 
 # ---------------------------------------------------------------------------
@@ -128,9 +128,24 @@ async def _cache_delete(*keys: str) -> None:
         logger.warning(f"Equipment cache delete failed: {e}")
 
 
+async def _invalidate_recommendations() -> None:
+    """Drop cached recommendations (R1): rigs, sites, mounts and horizons change them."""
+    r = await _redis()
+    if not r:
+        return
+    try:
+        keys = [k async for k in r.scan_iter(match=RECS_CACHE_PATTERN)]
+        if keys:
+            await r.delete(*keys)
+        await r.close()
+    except Exception as e:
+        logger.warning(f"Recommendations cache invalidation failed: {e}")
+
+
 async def _equipment_changed(queue: bool = True, scope: str = "all") -> Optional[str]:
-    """Invalidate detection proposals and queue a (debounced) assignment run."""
+    """Invalidate detection proposals and recommendations, and queue a (debounced) assignment run."""
     await _cache_delete(DETECT_CACHE_KEY.format(flag=0), DETECT_CACHE_KEY.format(flag=1))
+    await _invalidate_recommendations()
     if not queue:
         return None
     try:
@@ -514,6 +529,7 @@ async def mount_rig(rig_id: int, db: AsyncSession = Depends(get_db)):
     await db.flush()
     await db.execute(update(Rig).where(Rig.id == rig_id).values(is_mounted=True, updated_at=datetime.utcnow()))
     await db.commit()
+    await _invalidate_recommendations()
     return await _rig_response(db, rig_id)
 
 
@@ -522,6 +538,7 @@ async def unmount_rig(rig_id: int, db: AsyncSession = Depends(get_db)):
     await _get_or_404(db, Rig, rig_id)
     await db.execute(update(Rig).where(Rig.id == rig_id).values(is_mounted=False, updated_at=datetime.utcnow()))
     await db.commit()
+    await _invalidate_recommendations()
     return await _rig_response(db, rig_id)
 
 
@@ -778,35 +795,18 @@ async def delete_site(site_id: int, db: AsyncSession = Depends(get_db)):
     return Response(status_code=204)
 
 
-_HORIZON_SAMPLES_SQL = text("""
-    SELECT capture_date_utc AS utc,
-           raw_header->'CENTALT' AS centalt, raw_header->'CENTAZ' AS centaz,
-           ra_center_degrees AS ra, dec_center_degrees AS dec,
-           raw_header->'OBJCTRA' AS objctra, raw_header->'OBJCTDEC' AS objctdec
-    FROM images
-    WHERE site_id = :site_id AND frame_type = 'LIGHT' AND subtype = 'SUB_FRAME'
-      AND capture_date_utc IS NOT NULL
-""")
-
-
 @sites_router.get("/{site_id}/horizon/learned")
 async def learned_horizon(site_id: int, db: AsyncSession = Depends(get_db)):
-    from app.utils.horizon import horizon_samples, learn_horizon_profile
+    # Same SQL, computation and cache key as the recommendation engine (services/site_horizon.py).
+    from app.services.site_horizon import HORIZON_SAMPLES_SQL, profile_from_rows
 
     site = await _get_or_404(db, Site, site_id)
     key = HORIZON_CACHE_KEY.format(site_id=site_id)
     cached = await _cache_get(key)
     if cached:
         return cached
-    rows = [dict(r) for r in (await db.execute(_HORIZON_SAMPLES_SQL, {"site_id": site_id})).mappings().all()]
-
-    def compute():
-        samples = horizon_samples(rows, site.latitude, site.longitude)
-        return learn_horizon_profile(samples)
-
-    profile = await asyncio.to_thread(compute)
-    result = {"points": profile["points"], "floor_deg": profile["floor_deg"],
-              "sample_count": profile["sample_count"]}
+    rows = [dict(r) for r in (await db.execute(HORIZON_SAMPLES_SQL, {"site_id": site_id})).mappings().all()]
+    result = await asyncio.to_thread(profile_from_rows, rows, site.latitude, site.longitude)
     await _cache_set(key, result, HORIZON_CACHE_TTL)
     return result
 
@@ -824,6 +824,7 @@ async def update_horizon(site_id: int, body: HorizonUpdate, db: AsyncSession = D
     site.horizon_source = body.source if points else None
     site.updated_at = datetime.utcnow()
     await db.commit()
+    await _invalidate_recommendations()
     return await _site_response(db, site)
 
 
@@ -845,6 +846,7 @@ async def import_horizon(site_id: int, file: UploadFile = File(...), db: AsyncSe
     site.horizon_source = "IMPORTED"
     site.updated_at = datetime.utcnow()
     await db.commit()
+    await _invalidate_recommendations()
     return await _site_response(db, site)
 
 
