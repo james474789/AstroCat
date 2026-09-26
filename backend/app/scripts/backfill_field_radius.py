@@ -10,6 +10,10 @@ re-resolved (MANUAL targets are left untouched).
 Keyset batches of 500, committing per batch. Safe to re-run: rows that
 already have a positive radius, or can't derive one, are skipped.
 
+Also runs automatically (incrementally) as part of every reindex_all
+post-scan catch-up and the Admin "Re-resolve all targets" task, so installs
+upgrading from a pre-fix image self-heal without running this by hand.
+
 Usage:
     python -m app.scripts.backfill_field_radius
     python -m app.scripts.backfill_field_radius --dry-run
@@ -33,7 +37,7 @@ def log(msg):
     sys.stderr.flush()
 
 
-def backfill_field_radius(dry_run: bool = False):
+def backfill_field_radius(dry_run: bool = False) -> dict:
     log(f"Starting field radius backfill{' (dry run)' if dry_run else ''}...")
 
     fixed = 0
@@ -78,7 +82,7 @@ def backfill_field_radius(dry_run: bool = False):
                 session.commit()
             log(f"Up to id {last_id}: fixed {fixed}, skipped {skipped}, targets changed {targets_changed}")
 
-    if not dry_run:
+    if not dry_run and fixed:
         try:
             import redis
             from app.config import settings
@@ -90,6 +94,7 @@ def backfill_field_radius(dry_run: bool = False):
             log(f"Warning: failed to clear targets cache: {e}")
 
     log(f"Done. Fixed {fixed} radii, skipped {skipped} (no pixel scale/dimensions), targets changed {targets_changed}.")
+    return {"fixed": fixed, "skipped": skipped, "targets_changed": targets_changed}
 
 
 if __name__ == "__main__":

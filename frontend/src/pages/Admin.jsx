@@ -1010,7 +1010,7 @@ function Admin() {
                         <div className="cache-card" style={{ marginTop: '1rem' }}>
                             <div className="cache-info">
                                 <div className="cache-stat">
-                                    <span className="cache-label">Target resolution for Light sub-frames. A regular rescan already fills in any unassigned targets automatically -- use this to force a full re-resolve of every non-manual target (e.g. after an alias index update or catalog reseed).</span>
+                                    <span className="cache-label">Target resolution for Light sub-frames. A regular rescan already fills in any unassigned targets automatically -- use this to force a full re-resolve of every non-manual target (e.g. after an alias index update or catalog reseed). Also repairs missing field-of-view radii on plate-solved images and re-matches their catalog objects.</span>
                                 </div>
                             </div>
                             <div className="cache-actions">
