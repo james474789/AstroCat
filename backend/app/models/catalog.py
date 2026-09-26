@@ -160,6 +160,39 @@ class CaldwellCatalog(Base):
         return f"<Caldwell({self.designation}, {self.common_name or self.object_type})>"
 
 
+class Sh2Catalog(Base):
+    """
+    Sharpless (Sh2) Catalog - 313 emission nebulae/HII regions.
+    Sourced from https://github.com/edjuh/space-cats (catalogs/sharpless.json).
+    """
+    __tablename__ = "sh2_catalog"
+
+    id = Column(Integer, primary_key=True, index=True)
+    designation = Column(String(10), unique=True, nullable=False, index=True)  # e.g. "Sh2-155"
+    sh2_number = Column(Integer, unique=True, nullable=False, index=True)
+    source_designation = Column(String(20), nullable=True, index=True)  # e.g. "Sh 2-155"
+    common_name = Column(String(100), nullable=True)
+    aliases = Column(Text, nullable=True)
+
+    ra_degrees = Column(Float, nullable=False)
+    dec_degrees = Column(Float, nullable=False)
+    location = Column(
+        Geography(geometry_type='POINT', srid=4326),
+        nullable=True
+    )
+
+    object_type = Column(String(50), nullable=True)
+    object_definition = Column(String(100), nullable=True)
+    constellation = Column(String(50), nullable=True)
+
+    apparent_magnitude = Column(Float, nullable=True)
+    major_axis_arcmin = Column(Float, nullable=True)
+    minor_axis_arcmin = Column(Float, nullable=True)
+
+    def __repr__(self):
+        return f"<Sh2({self.designation}, {self.common_name or self.object_definition})>"
+
+
 class NamedStarCatalog(Base):
     """
     Named Stars Catalog (~3671 objects).

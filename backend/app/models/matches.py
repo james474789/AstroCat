@@ -19,6 +19,7 @@ class CatalogType(str, enum.Enum):
     IC = "IC"
     CALDWELL = "CALDWELL"
     NAMED_STAR = "NAMED_STAR" # Named Stars
+    SH2 = "SH2" # Sharpless
 
 
 class ImageCatalogMatch(Base):

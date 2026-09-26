@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchMessierCatalog, fetchNGCCatalog, fetchCaldwellCatalog, fetchNamedStarCatalog, fetchTargetKeys, formatRA, formatDec } from '../api/client';
+import { fetchMessierCatalog, fetchNGCCatalog, fetchCaldwellCatalog, fetchNamedStarCatalog, fetchSh2Catalog, fetchTargetKeys, formatRA, formatDec } from '../api/client';
 import './Catalogs.css';
 
 // Mirrors the backend's app.services.targets.normalize_designation just
@@ -29,7 +29,7 @@ export default function Catalogs() {
     const [hasImagesOnly, setHasImagesOnly] = useState(false);
     const [sortBy, setSortBy] = useState('default');
     const [sortOrder, setSortOrder] = useState('asc');
-    const [counts, setCounts] = useState({ messier: 0, ngc: 0, caldwell: 0, stars: 0 });
+    const [counts, setCounts] = useState({ messier: 0, ngc: 0, caldwell: 0, stars: 0, sh2: 0 });
     const [targetKeySet, setTargetKeySet] = useState(new Set());
 
     // Load the set of target keys once so cards can link to their Target page (F2).
@@ -43,17 +43,19 @@ export default function Catalogs() {
     useEffect(() => {
         async function loadCounts() {
             try {
-                const [messierData, ngcData, caldwellData, starsData] = await Promise.all([
+                const [messierData, ngcData, caldwellData, starsData, sh2Data] = await Promise.all([
                     fetchMessierCatalog({ page: 1, page_size: 1 }),
                     fetchNGCCatalog({ page: 1, page_size: 1, catalog: 'NGC' }),
                     fetchCaldwellCatalog({ page: 1, page_size: 1 }),
-                    fetchNamedStarCatalog({ page: 1, page_size: 1 })
+                    fetchNamedStarCatalog({ page: 1, page_size: 1 }),
+                    fetchSh2Catalog({ page: 1, page_size: 1 })
                 ]);
                 setCounts({
                     messier: messierData.total,
                     ngc: ngcData.total,
                     caldwell: caldwellData.total,
-                    stars: starsData.total
+                    stars: starsData.total,
+                    sh2: sh2Data.total
                 });
             } catch (error) {
                 console.error('Failed to load counts:', error);
@@ -97,6 +99,8 @@ export default function Catalogs() {
                 data = await fetchCaldwellCatalog(params);
             } else if (activeTab === 'stars') {
                 data = await fetchNamedStarCatalog(params);
+            } else if (activeTab === 'sh2') {
+                data = await fetchSh2Catalog(params);
             }
 
             setObjects(data.items);
@@ -131,6 +135,7 @@ export default function Catalogs() {
             'Planetary Nebula': '💫',
             'Emission Nebula': '🌫️',
             'Supernova Remnant': '💥',
+            'SHARPLESS': '🌫️',
         };
         return types[type] || '🔭';
     };
@@ -178,6 +183,14 @@ export default function Catalogs() {
                     <span className="tab-label">Stars</span>
                     <span className="tab-count">{counts.stars.toLocaleString()} objects</span>
                 </button>
+                <button
+                    className={`catalog-tab ${activeTab === 'sh2' ? 'active' : ''}`}
+                    onClick={() => handleTabChange('sh2')}
+                >
+                    <span className="tab-icon">🌫️</span>
+                    <span className="tab-label">Sharpless</span>
+                    <span className="tab-count">{counts.sh2.toLocaleString()} objects</span>
+                </button>
             </div>
 
             {/* Filters & Search */}
@@ -217,7 +230,7 @@ export default function Catalogs() {
                                 setCurrentPage(1);
                             }}
                         >
-                            <option value="default">Default Sort ({activeTab === 'messier' ? 'M#' : (activeTab === 'ngc' ? 'NGC#' : activeTab === 'caldwell' ? 'C#' : 'Name')})</option>
+                            <option value="default">Default Sort ({activeTab === 'messier' ? 'M#' : (activeTab === 'ngc' ? 'NGC#' : activeTab === 'caldwell' ? 'C#' : activeTab === 'sh2' ? 'Sh2#' : 'Name')})</option>
                             <option value="exposure">Cumulative Exposure</option>
                             <option value="ra">Right Ascension (RA)</option>
                         </select>
