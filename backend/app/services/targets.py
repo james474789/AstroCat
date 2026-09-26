@@ -237,7 +237,7 @@ MatchInfo = namedtuple(
     "MatchInfo", ["catalog_type", "designation", "separation_deg", "is_in_field", "magnitude"]
 )
 
-_CATALOG_PRIORITY = {"MESSIER": 0, "NGC": 1, "IC": 1, "CALDWELL": 2}
+_CATALOG_PRIORITY = {"MESSIER": 0, "NGC": 1, "IC": 1, "CALDWELL": 2, "SH2": 3}
 
 _LIGHT_VALUES = {"LIGHT"}
 
@@ -389,12 +389,12 @@ async def _load_match_infos_async(db, image_id: int) -> List[MatchInfo]:
 
 
 def _matches_with_magnitudes_sync(session, rows) -> List[MatchInfo]:
-    from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog
+    from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, Sh2Catalog
     from app.models.matches import CatalogType
     from sqlalchemy import select
 
     mag_map = {}
-    by_type = {"MESSIER": [], "NGC": [], "IC": [], "CALDWELL": []}
+    by_type = {"MESSIER": [], "NGC": [], "IC": [], "CALDWELL": [], "SH2": []}
     for r in rows:
         t = _as_str(r.catalog_type)
         if t in by_type:
@@ -419,6 +419,12 @@ def _matches_with_magnitudes_sync(session, rows) -> List[MatchInfo]:
             select(CaldwellCatalog).where(CaldwellCatalog.designation.in_(by_type["CALDWELL"]))
         ).scalars():
             mag_map[("CALDWELL", obj.designation)] = obj.apparent_magnitude
+
+    if by_type["SH2"]:
+        for obj in session.execute(
+            select(Sh2Catalog).where(Sh2Catalog.designation.in_(by_type["SH2"]))
+        ).scalars():
+            mag_map[("SH2", obj.designation)] = obj.apparent_magnitude
 
     return [
         MatchInfo(
@@ -433,11 +439,11 @@ def _matches_with_magnitudes_sync(session, rows) -> List[MatchInfo]:
 
 
 async def _matches_with_magnitudes_async(db, rows) -> List[MatchInfo]:
-    from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog
+    from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, Sh2Catalog
     from sqlalchemy import select
 
     mag_map = {}
-    by_type = {"MESSIER": [], "NGC": [], "IC": [], "CALDWELL": []}
+    by_type = {"MESSIER": [], "NGC": [], "IC": [], "CALDWELL": [], "SH2": []}
     for r in rows:
         t = _as_str(r.catalog_type)
         if t in by_type:
@@ -465,6 +471,13 @@ async def _matches_with_magnitudes_async(db, rows) -> List[MatchInfo]:
         )
         for obj in result.scalars():
             mag_map[("CALDWELL", obj.designation)] = obj.apparent_magnitude
+
+    if by_type["SH2"]:
+        result = await db.execute(
+            select(Sh2Catalog).where(Sh2Catalog.designation.in_(by_type["SH2"]))
+        )
+        for obj in result.scalars():
+            mag_map[("SH2", obj.designation)] = obj.apparent_magnitude
 
     return [
         MatchInfo(

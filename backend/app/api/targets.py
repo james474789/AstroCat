@@ -17,7 +17,7 @@ import redis.asyncio as redis
 
 from app.database import get_db
 from app.models.image import Image, ImageSubtype, FrameType
-from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, NamedStarCatalog
+from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, NamedStarCatalog, Sh2Catalog
 from app.models.target import TargetGoal
 from app.schemas.target import TargetGoalInput
 from app.services.targets import normalize_designation
@@ -119,6 +119,20 @@ async def _build_catalog_metadata_map(db: AsyncSession) -> Dict[str, dict]:
             }
         elif not meta[key].get("common_name") and row.common_name:
             meta[key]["common_name"] = row.common_name
+
+    for row in (await db.execute(select(Sh2Catalog))).scalars().all():
+        key = normalize_designation(row.designation)
+        if key not in meta:
+            meta[key] = {
+                "catalog_type": "SH2",
+                "designation": row.designation,
+                "common_name": row.common_name,
+                "object_type": row.object_type,
+                "constellation": row.constellation,
+                "apparent_magnitude": row.apparent_magnitude,
+                "ra_degrees": row.ra_degrees,
+                "dec_degrees": row.dec_degrees,
+            }
 
     for row in (await db.execute(select(NamedStarCatalog))).scalars().all():
         key = normalize_designation(row.designation)
@@ -369,7 +383,7 @@ async def list_targets(
     min_hours: Optional[float] = Query(None),
     filter: Optional[str] = Query(None, description="Normalized filter bucket, e.g. Ha"),
     has_master: Optional[bool] = Query(None),
-    catalog: Optional[str] = Query(None, description="MESSIER|NGC|IC|CALDWELL|OTHER"),
+    catalog: Optional[str] = Query(None, description="MESSIER|NGC|IC|CALDWELL|SH2|OTHER"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=10000),
     keys_only: bool = Query(False, description="Return only target_key values (lightweight)"),
