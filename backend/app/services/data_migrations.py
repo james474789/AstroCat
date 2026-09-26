@@ -49,6 +49,30 @@ def _backfill_targets():
     return backfill_targets(process_all=False)
 
 
+# --- P0 data foundations (docs/design/P0-R0-equipment-sites.md §3.4) ---
+
+def _canonicalize_target_keys():
+    from app.scripts.backfill_targets import backfill_targets
+    from app.scripts.recanonicalize_targets import recanonicalize_targets, mark_unresolved_lights_none
+
+    summary = recanonicalize_targets()
+    # NONE sentinel: resolve any never-processed lights first (the resolver
+    # now stamps unresolved lights 'NONE'), then mark any remainder.
+    summary["sentinel_backfill"] = backfill_targets(process_all=False)
+    summary["marked_none"] = mark_unresolved_lights_none()
+    return summary
+
+
+def _capture_time_provenance():
+    from app.scripts.backfill_capture_time import backfill_capture_time
+    return backfill_capture_time(process_all=False)
+
+
+def _image_site_coordinates():
+    from app.scripts.backfill_sites import backfill_image_sites
+    return backfill_image_sites(process_all=False)
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -64,6 +88,21 @@ REGISTRY: List[DataMigrationSpec] = [
         "0003_backfill_targets",
         "Resolve targets for Light frames indexed before targets existed.",
         _backfill_targets,
+    ),
+    DataMigrationSpec(
+        "0004_canonicalize_target_keys",
+        "Re-key targets to canonical names (NGC3031 -> M81, C11 -> NGC7635, Sh2 regions -> their NGC/IC nebula), merge goals, and mark resolved-but-unassigned Lights as NONE.",
+        _canonicalize_target_keys,
+    ),
+    DataMigrationSpec(
+        "0005_capture_time_provenance",
+        "Record where each capture time came from and derive capture_date_utc from stored headers.",
+        _capture_time_provenance,
+    ),
+    DataMigrationSpec(
+        "0006_image_site_coordinates",
+        "Fill per-image site coordinates from FITS SITELAT/SITELONG (decimal or sexagesimal) and EXIF GPS.",
+        _image_site_coordinates,
     ),
 ]
 
