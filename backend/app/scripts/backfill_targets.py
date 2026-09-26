@@ -31,7 +31,7 @@ def log(msg):
     sys.stderr.flush()
 
 
-def backfill_targets(process_all: bool = False):
+def backfill_targets(process_all: bool = False) -> dict:
     log("Starting target backfill...")
 
     total_processed = 0
@@ -80,6 +80,7 @@ def backfill_targets(process_all: bool = False):
         log(f"Warning: failed to clear targets cache: {e}")
 
     log(f"Backfill complete. Processed {total_processed} images, changed {total_changed}.")
+    return {"processed": total_processed, "changed": total_changed}
 
 
 if __name__ == "__main__":

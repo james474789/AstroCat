@@ -3,7 +3,7 @@ AstroCat Celery Worker
 Background task processing for image indexing and thumbnail generation.
 """
 
-from celery.signals import setup_logging
+from celery.signals import setup_logging, worker_ready
 from celery import Celery
 from app.config import settings
 from app.logging_config import setup_logging as configure_logging
@@ -23,6 +23,7 @@ celery_app = Celery(
         "app.tasks.astrometry",
         "app.tasks.bulk",
         "app.tasks.sync_ratings",
+        "app.tasks.maintenance",
     ]
 )
 
@@ -70,7 +71,24 @@ celery_app.conf.task_routes = {
     "app.tasks.indexer.*": {"queue": "indexer"},
     "app.tasks.thumbnails.*": {"queue": "thumbnails"},
     "app.tasks.bulk.*": {"queue": "indexer"},
+    "app.tasks.maintenance.*": {"queue": "indexer"},
 }
+
+
+
+@worker_ready.connect
+def on_worker_ready(**kwargs):
+    # Apply any pending one-off data repairs in the background, so startup
+    # isn't blocked and each repair runs once per install (see
+    # app/services/data_migrations.py).
+    try:
+        # A lock left by a run that died with the previous worker would
+        # otherwise block this start's run until it expires.
+        from app.services.data_migrations import LOCK_KEY, redis_client
+        redis_client().delete(LOCK_KEY)
+    except Exception:
+        pass
+    celery_app.send_task("app.tasks.maintenance.run_data_migrations")
 
 
 if __name__ == "__main__":

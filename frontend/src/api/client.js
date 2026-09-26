@@ -511,6 +511,20 @@ export async function triggerBackfillTargets(all = false) {
     }));
 }
 
+export async function fetchDataMigrations() {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/data-migrations`, { credentials: 'include' }));
+}
+
+// id: re-run that data migration regardless of status; omit to run all pending.
+export async function runDataMigrations(id = null) {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/data-migrations/run`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(id ? { id } : {}),
+        credentials: 'include'
+    }));
+}
+
 // ============ Settings API ============
 
 export async function fetchSettings() {
