@@ -117,7 +117,7 @@ export default function Targets() {
                 </div>
                 {unassigned.count > 0 && (
                     <Link
-                        to={`/search?target_key=__none__&frame_type=LIGHT`}
+                        to={`/search?target_key=__none__&frame_type=LIGHT&subtype=SUB_FRAME`}
                         className="targets-unassigned-link"
                     >
                         Unassigned lights: {unassigned.count.toLocaleString()} ({formatHours(unassigned.total_seconds)})
