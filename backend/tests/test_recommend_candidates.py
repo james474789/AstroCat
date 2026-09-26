@@ -120,3 +120,77 @@ def test_row_kind_and_size_parsing():
     assert row_kind("SNR") == "EMISSION" and row_kind("Supernova Remnant") == "EMISSION"
     assert row_kind("RfN") == KIND_REFLECTION and row_kind("Reflection Nebula") == KIND_REFLECTION
     assert parse_size("70 × 50") == 70.0 and parse_size(None) is None and parse_size(12) == 12.0
+
+
+# --- tuning round: imaged odd-typed rows, Dup folding, stray key folding ----------------
+
+from app.services.recommend.candidates import build_pool_parts, fold_key, fold_map  # noqa: E402
+
+EXTRA_NGC = [
+    ngc("NGC281", "HII", 35.0, 13.2, 56.62),
+    ngc("IC0011", "Dup", None, 13.25, 56.63),          # duplicate of NGC281
+    ngc("NGC7822", "HII", 20.0, 0.87, 67.2),
+    ngc("NGC2239", "OCl", 24.0, 97.98, 4.94),
+    ngc("NGC2244", "Dup", None, 97.99, 4.95),          # duplicate of NGC2239
+    ngc("IC1318", "*", None, 305.56, 40.26, 2.2),       # typed as the star gamma Cyg
+    ngc("IC5067", "Other", None, 311.95, 44.37),
+    ngc("IC0395", "Dup", None, 72.4, 0.25),             # nothing near it in this fixture
+]
+
+
+def build_extra(imaged=(), hint=()):
+    rows = NGC + EXTRA_NGC
+    index = build_alias_index(MESSIER, rows, CALDWELL, SH2)
+    cands, dup_map = build_pool_parts(MESSIER, CALDWELL, rows, SH2, index, imaged, hint)
+    return {c.key: c for c in cands}, dup_map, index
+
+
+def test_imaged_star_and_other_typed_rows_are_candidates():
+    pool, _, _ = build_extra()
+    assert "IC1318" not in pool and "IC5067" not in pool
+    pool, _, _ = build_extra(imaged={"IC1318", "IC5067"}, hint={"IC1318"})
+    assert pool["IC1318"].kind == KIND_EMISSION           # imaged mostly in narrowband
+    assert pool["IC5067"].kind == "OTHER"
+
+
+def test_dup_rows_fold_into_their_object():
+    pool, dup_map, _ = build_extra(imaged={"IC11", "IC395"})
+    assert dup_map["IC11"] == "NGC281" and "IC11" not in pool
+    assert dup_map["NGC2244"] == "NGC2239"
+    assert "IC395" in pool                                 # imaged, nothing to fold into
+
+
+def test_fold_key_panels_filters_and_dups():
+    pool, dup_map, index = build_extra()
+    idx = {k: i for i, k in enumerate(pool)}
+    resolve = index.resolve
+    assert fold_key("OBJ:NGC78222", idx, resolve, dup_map) == "NGC7822"
+    assert fold_key("OBJ:IC13961", idx, resolve, dup_map) == "IC1396"
+    assert fold_key("OBJ:M81LUM", idx, resolve, dup_map) == "M81"
+    assert fold_key("OBJ:NGC22441", idx, resolve, dup_map) == "NGC2239"
+    assert fold_key("IC11", idx, resolve, dup_map) == "NGC281"
+    assert fold_key("OBJ:COMETC2023A3", idx, resolve, dup_map) is None
+    assert fold_key("M81", idx, resolve, dup_map) is None      # already a pool key
+    assert fold_map(["OBJ:IC13962", "M81", "OBJ:XYZ"], idx, resolve, dup_map) == {"OBJ:IC13962": "IC1396"}
+
+
+def test_build_pool_data_remaps_history():
+    from datetime import date as d_
+
+    from app.services.recommend.history import GoalRow, HistoryRow
+    from app.services.recommend.loader import HistoryInputs, build_pool_data
+
+    rows = [HistoryRow("OBJ:IC13961", d_(2025, 9, 1), "Ha", 3600.0),
+            HistoryRow("IC1396", d_(2025, 9, 2), "Ha", 3600.0),
+            HistoryRow("IC11", d_(2025, 9, 3), "Ha", 1800.0),
+            HistoryRow("IC1318", d_(2025, 9, 4), "Ha", 7200.0)]
+    hist = HistoryInputs(version="v", rows=rows, masters={"OBJ:IC13961": d_(2025, 9, 1)},
+                         goal_rows=[GoalRow("OBJ:IC13961", "ANY", 3600.0, None)])
+    data = build_pool_data(MESSIER, CALDWELL, NGC + EXTRA_NGC, SH2,
+                           build_alias_index(MESSIER, NGC + EXTRA_NGC, CALDWELL, SH2), hist)
+    assert data.key_map == {"OBJ:IC13961": "IC1396", "IC11": "NGC281"}
+    assert [r.key for r in data.rows] == ["IC1396", "IC1396", "NGC281", "IC1318"]
+    assert data.masters == {"IC1396": d_(2025, 9, 1)} and data.goal_rows[0].key == "IC1396"
+    assert data.pool.get("IC1318").kind == KIND_EMISSION
+    stats = data.fold_stats(rows)
+    assert stats["keys"] == 2 and stats["rows"] == 2 and stats["hours"] == 1.5

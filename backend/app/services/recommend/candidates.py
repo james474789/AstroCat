@@ -13,7 +13,7 @@ Pure: rows are ORM objects or anything exposing the same attributes.
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, Iterable, List, Optional, Sequence
+from typing import Callable, Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -50,6 +50,7 @@ GATE_MAX_MAG = 11.5
 GATE_MIN_SIZE = 8.0
 GATE_MIN_SIZE_EMISSION = 3.0
 GATE_MIN_SIZE_SH2 = 10.0
+DUP_FOLD_MAX_SEP_DEG = 0.25
 
 
 @dataclass(frozen=True)
@@ -69,7 +70,8 @@ class Candidate:
 class CandidatePool:
     """Candidates plus the numpy arrays the ephemeris and scoring use."""
 
-    def __init__(self, candidates: Sequence[Candidate]):
+    def __init__(self, candidates: Sequence[Candidate], dup_map: Optional[Mapping[str, str]] = None):
+        self.dup_map: Dict[str, str] = dict(dup_map or {})
         self.candidates: List[Candidate] = list(candidates)
         self.index: Dict[str, int] = {c.key: i for i, c in enumerate(self.candidates)}
         self.ra = np.asarray([c.ra_deg for c in self.candidates], dtype=float)
@@ -212,10 +214,29 @@ def _passes_gate(acc: _Acc, kind: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def build_candidates(messier: Iterable, caldwell: Iterable, ngc: Iterable, sh2: Iterable,
-                     alias_index: AliasIndex, imaged_keys: Iterable[str] = ()) -> List[Candidate]:
+                     alias_index: AliasIndex, imaged_keys: Iterable[str] = (),
+                     emission_hint: Iterable[str] = ()) -> List[Candidate]:
     """One Candidate per canonical key, gated for imageability (imaged keys always kept)."""
+    return build_pool_parts(messier, caldwell, ngc, sh2, alias_index, imaged_keys, emission_hint)[0]
+
+
+def build_pool_parts(messier: Iterable, caldwell: Iterable, ngc: Iterable, sh2: Iterable,
+                     alias_index: AliasIndex, imaged_keys: Iterable[str] = (),
+                     emission_hint: Iterable[str] = ()) -> Tuple[List[Candidate], Dict[str, str]]:
+    """
+    (candidates, dup_map). dup_map sends an OpenNGC `Dup` designation to the
+    candidate within DUP_FOLD_MAX_SEP_DEG of it (IC11 -> NGC281), so history
+    keyed by the duplicate can be folded into the real object.
+
+    Imaged keys are always candidates, including rows OpenNGC types as a star
+    or `Other` (IC1318 and IC5067 are typed `*` / `Other`). `emission_hint`
+    (keys imaged mostly in narrowband) turns an OTHER kind into EMISSION.
+    """
     accs: Dict[str, _Acc] = {}
     order: List[str] = []
+    imaged = set(imaged_keys or ())
+    hint = set(emission_hint or ())
+    dup_rows = []
 
     def acc_for(key: str) -> _Acc:
         if key not in accs:
@@ -237,10 +258,13 @@ def build_candidates(messier: Iterable, caldwell: Iterable, ngc: Iterable, sh2: 
 
     for row in ngc:
         otype = getattr(row, "object_type", None)
-        if otype in _SKIP_NGC_TYPES:
-            continue
         key = canonical(row.designation)
         if not key:
+            continue
+        if otype == "Dup":
+            dup_rows.append((key, row))
+            continue
+        if otype in _SKIP_NGC_TYPES and key not in imaged:
             continue
         cat = "IC" if normalize_designation(row.designation).startswith("IC") else "NGC"
         acc_for(key).add(cat, row.designation, row.ra_degrees, row.dec_degrees,
@@ -272,19 +296,19 @@ def build_candidates(messier: Iterable, caldwell: Iterable, ngc: Iterable, sh2: 
                 None, _first_name(getattr(row, "common_name", None)), (getattr(row, "source_designation", None),))
 
     reflection = frozenset(canonical(k) or k for k in REFLECTION_OVERRIDES) | REFLECTION_OVERRIDES
-    imaged = set(imaged_keys or ())
     out: List[Candidate] = []
-    for key in order:
-        acc = accs[key]
-        if acc.ra is None or key.startswith("OBJ:"):
-            continue
+
+    def emit(acc: _Acc) -> None:
+        key = acc.key
         kind = _merged_kind(acc, reflection)
+        if kind == KIND_OTHER and key in hint:
+            kind = KIND_EMISSION
         catalogs_only_ngc = not (acc.catalogs & {"M", "C", "SH2"})
         if key not in imaged:
             if catalogs_only_ngc and kind == KIND_OTHER:
-                continue
+                return
             if not _passes_gate(acc, kind):
-                continue
+                return
         prior = max(CATALOG_PRIOR.get(c, 0.55) for c in acc.catalogs)
         out.append(Candidate(
             key=key,
@@ -294,4 +318,91 @@ def build_candidates(messier: Iterable, caldwell: Iterable, ngc: Iterable, sh2: 
             kind=kind, catalog=key_catalog(key), magnitude=acc.mag,
             aliases=frozenset(acc.aliases), prior=prior,
         ))
+
+    for key in order:
+        acc = accs[key]
+        if acc.ra is None or key.startswith("OBJ:"):
+            continue
+        emit(acc)
+
+    # Dup rows: fold into the nearest candidate, else (if imaged) keep as their own.
+    dup_map: Dict[str, str] = {}
+    if dup_rows and out:
+        ra = np.radians([c.ra_deg for c in out])
+        dec = np.radians([c.dec_deg for c in out])
+        present = {c.key for c in out}
+        for key, row in dup_rows:
+            if key in present or row.ra_degrees is None or row.dec_degrees is None:
+                continue
+            r0, d0 = math.radians(row.ra_degrees), math.radians(row.dec_degrees)
+            cosd = np.sin(dec) * math.sin(d0) + np.cos(dec) * math.cos(d0) * np.cos(ra - r0)
+            j = int(np.argmax(cosd))
+            if math.degrees(math.acos(max(-1.0, min(1.0, float(cosd[j]))))) <= DUP_FOLD_MAX_SEP_DEG:
+                dup_map[key] = out[j].key
+    for key, row in dup_rows:
+        if key in imaged and key not in dup_map and key not in accs:
+            acc = acc_for(key)
+            cat = "IC" if key.startswith("IC") else "NGC"
+            acc.add(cat, row.designation, row.ra_degrees, row.dec_degrees,
+                    parse_size(getattr(row, "major_axis_arcmin", None)), getattr(row, "apparent_magnitude", None),
+                    KIND_OTHER, _first_name(getattr(row, "common_name", None)))
+            if acc.ra is not None:
+                emit(acc)
+    return out, dup_map
+
+
+# ---------------------------------------------------------------------------
+# Folding stray history keys into pool keys (history mapping only)
+# ---------------------------------------------------------------------------
+
+_FILTER_SUFFIX = re.compile(r"(?<=\d)(LUM|LRGB|RGB|SHO|HOO|HA|OIII|SII|L|R|G|B)$")
+_PANEL_DIGIT = re.compile(r"^(.*\d)\d$")
+
+
+def fold_key(key: str, pool_index: Mapping[str, int], resolve: Callable[[str], Optional[str]],
+             dup_map: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    """
+    The pool key a stray history key belongs to, or None. Tries the key, then
+    with a trailing filter word removed (OBJ:M81LUM -> M81), then with one
+    trailing panel digit removed (OBJ:NGC78222 -> NGC7822, OBJ:IC13961 ->
+    IC1396); each variant resolves through the alias index and the Dup map.
+    """
+    if not key or key in pool_index:
+        return None
+    dup_map = dup_map or {}
+
+    def to_pool(text: str) -> Optional[str]:
+        for k in (text, resolve(text)):
+            if not k:
+                continue
+            if k in pool_index:
+                return k
+            if k in dup_map:
+                return dup_map[k]
+        return None
+
+    base = key[4:] if key.startswith("OBJ:") else key
+    variants = [base]
+    no_filter = _FILTER_SUFFIX.sub("", base)
+    if no_filter != base:
+        variants.append(no_filter)
+    for v in list(variants):
+        m = _PANEL_DIGIT.match(v)
+        if m:
+            variants.append(m.group(1))
+    for v in variants:
+        hit = to_pool(v)
+        if hit and hit != key:
+            return hit
+    return None
+
+
+def fold_map(keys: Iterable[str], pool_index: Mapping[str, int], resolve: Callable[[str], Optional[str]],
+             dup_map: Optional[Mapping[str, str]] = None) -> Dict[str, str]:
+    """{stray key: pool key} for every key that folds."""
+    out = {}
+    for k in set(keys):
+        hit = fold_key(k, pool_index, resolve, dup_map)
+        if hit:
+            out[k] = hit
     return out
