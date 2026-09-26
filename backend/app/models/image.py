@@ -170,7 +170,12 @@ class Image(Base):
 
     # Target (F2)
     target_key = Column(String(64), nullable=True, index=True)
-    target_source = Column(String(20), nullable=True)  # MANUAL | HEADER | MATCH | HEADER_RAW
+    target_source = Column(String(20), nullable=True)  # MANUAL | HEADER | MATCH | HEADER_RAW | NONE
+
+    # Capture time / site (P0). See app/utils/capture_time.py. Site coordinates
+    # use the existing site_latitude/site_longitude/site_name columns above.
+    capture_date_utc = Column(DateTime, nullable=True, index=True)   # naive UTC; NULL when not derivable
+    capture_time_source = Column(String(20), nullable=True)          # FITS_UTC | FITS_LOCAL | GPS_UTC | EXIF_OFFSET | EXIF_LOCAL | FILE_MTIME | OTHER
 
     # Timestamps
     indexed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
