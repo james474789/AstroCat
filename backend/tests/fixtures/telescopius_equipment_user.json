@@ -1,0 +1,37 @@
+{
+  "telescopes": [
+    {"id": 50601, "label": "William Optics Zenithstar 73", "custom_brand": "William Optics",
+     "aperture": 73, "focal_length_min": 430, "focal_length_max": 430, "f_number": 5.9},
+    {"id": 50602, "label": "Celestron C11 EdgeHD", "custom_brand": "Celestron",
+     "aperture": 280, "focal_length_min": 2800, "focal_length_max": 2800, "f_number": 10},
+    {"id": 50603, "label": "EF 200mm f/2.8L II", "custom_brand": "Canon",
+     "aperture": 71, "focal_length_min": 200, "focal_length_max": 200, "f_number": 2.8},
+    {"id": 50604, "label": "Sigma 105mm F1.4 DG HSM Art", "custom_brand": null,
+     "aperture": 75, "focal_length_min": 105, "focal_length_max": 105, "f_number": 1.4},
+    {"id": 50605, "label": "EF 70-200mm f/4L", "custom_brand": "Canon",
+     "aperture": 50, "focal_length_min": 70, "focal_length_max": 200, "f_number": 4},
+    {"id": 50606, "label": "Broken entry", "custom_brand": null,
+     "aperture": null, "focal_length_min": null, "focal_length_max": null, "f_number": null}
+  ],
+  "cameras": [
+    {"id": 50600, "label": "ZWO ASI1600MM Pro", "custom_sensor_width_mm": 17.7, "custom_sensor_height_mm": 13.4,
+     "sensor_width_px": 4656, "sensor_height_px": 3520, "is_color": null, "is_cooled": true},
+    {"id": 50610, "label": "ZWO ASI294MM Pro", "custom_sensor_width_mm": 19.1, "custom_sensor_height_mm": 13.0,
+     "sensor_width_px": 4144, "sensor_height_px": 2822, "is_color": null, "is_cooled": true},
+    {"id": 50611, "label": "ZWO ASI294MM Pro (unlocked)", "custom_sensor_width_mm": 19.1, "custom_sensor_height_mm": 13.0,
+     "sensor_width_px": 8288, "sensor_height_px": 5644, "is_color": null, "is_cooled": true}
+  ],
+  "filters": [
+    {"id": 50620, "label": "Astrodon Ha 5nm", "filter_type_id": 3},
+    {"id": 50621, "label": "Astrodon OIII 3nm", "filter_type_id": 4},
+    {"id": 50622, "label": "Astrodon SII 5nm", "filter_type_id": 5}
+  ],
+  "mounts": [
+    {"id": 50630, "model_name": "CEM60"}
+  ],
+  "accessories": [],
+  "software": [],
+  "eyepieces": [],
+  "binoculars": [],
+  "lenscams": []
+}
