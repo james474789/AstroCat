@@ -307,8 +307,9 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
         is_subframe = True
         if metadata.get("subtype"):
             # If extractor determined it (e.g. from header), use it
-            # We need the enum value or string match
-            from app.models.image import ImageSubtype
+            # We need the enum value or string match. (ImageSubtype is imported
+            # at module level; a local import here would make the name local to
+            # the whole function and break the new-row branch below.)
             is_subframe = (metadata["subtype"] == ImageSubtype.SUB_FRAME)
         
         try:
@@ -486,7 +487,7 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
             )
             session.add(image)
             session.flush() # Get ID
-            
+
         # 3. Match Catalogs (if plate solved, LIGHT frames only)
         matches_count = 0
         if image.frame_type != FrameType.LIGHT:
