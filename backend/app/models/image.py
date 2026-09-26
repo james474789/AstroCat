@@ -182,6 +182,9 @@ class Image(Base):
     rig_source = Column(String(10), nullable=True)                   # AUTO | MANUAL
     site_id = Column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # How capture_date_utc of a FITS_LOCAL / EXIF_LOCAL row was derived (R1 §3.2).
+    capture_utc_basis = Column(String(20), nullable=True)            # SITE_TZ | DEFAULT_SITE_TZ | CAMERA_UTC
+
     # Timestamps
     indexed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
