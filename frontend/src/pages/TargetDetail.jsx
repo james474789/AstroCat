@@ -244,7 +244,8 @@ export default function TargetDetail() {
                             <tr>
                                 <th>Filter</th>
                                 <th>Camera</th>
-                                <th>Telescope</th>
+                                <th>Pixel Scale</th>
+                                <th>Focal Length</th>
                                 <th>Subs</th>
                                 <th>Integration</th>
                             </tr>
@@ -254,7 +255,8 @@ export default function TargetDetail() {
                                 <tr key={idx}>
                                     <td>{r.filter}</td>
                                     <td>{r.camera || 'Unknown'}</td>
-                                    <td>{r.telescope || 'Unknown'}</td>
+                                    <td>{r.pixel_scale != null ? `${r.pixel_scale.toFixed(2)}"/px` : '—'}</td>
+                                    <td>{r.focal_length != null ? `${Math.round(r.focal_length)} mm` : '—'}</td>
                                     <td>{r.subs}</td>
                                     <td>{formatHours(r.seconds)}</td>
                                 </tr>
