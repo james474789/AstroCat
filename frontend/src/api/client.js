@@ -784,3 +784,197 @@ export function formatHours(seconds) {
     if (minutes === 0) return `${hours}h`;
     return `${hours}h ${minutes}m`;
 }
+
+// ============ Equipment (R0) ============
+// Binding contract: docs/design/P0-R0-equipment-sites.md §4.6 (see the R0 API contract scratchpad
+// used to build this frontend). Every write requires admin on the backend.
+
+async function equipmentCrud(kind, method, id, data) {
+    const url = id != null ? `${API_BASE_URL}/equipment/${kind}/${id}` : `${API_BASE_URL}/equipment/${kind}`;
+    return handleResponse(await fetch(url, {
+        method,
+        headers: withCsrfHeaders(data !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        body: data !== undefined ? JSON.stringify(data) : undefined,
+        credentials: 'include'
+    }));
+}
+
+export async function fetchEquipment() {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment`, { credentials: 'include' }));
+}
+
+export async function createCamera(data) { return equipmentCrud('cameras', 'POST', null, data); }
+export async function updateCamera(id, data) { return equipmentCrud('cameras', 'PUT', id, data); }
+export async function deleteCamera(id) { return equipmentCrud('cameras', 'DELETE', id); }
+
+export async function createOptic(data) { return equipmentCrud('optics', 'POST', null, data); }
+export async function updateOptic(id, data) { return equipmentCrud('optics', 'PUT', id, data); }
+export async function deleteOptic(id) { return equipmentCrud('optics', 'DELETE', id); }
+
+export async function createFilter(data) { return equipmentCrud('filters', 'POST', null, data); }
+export async function updateFilter(id, data) { return equipmentCrud('filters', 'PUT', id, data); }
+export async function deleteFilter(id) { return equipmentCrud('filters', 'DELETE', id); }
+
+export async function createRig(data) { return equipmentCrud('rigs', 'POST', null, data); }
+export async function updateRig(id, data) { return equipmentCrud('rigs', 'PUT', id, data); }
+export async function deleteRig(id) { return equipmentCrud('rigs', 'DELETE', id); }
+
+export async function mountRig(id) {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment/rigs/${id}/mount`, {
+        method: 'POST',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
+export async function unmountRig(id) {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment/rigs/${id}/mount`, {
+        method: 'DELETE',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
+export async function fetchEquipmentDetect(includeOlder = false) {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment/detect?include_older=${includeOlder ? 'true' : 'false'}`, {
+        credentials: 'include'
+    }));
+}
+
+export async function applyEquipmentDetect(body) {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment/detect/apply`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+        credentials: 'include'
+    }));
+}
+
+export async function importFromTelescopius() {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment/import/telescopius`, {
+        method: 'POST',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
+export async function triggerEquipmentAssign(scope = 'unassigned') {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment/assign?scope=${encodeURIComponent(scope)}`, {
+        method: 'POST',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
+// ============ Sites (R0) ============
+
+export async function fetchSites() {
+    return handleResponse(await fetch(`${API_BASE_URL}/sites`, { credentials: 'include' }));
+}
+
+export async function createSite(data) {
+    return handleResponse(await fetch(`${API_BASE_URL}/sites`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(data),
+        credentials: 'include'
+    }));
+}
+
+export async function updateSite(id, data) {
+    return handleResponse(await fetch(`${API_BASE_URL}/sites/${id}`, {
+        method: 'PUT',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(data),
+        credentials: 'include'
+    }));
+}
+
+export async function deleteSite(id) {
+    return handleResponse(await fetch(`${API_BASE_URL}/sites/${id}`, {
+        method: 'DELETE',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
+export async function fetchLearnedHorizon(siteId) {
+    return handleResponse(await fetch(`${API_BASE_URL}/sites/${siteId}/horizon/learned`, { credentials: 'include' }));
+}
+
+export async function updateSiteHorizon(siteId, points, source) {
+    return handleResponse(await fetch(`${API_BASE_URL}/sites/${siteId}/horizon`, {
+        method: 'PUT',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ points, source }),
+        credentials: 'include'
+    }));
+}
+
+export async function importSiteHorizon(siteId, file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return handleResponse(await fetch(`${API_BASE_URL}/sites/${siteId}/horizon/import`, {
+        method: 'POST',
+        headers: withCsrfHeaders(),
+        body: formData,
+        credentials: 'include'
+        // Important: DON'T set Content-Type header for FormData - let browser set it
+    }));
+}
+
+export async function exportSiteHorizon(siteId) {
+    const response = await fetch(`${API_BASE_URL}/sites/${siteId}/horizon/export`, {
+        credentials: 'include',
+        headers: withCsrfHeaders()
+    });
+    if (!response.ok) {
+        const error = await response.text().catch(() => 'Export failed');
+        throw new Error(error);
+    }
+    return response.blob();
+}
+
+// ============ Equipment computed-value helpers (client-side preview) ============
+// Mirrors backend/app/utils/optics.py so rig/site forms can show live previews before saving.
+
+export function computeEffectiveFocalMm(focalMm, modifierFactor = 1.0) {
+    if (focalMm == null) return null;
+    return focalMm * (modifierFactor || 1.0);
+}
+
+export function computePixelScale(pixelUm, focalMm, binning = 1, modifierFactor = 1.0) {
+    if (!pixelUm || !focalMm) return null;
+    const effFocal = focalMm * (modifierFactor || 1.0);
+    if (!effFocal) return null;
+    return (206.265 * pixelUm * (binning || 1)) / effFocal;
+}
+
+export function computeFovDeg(widthPx, heightPx, scaleArcsec) {
+    if (!widthPx || !heightPx || !scaleArcsec) return null;
+    return [(widthPx * scaleArcsec) / 3600, (heightPx * scaleArcsec) / 3600];
+}
+
+export function computeFocalRatio(focalMm, apertureMm, modifierFactor = 1.0) {
+    if (!focalMm || !apertureMm) return null;
+    return (focalMm * (modifierFactor || 1.0)) / apertureMm;
+}
+
+export function computeSampling(scaleArcsec, seeingArcsec = 2.5) {
+    if (!scaleArcsec) return null;
+    // ratio = seeing / scale (pixels per FWHM, roughly). ok when 1.0 <= ratio <= 3.0.
+    const ratio = seeingArcsec / scaleArcsec;
+    let verdict = 'ok';
+    if (ratio < 1.0) verdict = 'under';
+    else if (ratio > 3.0) verdict = 'over';
+    return { verdict, ratio, seeing_arcsec: seeingArcsec };
+}
+
+export function computeScaleCheck(declared, measured, tol = 0.05) {
+    if (declared == null || measured == null) {
+        return { declared: declared ?? null, measured: measured ?? null, delta_pct: null, verdict: 'unknown' };
+    }
+    const deltaPct = ((measured - declared) / declared) * 100;
+    const verdict = Math.abs(deltaPct) / 100 <= tol ? 'ok' : 'mismatch';
+    return { declared, measured, delta_pct: deltaPct, verdict };
+}

@@ -12,6 +12,7 @@ import TargetDetail from './pages/TargetDetail';
 import Stats from './pages/Stats';
 import FitsStats from './pages/FitsStats';
 import Admin from './pages/Admin';
+import Equipment from './pages/Equipment';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -104,6 +105,8 @@ const AppRoutes = () => {
                   <Route path="/catalogs/:type/:designation" element={<Catalogs />} />
                   <Route path="/targets" element={<Targets />} />
                   <Route path="/targets/:targetKey" element={<TargetDetail />} />
+                  {/* R0: inserted after Targets per docs/design/README.md §4 */}
+                  <Route path="/equipment" element={<ErrorBoundary><Equipment /></ErrorBoundary>} />
                   <Route path="/stats" element={<Stats />} />
                   <Route path="/stats/fits" element={<FitsStats />} />
                   <Route path="/admin" element={<ErrorBoundary><Admin /></ErrorBoundary>} />
