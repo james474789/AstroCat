@@ -5,6 +5,8 @@ Resolves target_key/target_source for LIGHT sub-frames that don't have one
 yet, in keyset batches of 1000, committing per batch. Resumable: by default
 only touches rows where target_source IS NULL; pass --all to re-resolve
 every non-MANUAL row (e.g. after an alias index update or catalog reseed).
+Lights that resolve to nothing are stamped target_source='NONE' (P0), so a
+default run is a true no-op once every light has been through the resolver.
 
 Usage:
     python -m app.scripts.backfill_targets
