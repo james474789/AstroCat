@@ -9,7 +9,7 @@ from typing import Optional
 
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, 
-    Enum, Text, BigInteger, Index
+    Enum, Text, BigInteger, Index, ForeignKey
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -176,6 +176,11 @@ class Image(Base):
     # use the existing site_latitude/site_longitude/site_name columns above.
     capture_date_utc = Column(DateTime, nullable=True, index=True)   # naive UTC; NULL when not derivable
     capture_time_source = Column(String(20), nullable=True)          # FITS_UTC | FITS_LOCAL | GPS_UTC | EXIF_OFFSET | EXIF_LOCAL | FILE_MTIME | OTHER
+
+    # Equipment & site (R0). See app/services/equipment_assignment.py.
+    rig_id = Column(Integer, ForeignKey("rigs.id", ondelete="SET NULL"), nullable=True, index=True)
+    rig_source = Column(String(10), nullable=True)                   # AUTO | MANUAL
+    site_id = Column(Integer, ForeignKey("sites.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # Timestamps
     indexed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
