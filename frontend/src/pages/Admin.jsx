@@ -14,6 +14,7 @@ import {
     triggerMountMatches,
     triggerMountRescan,
     triggerReclassifyFrameTypes,
+    triggerBackfillTargets,
     downloadBackup,
     uploadBackup,
     fetchUsers,
@@ -44,6 +45,7 @@ function Admin() {
     const [cacheStats, setCacheStats] = useState(null);
     const [cacheActionLoading, setCacheActionLoading] = useState(false);
     const [reclassifyLoading, setReclassifyLoading] = useState(false);
+    const [backfillTargetsLoading, setBackfillTargetsLoading] = useState(false);
     const [systemSettings, setSystemSettings] = useState({ astrometry_provider: 'nova' });
     const [settingsLoading, setSettingsLoading] = useState(false);
     const [bulkActionLoading, setBulkActionLoading] = useState({}); // { [path]: 'match' | 'rescan' | null }
@@ -217,6 +219,19 @@ function Admin() {
             showToast(`Failed to start reclassification: ${err.message}`, 'error');
         } finally {
             setReclassifyLoading(false);
+        }
+    }
+
+    async function handleBackfillTargets() {
+        setBackfillTargetsLoading(true);
+        try {
+            await triggerBackfillTargets(true);
+            showToast('Target backfill started in background.', 'success', 2500);
+        } catch (err) {
+            console.error('Failed to start target backfill:', err);
+            showToast(`Failed to start target backfill: ${err.message}`, 'error');
+        } finally {
+            setBackfillTargetsLoading(false);
         }
     }
 
@@ -977,7 +992,7 @@ function Admin() {
                         </div>
                     </section>
 
-                    {/* Data Maintenance Section (F1) */}
+                    {/* Data Maintenance Section (F1/F2) */}
                     <section className="settings-section">
                         <h2 className="section-title">🌓 Data Maintenance</h2>
                         <div className="cache-card">
@@ -989,6 +1004,18 @@ function Admin() {
                             <div className="cache-actions">
                                 <button className="btn btn-secondary" onClick={handleReclassifyFrameTypes} disabled={reclassifyLoading}>
                                     {reclassifyLoading ? 'Starting...' : '🌓 Reclassify frame types'}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="cache-card" style={{ marginTop: '1rem' }}>
+                            <div className="cache-info">
+                                <div className="cache-stat">
+                                    <span className="cache-label">Target resolution for Light sub-frames. A regular rescan already fills in any unassigned targets automatically -- use this to force a full re-resolve of every non-manual target (e.g. after an alias index update or catalog reseed).</span>
+                                </div>
+                            </div>
+                            <div className="cache-actions">
+                                <button className="btn btn-secondary" onClick={handleBackfillTargets} disabled={backfillTargetsLoading}>
+                                    {backfillTargetsLoading ? 'Starting...' : '🎯 Re-resolve all targets'}
                                 </button>
                             </div>
                         </div>
