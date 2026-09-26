@@ -126,15 +126,29 @@ class ThumbnailGenerator:
                     return Image.fromarray(rgb).convert("RGB")
 
             if ext in {".fits", ".fit"} and fits:
-                with fits.open(source_path, memmap=True) as hdul:
-                    for hdu in hdul:
-                        shape = hdu.shape
-                        if not shape or len(shape) < 2:
-                            continue
-                        stride = ThumbnailGenerator._source_stride(shape[-1], shape[-2], target_size)
-                        data = hdu.section[0, ::stride, ::stride] if len(shape) == 3 else hdu.section[::stride, ::stride]
-                        return Image.fromarray(ThumbnailGenerator._normalize(data, apply_stf)).convert("RGB")
-                return None
+                try:
+                    with fits.open(source_path, memmap=True) as hdul:
+                        for hdu in hdul:
+                            shape = hdu.shape
+                            if not shape or len(shape) < 2:
+                                continue
+                            stride = ThumbnailGenerator._source_stride(shape[-1], shape[-2], target_size)
+                            data = hdu.section[0, ::stride, ::stride] if len(shape) == 3 else hdu.section[::stride, ::stride]
+                            return Image.fromarray(ThumbnailGenerator._normalize(data, apply_stf)).convert("RGB")
+                    return None
+                except ValueError:
+                    # astropy refuses memory-mapped .section reads when BZERO/BSCALE/BLANK
+                    # scaling keywords are present (common for unsigned 16-bit camera data).
+                    # Fall back to a full, non-memmapped read for those files.
+                    with fits.open(source_path, memmap=False) as hdul:
+                        for hdu in hdul:
+                            shape = hdu.shape
+                            if not shape or len(shape) < 2:
+                                continue
+                            stride = ThumbnailGenerator._source_stride(shape[-1], shape[-2], target_size)
+                            data = hdu.data[0, ::stride, ::stride] if len(shape) == 3 else hdu.data[::stride, ::stride]
+                            return Image.fromarray(ThumbnailGenerator._normalize(data, apply_stf)).convert("RGB")
+                    return None
 
             if ext == ".xisf" and xisf:
                 data = ThumbnailGenerator._read_xisf_preview(source_path, target_size)
