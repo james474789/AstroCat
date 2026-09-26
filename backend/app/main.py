@@ -255,6 +255,9 @@ app.include_router(admin.router, prefix="/api/admin", tags=["Admin"], dependenci
 app.include_router(settings_api.router, prefix="/api/settings", tags=["Settings"], dependencies=[Depends(get_current_user)])
 app.include_router(filesystem.router, prefix="/api/filesystem", tags=["Filesystem"], dependencies=[Depends(get_current_user)])
 app.include_router(targets.router, prefix="/api/targets", tags=["Targets"], dependencies=[Depends(get_current_user)])
+from app.api import equipment  # noqa: E402  (R0)
+app.include_router(equipment.router, prefix="/api/equipment", tags=["Equipment"], dependencies=[Depends(get_current_user)])
+app.include_router(equipment.sites_router, prefix="/api/sites", tags=["Sites"], dependencies=[Depends(get_current_user)])
 
 
 
