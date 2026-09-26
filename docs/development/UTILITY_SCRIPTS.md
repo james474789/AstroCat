@@ -76,3 +76,16 @@ For troubleshooting inside the container: `python -c "from app.tasks.equipment i
 run_assignment; print(run_assignment('all'))"` runs it synchronously and prints the summary
 (`rig_changed`, `site_changed`, `utc_filled`, per-reason counts, `clock_modes`, `measured`).
 See `docs/features/EQUIPMENT.md`.
+
+## Recommendations (R1)
+
+Data migration `0008_fill_utc_default_site` runs once, in the background: it re-runs
+equipment assignment (`run_assignment('all')`) so local-clock frames without a site get
+`capture_date_utc` from the camera's UTC clock or the default site's timezone, and records
+`capture_utc_basis`. With no default site yet it records `{"skipped": "no default site"}`.
+
+| Script | Description |
+|--------|-------------|
+| `replay_recommendations` | Read-only. Runs the recommendation engine "as of" every historical imaging night (>= 30 min of resolved light subs; history and goals strictly before the night) and reports hit@1/3/5/10, MRR and `feasible_recall` against recency / altitude / random baselines, with breakdowns by tier, Moon, year and known rig, and every miss with its reason. `--since/--until YYYY-MM-DD` filter nights; `--grid` prints the top 5 weight settings by hit@5 (nothing is applied), `--grid-moon` also varies the Moon-rule D values by +/-25%; `--out PATH` writes the JSON report there as well as to `<log_dir>/replay_latest.json` (served by `GET /api/recommendations/replay/latest`). Run inside the backend container: `python -m app.scripts.replay_recommendations --out /app/logs/replay.json`. |
+
+See `docs/features/RECOMMENDATIONS.md`.

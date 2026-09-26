@@ -247,6 +247,39 @@ def fill_capture_utc(source: Optional[str], local: Optional[datetime], tz_name: 
     return local_to_utc(local, tz_name)
 
 
+# images.capture_utc_basis (R1 §3.2): how a local-time row's UTC was derived.
+BASIS_SITE_TZ = "SITE_TZ"
+BASIS_DEFAULT_SITE_TZ = "DEFAULT_SITE_TZ"
+BASIS_CAMERA_UTC = "CAMERA_UTC"
+
+
+def capture_utc_with_basis(source: Optional[str], local: Optional[datetime], site_tz: Optional[str],
+                           default_tz: Optional[str] = None, clock_mode: Optional[str] = None,
+                           offset_value: Any = None) -> Tuple[Optional[datetime], Optional[str]]:
+    """
+    (capture_date_utc, capture_utc_basis) for a FITS_LOCAL / EXIF_LOCAL row.
+
+    site_tz is the timezone of the row's own site (None when it has no site);
+    default_tz is the default site's timezone, used only for site-less rows.
+    Order: a camera whose clock runs on UTC (CAMERA_UTC), else the row's site
+    zone (SITE_TZ), else, without a site, the default site's zone
+    (DEFAULT_SITE_TZ). (None, None) when nothing applies.
+    """
+    if source not in LOCAL_SOURCES or local is None:
+        return None, None
+    if parse_offset(offset_value) is not None:
+        return None, None  # carries an offset: never reinterpret it
+    if clock_mode == CLOCK_UTC:
+        return local, BASIS_CAMERA_UTC
+    if site_tz:
+        utc = local_to_utc(local, site_tz)
+        return utc, (BASIS_SITE_TZ if utc is not None else None)
+    if default_tz:
+        utc = local_to_utc(local, default_tz)
+        return utc, (BASIS_DEFAULT_SITE_TZ if utc is not None else None)
+    return None, None
+
+
 def infer_clock_mode(pairs: Iterable[Tuple[datetime, datetime, str]]) -> Optional[str]:
     """
     pairs: (exif_wall_time, gps_utc, site_tz). Votes only count when the
@@ -390,14 +423,19 @@ def apply_equipment(image, rigs: List[RigInfo], sites: List[SiteInfo],
 
     if image.capture_time_source in LOCAL_SOURCES:
         site = next((s for s in sites if s.id == image.site_id), None)
+        default = next((s for s in sites if s.is_default), None)
         raw = image.raw_header if isinstance(image.raw_header, dict) else {}
         local = local_capture_time(image.capture_time_source, image.capture_date, raw.get("DATE-LOC"),
                                    raw.get("EXIF:EXIF DateTimeOriginal") or raw.get("PIL:DateTimeOriginal"))
         from app.services.equipment_detection import normalize_camera_name
         clock = (clock_modes or {}).get(normalize_camera_name(image.camera_name) or "")
-        image.capture_date_utc = fill_capture_utc(
-            image.capture_time_source, local, site.timezone if site else None, clock_mode=clock,
+        utc, basis = capture_utc_with_basis(
+            image.capture_time_source, local, site.timezone if site else None,
+            default_tz=default.timezone if (default is not None and image.site_id is None) else None,
+            clock_mode=clock,
             offset_value=raw.get("EXIF:EXIF OffsetTimeOriginal") or raw.get("PIL:OffsetTimeOriginal"))
+        image.capture_date_utc = utc
+        image.capture_utc_basis = basis
     return {"rig_reason": reason}
 
 

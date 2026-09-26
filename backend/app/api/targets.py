@@ -24,6 +24,7 @@ from app.models.target import TargetGoal
 from app.schemas.target import TargetGoalInput
 from app.services.targets import normalize_designation
 from app.utils.filter_names import normalize_filter, filter_sort_key
+from app.utils.observing_night import NIGHT_JOIN_SQL, NIGHT_SQL
 from app.utils.path_security import validate_path_safety
 from app.utils.rig_optics import (
     build_filter_rig_rows, valid_pixel_scale, parse_pixel_size, known_pixel_size, binning_factor,
@@ -314,12 +315,13 @@ async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) ->
 
     # Nights (README §2.2: simple date-boundary count, no dependency on F7 sessions)
     path_like_sql = _path_like_sql(path)
+    # R1 §3.1: one observing-night definition shared with the recommender (utils/observing_night).
     nights_stmt = text(f"""
-        SELECT target_key, count(distinct date(capture_date - interval '12 hours')) as nights
-        FROM images
-        WHERE target_key = ANY(:keys) AND frame_type = 'LIGHT' AND subtype = 'SUB_FRAME'
+        SELECT images.target_key, count(distinct {NIGHT_SQL}) as nights
+        FROM images {NIGHT_JOIN_SQL}
+        WHERE images.target_key = ANY(:keys) AND images.frame_type = 'LIGHT' AND images.subtype = 'SUB_FRAME'
         {f"AND {path_like_sql}" if path_like_sql else ""}
-        GROUP BY target_key
+        GROUP BY images.target_key
     """)
     for r in (await db.execute(nights_stmt, {"keys": keys, **_path_like_params(path)})).all():
         targets[r.target_key]["nights"] = r.nights
@@ -659,13 +661,13 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
     )
 
     # nights_detail
-    nights_stmt = text("""
-        SELECT date(capture_date - interval '12 hours') as night, filter_name,
-               sum(exposure_time_seconds) as secs
-        FROM images
-        WHERE target_key = :key AND frame_type = 'LIGHT' AND subtype = 'SUB_FRAME'
-          AND capture_date IS NOT NULL
-        GROUP BY night, filter_name
+    nights_stmt = text(f"""
+        SELECT {NIGHT_SQL} as night, images.filter_name,
+               sum(images.exposure_time_seconds) as secs
+        FROM images {NIGHT_JOIN_SQL}
+        WHERE images.target_key = :key AND images.frame_type = 'LIGHT' AND images.subtype = 'SUB_FRAME'
+          AND images.capture_date IS NOT NULL
+        GROUP BY night, images.filter_name
         ORDER BY night
     """)
     night_rows = (await db.execute(nights_stmt, {"key": target_key})).all()

@@ -148,10 +148,13 @@ All of the above skip images whose `target_source == 'MANUAL'`.
 
 ## Known limitations / follow-ups
 
-- "Nights" uses the simple `count(distinct date(capture_date - interval '12
-  hours'))` expression (README §2.2), not F7's `imaging_sessions` table (F7
-  hadn't merged when this branch was written). A follow-up can switch to
-  `count(distinct session_id)` once F7 lands.
+- "Nights" (the list count and `nights_detail`) use the shared observing-night
+  definition from R1 (`backend/app/utils/observing_night.py`, also used by the
+  Tonight recommender): the local *solar* date of the preceding noon,
+  `date(coalesce(capture_date_utc + longitude*240 s, capture_date) - 12 h)`,
+  with the longitude of the image's site (0 without one). Rows without a UTC time
+  fall back to the camera-local `capture_date - 12 h`. It doesn't use F7's
+  `imaging_sessions` table; a follow-up can switch once F7 lands.
 - `light_subs_clause()` from F1's `app/utils/frame_filters` doesn't exist yet
   on this branch (F1b hadn't merged); the predicate is inlined with a
   `# TODO(F1)` comment in `backend/app/api/targets.py`.
