@@ -603,6 +603,13 @@ def reindex_all(self):
         ft_summary = _backfill_frame_types(dry_run=False, reclassify_all=False)
         logger.info(f"Frame type catch-up: scanned={ft_summary['total']} updated={ft_summary['updated']}")
 
+        # Plate-solved rows with no usable field radius (sidecar .ini solves
+        # that omit it) can't MATCH a target; derive the radius, re-match and
+        # re-resolve them. Incremental: a no-op once every row has a radius.
+        from app.scripts.backfill_field_radius import backfill_field_radius as _backfill_field_radius
+        fr_summary = _backfill_field_radius(dry_run=False)
+        logger.info(f"Field radius catch-up: fixed={fr_summary['fixed']} targets_changed={fr_summary['targets_changed']}")
+
         from app.scripts.backfill_targets import backfill_targets as _backfill_targets
         _backfill_targets(process_all=False)
     except SoftTimeLimitExceeded:
@@ -799,10 +806,14 @@ def backfill_targets(self, reclassify_all: bool = False):
     explicit --all case and for on-demand re-runs without waiting on a full
     mount rescan. Safe to re-run; a no-op once every LIGHT row has a source.
     """
+    from app.scripts.backfill_field_radius import backfill_field_radius as _backfill_field_radius
     from app.scripts.backfill_targets import backfill_targets as _run_backfill
 
     logger.info(f"Starting target backfill (reclassify_all={reclassify_all})...")
     try:
+        # Repair missing field radii first so MATCH resolution can use them.
+        fr_summary = _backfill_field_radius(dry_run=False)
+        logger.info(f"Field radius repair: fixed={fr_summary['fixed']} targets_changed={fr_summary['targets_changed']}")
         _run_backfill(process_all=reclassify_all)
         logger.info("Target backfill complete.")
         return {"status": "completed"}
