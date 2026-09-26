@@ -36,15 +36,19 @@ from app.utils.filter_names import normalize_filter
     ("Hα", "Ha"),
     ("Ha 7nm", "Ha"),
     ("Astrodon Ha 3nm", "Ha"),
+    ("H", "Ha"),
+    ("h", "Ha"),
     # OIII
     ("OIII", "OIII"),
     ("O3", "OIII"),
     ("O-III", "OIII"),
     ("Oiii", "OIII"),
+    ("O", "OIII"),
     # SII
     ("SII", "SII"),
     ("S2", "SII"),
     ("S-II", "SII"),
+    ("S", "SII"),
     # Hb
     ("Hb", "Hb"),
     ("H-beta", "Hb"),

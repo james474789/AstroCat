@@ -152,17 +152,20 @@ Case-insensitive, after stripping bandwidth/brand noise (`\d+(\.\d+)?\s*nm`, `as
 |---|---|
 | `L` | L, Lum, Luminance, Clear, UV/IR, UVIR, L-Pro (broadband light-pollution filters count as `L`) |
 | `R` / `G` / `B` | R, Red / G, Green / B, Blue |
-| `Ha` | Ha, H-a, H-alpha, Halpha, HA, H_Alpha, Hα |
-| `OIII` | OIII, O3, O-III, Oiii |
-| `SII` | SII, S2, S-II |
+| `Ha` | Ha, H-a, H-alpha, Halpha, HA, H_Alpha, Hα, bare `H` (single-letter filter wheel labels) |
+| `OIII` | OIII, O3, O-III, Oiii, bare `O` |
+| `SII` | SII, S2, S-II, bare `S` |
 | `Hb` | Hb, H-beta |
 | `Duo` | L-eNhance, L-eXtreme, L-Ultimate, ALP-T, NBZ, Triad, Quad, Duo, Dual, Tri-band, CLS |
 | `None` | empty / null / `NoFilter` / `OSC`, i.e. an OSC or DSLR with no filter wheel. Display it as **"OSC / No filter"**. |
 | `Other:<orig>` | anything unrecognized. Keep it visible rather than hiding data. |
 
 Display order: `L, R, G, B, Ha, OIII, SII, Hb, Duo, None, Other:*`. Colors (CSS variables to add in
-`Targets.css`): L `#d0d4dc`, R `#e05050`, G `#50c070`, B `#5080e0`, Ha `#c8283c`, OIII `#28b4b4`,
-SII `#8c1e3c`, Hb `#3cc8ff`, Duo `#b060c0`, None `#a0a0a0`, Other `#707070`.
+`Targets.css`): L `#d0d4dc`, R `#e05050`, G `#50c070`, B `#5080e0`, Ha `#c8283c`, OIII `#2f80ed`,
+SII `#a83246`, Hb `#3cc8ff`, Duo `#b060c0`, None `#a0a0a0`, Other `#707070`. Narrowband hues follow
+the common bicolor/SHO convention: Ha and SII (both deep-red emission lines) render as two distinct
+reds, OIII (the blue channel in the Hubble palette) renders as blue. `L` is the only neutral/grey
+bucket among real filters; `Other`/`None` stay grey as the "unclassified" fallback.
 
 Filter normalization is done **at query time in Python** over grouped rows (group by the raw
 `filter_name` in SQL, then fold in Python). The number of distinct raw filter names is small. Do not
