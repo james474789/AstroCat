@@ -37,29 +37,49 @@ def test_soft_moon_just_short_is_half():
     assert moon_factor(np.array([1.0]), np.array([False]), req)[0] == 1.0
 
 
-def test_emission_on_narrowband_rig_survives_full_moon_but_broadband_does_not():
+def test_emission_on_narrowband_rig_beats_broadband_at_full_moon():
+    """The hard MOON filter is generous (half the required distance); the full rule drives hours and score."""
     pool = CandidatePool([cand("NGC7000", 314.7, 44.3, 120.0, "EMISSION"),
                           cand("GAL", 314.7, 44.3, 60.0, "GALAXY")])
     res = recommend(make_inputs(pool=pool, rigs=[NB_RIG]), Params())
     keys = {p.key: p for p in res.ranked}
     assert "NGC7000" in keys and keys["NGC7000"].mode in ("HA", "SII")
-    assert "GAL" not in keys and res.excluded["GAL"] == "MOON"
+    assert keys["NGC7000"].available_hours > 3
+    gal = keys["GAL"]                       # 59 deg from a full Moon: kept, but no clear hours
+    assert gal.mode == "BB" and gal.available_hours < 0.5 and gal.score < keys["NGC7000"].score
 
 
-def test_osc_rig_at_full_moon_has_no_bb_picks_near_the_moon():
+def test_moon_hard_exclusion_only_close_to_the_moon():
+    # 2026-09-26 full Moon near RA 5 h... use a target a few degrees from the Moon's position at midnight.
+    from app.services.recommend import prepare_night
+    inputs = make_inputs(rigs=[OSC_RIG])
+    prep = prepare_night(inputs, Params())
+    eph = prep.ctx.eph
+    mid = int(np.flatnonzero(prep.ctx.dark_mask)[len(np.flatnonzero(prep.ctx.dark_mask)) // 2])
+    near = CandidatePool([cand("NEAR", float(eph.moon_ra[mid]), float(eph.moon_dec[mid]) + 5.0, 60.0, "GALAXY")])
+    res = recommend(make_inputs(pool=near, rigs=[OSC_RIG]), Params())
+    assert res.excluded.get("NEAR") in ("MOON", "BELOW_HORIZON")
+
+
+def test_osc_rig_at_full_moon_near_moon_picks_have_no_clear_hours():
     res = recommend(make_inputs(rigs=[OSC_RIG]), Params())
     for p in res.ranked:
         assert p.mode == "OSC"
-        assert p.moon_sep_min_deg is None or p.moon_sep_min_deg >= 60
+        if p.moon_sep_min_deg is not None and p.moon_sep_min_deg < 60:
+            assert p.available_hours < 0.5
 
 
-def test_bright_tier_drops_broadband():
+def test_bright_tier_penalises_broadband():
     ok = tier_class_mask("BRIGHT")
-    assert not ok[CLASS_INDEX["BB"]] and not ok[CLASS_INDEX["OSC"]] and ok[CLASS_INDEX["HA"]]
+    assert ok[CLASS_INDEX["BB"]] and ok[CLASS_INDEX["OSC"]] and ok[CLASS_INDEX["HA"]]
+    assert not tier_class_mask("NONE").any()
     res = recommend(make_inputs(rigs=[NB_RIG, OSC_RIG], night=date(2026, 6, 21)), Params())
     assert res.context.tier in ("BRIGHT", "NAUTICAL")
     if res.context.tier == "BRIGHT":
-        assert res.ranked and all(p.mode in ("HA", "SII", "OIII") for p in res.ranked)
+        assert res.ranked
+        bb = [p for p in res.ranked if p.mode in ("BB", "OSC")]
+        assert bb and all(p.components["observability"] <= 0.3 + 1e-9 for p in bb)
+        assert all(any(r["code"] == "TIER" for r in p.reasons) for p in res.lanes[0]["items"])
     assert res.context.tier_note
 
 
@@ -128,11 +148,20 @@ def test_project_zero_when_well_over_goal():
 
 
 def test_momentum_decay():
-    m = momentum_score([0, 45, 180, 181, np.nan])
+    m = momentum_score([0, 45, 135, 136, np.nan])
     assert m[0] == 1.0
     assert m[1] == pytest.approx(math.exp(-1), abs=1e-6)
-    assert m[2] == pytest.approx(math.exp(-4), abs=1e-6)
-    assert m[3] == 0.0 and m[4] == 0.0
+    assert m[2] == pytest.approx(math.exp(-3), abs=1e-6)
+    assert m[3] == 0.0 and m[4] == 0.0            # zero beyond 3 x tau
+    m = momentum_score([10, 30, 31], tau_days=10)
+    assert m[0] == pytest.approx(math.exp(-1)) and m[1] > 0 and m[2] == 0.0
+
+
+def test_recency_rank():
+    from app.services.recommend.scoring import recency_rank_score
+
+    r = recency_rank_score([5, np.nan, 1, 5, 40])
+    assert r.tolist() == [pytest.approx(1 / 2), 0.0, 1.0, pytest.approx(1 / 2), pytest.approx(1 / 4)]
 
 
 def test_urgency():
@@ -154,8 +183,8 @@ def test_active_project_regression_full_moon():
     assert hero.key == "NGC7000" and hero.mode in ("HA", "SII")
     assert any(r["code"] == "ACTIVE" for r in hero.reasons)
     for p in res.ranked:
-        if p.mode in ("BB", "OSC"):
-            assert p.moon_sep_min_deg is None or p.moon_sep_min_deg >= 60
+        if p.mode in ("BB", "OSC") and p.moon_sep_min_deg is not None and p.moon_sep_min_deg < 60:
+            assert p.available_hours < 0.5 and p.score < hero.score
 
 
 def test_osc_only_full_moon_is_empty_or_dont_bother():
@@ -215,4 +244,4 @@ def test_moon_rules_defaults_match_spec():
     assert MOON_RULES["SII"] == (40.0, 10.0) and MOON_RULES["OIII"] == (70.0, 10.0)
     w = Weights().as_dict()
     assert w == {"observability": 0.25, "framing": 0.20, "project": 0.20, "momentum": 0.15, "urgency": 0.15,
-                 "prior": 0.10}
+                 "prior": 0.10, "recency_rank": 0.0}

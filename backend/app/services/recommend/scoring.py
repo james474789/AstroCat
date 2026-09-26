@@ -51,22 +51,29 @@ MOON_RULES: Dict[str, Tuple[float, float]] = {
 }
 MOON_SOFT_WIDTH_DEG = 5.0
 
-DEFAULT_MIN_USABLE_H = 1.0
+# Hard filters are generous (R1 tuning): they only drop clear-cut cases; the
+# full soft rules still drive available_hours and the score.
+DEFAULT_MIN_USABLE_H = 0.5          # hours above the relaxed (hard) limit
+HARD_LIMIT_DROP_DEG = 10.0          # hard limit = max(15, limit(az) - 10)
+HARD_LIMIT_MIN_DEG = 15.0
+MOON_HARD_FRACTION = 0.5            # MOON excludes only with < 0.5 h clear of 0.5 x the required distance
+URGENCY_MIN_USABLE_H = 1.0          # seasonal urgency keeps the real limit and 1 h
+BRIGHT_BROADBAND_FACTOR = 0.3       # BRIGHT tier: broadband/OSC allowed, observability x 0.3
 MIN_AVAILABLE_H = 0.5
 OBSERVABILITY_FULL_H = 5.0
 PROJECT_DELTA_FRACTION = 0.7
 PROJECT_OVER_GOAL_FACTOR = 0.4
 PROJECT_DONE_FACTOR = 1.5
 MOMENTUM_TAU_DAYS = 45.0
-MOMENTUM_MAX_DAYS = 180
+MOMENTUM_CUTOFF_TAUS = 3.0          # momentum is 0 beyond 3 x tau
 URGENCY_WEEKS = 12
 URGENCY_TONIGHT_FRACTION = 0.8
 SEASON_STEP_MIN = 30
 FRAMING_BEST_RATIO = 0.5
 FRAMING_SIGMA = 0.7
 FRAMING_UNKNOWN_FIT = 0.4
-MIN_TARGET_PX = 40.0
-MAX_FILL_RATIO = 3.0
+MIN_TARGET_PX = 15.0
+MAX_FILL_RATIO = 4.0
 
 EXCL_NONE = 0
 EXCL_BELOW_HORIZON = 1
@@ -92,7 +99,7 @@ USEFUL_CLASSES = {
 }
 DEFAULT_USEFUL = BROADBAND
 
-COMPONENTS = ("observability", "framing", "project", "momentum", "urgency", "prior")
+COMPONENTS = ("observability", "framing", "project", "momentum", "urgency", "prior", "recency_rank")
 
 
 @dataclass(frozen=True)
@@ -103,6 +110,7 @@ class Weights:
     momentum: float = 0.15
     urgency: float = 0.15
     prior: float = 0.10
+    recency_rank: float = 0.0
 
     def as_dict(self) -> Dict[str, float]:
         return asdict(self)
@@ -156,38 +164,51 @@ class NightFeatures:
     limit: np.ndarray           # N x T horizon limit
     required: Dict[str, float]  # class -> required separation tonight
     step_h: float
+    usable_hard_h: np.ndarray = None    # N hours above the relaxed hard limit
+    moon_ok_hard_h: np.ndarray = None   # N x C hours (hard mask) clear of MOON_HARD_FRACTION x required
 
 
-def night_features(ctx: NightContext, sky, moon_rules: Mapping[str, Tuple[float, float]] = MOON_RULES) -> NightFeatures:
+def night_features(ctx: NightContext, sky, moon_rules: Mapping[str, Tuple[float, float]] = MOON_RULES,
+                   moon_hard_fraction: float = MOON_HARD_FRACTION) -> NightFeatures:
     eph = ctx.eph
     step_h = eph.step_h
     alt, az, sep = sky.alt, sky.az, sky.sep
     limit = horizon_limit(ctx.horizon, ctx.floor_deg, az)
-    U = (alt > limit) & ctx.dark_mask[None, :]
+    dark = ctx.dark_mask[None, :]
+    U = (alt > limit) & dark
+    hard_limit = np.maximum(HARD_LIMIT_MIN_DEG, limit - HARD_LIMIT_DROP_DEG)
+    H = (alt > hard_limit) & dark
     usable_h = U.sum(axis=1) * step_h
+    usable_hard = H.sum(axis=1) * step_h
     moon_up = (eph.moon_alt > 0.0)[None, :]
     w_alt = np.sin(np.radians(np.clip(alt, 0.0, 90.0))).astype(np.float32)
     Uf = U.astype(np.float32)
+    Hf = H.astype(np.float32)
     n = alt.shape[0]
     moon_ok = np.zeros((n, len(CLASSES)), dtype=np.float32)
+    moon_hard = np.zeros((n, len(CLASSES)), dtype=np.float32)
     weighted = np.zeros((n, len(CLASSES)), dtype=np.float32)
     required = {}
     for cls, ci in CLASS_INDEX.items():
         d, w = moon_rules.get(cls, MOON_RULES[cls])
         req = required_separation(ctx.moon_age_days, d, w)
         required[cls] = req
-        f = moon_factor(sep, moon_up, req) * Uf
-        moon_ok[:, ci] = f.sum(axis=1) * step_h
-        weighted[:, ci] = (f * w_alt).sum(axis=1) * step_h
-    masked_alt = np.where(U, alt, -99.0)
+        f = moon_factor(sep, moon_up, req)
+        fu = f * Uf
+        moon_ok[:, ci] = fu.sum(axis=1) * step_h
+        weighted[:, ci] = (fu * w_alt).sum(axis=1) * step_h
+        moon_hard[:, ci] = (moon_factor(sep, moon_up, moon_hard_fraction * req) * Hf).sum(axis=1) * step_h
+    shown = np.where(U.any(axis=1)[:, None], U, H)
+    masked_alt = np.where(shown, alt, -99.0)
     best_idx = np.argmax(masked_alt, axis=1)
-    max_alt = np.where(U.any(axis=1), masked_alt.max(axis=1),
+    max_alt = np.where(shown.any(axis=1), masked_alt.max(axis=1),
                        np.where(ctx.dark_mask[None, :], alt, -99.0).max(axis=1))
-    sep_mask = U & moon_up
+    sep_mask = shown & moon_up
     sep_min = np.where(sep_mask.any(axis=1), np.where(sep_mask, sep, 999.0).min(axis=1), np.nan)
     return NightFeatures(usable_h=usable_h.astype(float), moon_ok_h=moon_ok, weighted_h=weighted,
                          max_alt=max_alt.astype(float), best_idx=best_idx, sep_min=sep_min.astype(float),
-                         limit=limit, required=required, step_h=step_h)
+                         limit=limit, required=required, step_h=step_h,
+                         usable_hard_h=usable_hard.astype(float), moon_ok_hard_h=moon_hard)
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +249,7 @@ def _no_moon(jd):
 
 
 def urgency_scores(usable_h: np.ndarray, future: np.ndarray,
-                   min_usable_h: float = DEFAULT_MIN_USABLE_H) -> Tuple[np.ndarray, np.ndarray]:
+                   min_usable_h: float = URGENCY_MIN_USABLE_H) -> Tuple[np.ndarray, np.ndarray]:
     """(urgency, weeks_left). weeks_left = first future week (1-based) below min_usable_h, else `weeks`."""
     weeks = future.shape[1]
     below = future < min_usable_h
@@ -254,17 +275,33 @@ class HistoryArrays:
     committed: np.ndarray     # N bool
     goal_h: np.ndarray        # N
     goal_source: List[str]    # N
+    recency_rank: np.ndarray = None   # N: 1 / (1 + rank by last night among targets with history)
 
 
-def momentum_score(days_since) -> np.ndarray:
+def momentum_score(days_since, tau_days: float = MOMENTUM_TAU_DAYS) -> np.ndarray:
+    """exp(-days / tau), 0 beyond MOMENTUM_CUTOFF_TAUS x tau (and for never-imaged targets)."""
     d = np.asarray(days_since, dtype=float)
+    tau = float(tau_days)
     with np.errstate(invalid="ignore"):
-        m = np.where((d >= 0) & (d <= MOMENTUM_MAX_DAYS), np.exp(-np.nan_to_num(d, nan=1e9) / MOMENTUM_TAU_DAYS), 0.0)
+        m = np.where((d >= 0) & (d <= MOMENTUM_CUTOFF_TAUS * tau),
+                     np.exp(-np.nan_to_num(d, nan=1e9) / tau), 0.0)
     return np.where(np.isnan(d), 0.0, m)
 
 
+def recency_rank_score(days_since) -> np.ndarray:
+    """1 / (1 + rank), rank = how many targets were imaged more recently (ties share a rank); 0 without history."""
+    d = np.asarray(days_since, dtype=float)
+    out = np.zeros(d.shape)
+    known = ~np.isnan(d)
+    if known.any():
+        vals = np.sort(d[known])
+        rank = np.searchsorted(vals, d[known], side="left")
+        out[known] = 1.0 / (1.0 + rank)
+    return out
+
+
 def history_arrays(pool: CandidatePool, history: Mapping[str, TargetHistory], goals: GoalModel,
-                   night: date) -> HistoryArrays:
+                   night: date, tau_days: float = MOMENTUM_TAU_DAYS) -> HistoryArrays:
     n = len(pool)
     has = np.zeros(n, dtype=bool)
     total = np.zeros(n)
@@ -287,10 +324,11 @@ def history_arrays(pool: CandidatePool, history: Mapping[str, TargetHistory], go
         nights[i] = len(h.nights)
         if h.last_night is not None:
             days[i] = (night - h.last_night).days
-    mom = momentum_score(days)
+    mom = momentum_score(days, tau_days)
     committed = has & ((nights >= 2) | (total >= 2.0) | (mom > 0))
     return HistoryArrays(has=has, total_h=total, class_h=class_h, nights=nights, days_since=days, momentum=mom,
-                         committed=committed, goal_h=goal_h, goal_source=goal_src)
+                         committed=committed, goal_h=goal_h, goal_source=goal_src,
+                         recency_rank=recency_rank_score(days))
 
 
 # ---------------------------------------------------------------------------
@@ -324,13 +362,14 @@ def useful_mask(pool: CandidatePool) -> np.ndarray:
 
 
 def tier_class_mask(tier: str) -> np.ndarray:
+    """Classes the tier allows. Only NONE excludes; BRIGHT penalises broadband instead (see evaluate_rig)."""
     ok = np.ones(len(CLASSES), dtype=bool)
-    if tier == TIER_BRIGHT:
-        for cls in BROADBAND:
-            ok[CLASS_INDEX[cls]] = False
     if tier == TIER_NONE:
         ok[:] = False
     return ok
+
+
+BROADBAND_INDEX = np.asarray([CLASS_INDEX[c] for c in sorted(BROADBAND)])
 
 
 @dataclass
@@ -346,29 +385,36 @@ class RigEval:
     px: np.ndarray
     have_h: np.ndarray           # N hours in the classes usable tonight (fallback: all)
     components: Dict[str, np.ndarray]
+    avail_hard_h: np.ndarray = None   # N best hard-rule Moon-clear hours over the pair's classes
 
 
 def evaluate_rig(rig: RigSpec, pool: CandidatePool, feats: NightFeatures, hist: HistoryArrays,
                  urgency: np.ndarray, tier: str, weights: Weights, useful: np.ndarray,
-                 min_usable_h: float = DEFAULT_MIN_USABLE_H) -> RigEval:
+                 min_usable_h: float = DEFAULT_MIN_USABLE_H,
+                 bright_broadband_factor: float = BRIGHT_BROADBAND_FACTOR) -> RigEval:
     n = len(pool)
     rig_classes = np.asarray([c in rig.classes for c in CLASSES], dtype=bool)
     pair = useful & rig_classes[None, :] & tier_class_mask(tier)[None, :]
-    cand = np.where(pair, feats.moon_ok_h, -1.0)
+    hard = feats.moon_ok_hard_h if feats.moon_ok_hard_h is not None else feats.moon_ok_h
+    # Mode: best full-rule Moon-clear hours; the hard hours break ties (all zero on a moonlit night).
+    cand = np.where(pair, feats.moon_ok_h + 1e-3 * hard, -1.0)
     mode = np.argmax(cand, axis=1)
-    avail = cand[np.arange(n), mode]
+    rows = np.arange(n)
+    avail = feats.moon_ok_h[rows, mode]
     has_class = pair.any(axis=1)
     mode = np.where(has_class, mode, -1)
     avail = np.where(has_class, avail, 0.0)
+    avail_hard = np.where(has_class, np.where(pair, hard, 0.0).max(axis=1), 0.0)
+    usable_hard = feats.usable_hard_h if feats.usable_hard_h is not None else feats.usable_h
 
     fit, ratio, px = framing(pool.size, rig)
     excluded = np.zeros(n, dtype=np.int8)
     rules = (
-        (EXCL_BELOW_HORIZON, feats.usable_h < min_usable_h),
+        (EXCL_BELOW_HORIZON, usable_hard < min_usable_h),
         (EXCL_TOO_SMALL, np.nan_to_num(px, nan=np.inf) < MIN_TARGET_PX),
         (EXCL_TOO_BIG, np.nan_to_num(ratio, nan=0.0) > MAX_FILL_RATIO),
         (EXCL_TIER, ~has_class),
-        (EXCL_MOON, avail < MIN_AVAILABLE_H),
+        (EXCL_MOON, avail_hard < MIN_AVAILABLE_H),
     )
     for code, cond in rules:
         excluded = np.where((excluded == 0) & cond, code, excluded)
@@ -376,6 +422,9 @@ def evaluate_rig(rig: RigSpec, pool: CandidatePool, feats: NightFeatures, hist: 
     safe_mode = np.maximum(mode, 0)
     observability = np.minimum(feats.weighted_h[np.arange(n), safe_mode] / OBSERVABILITY_FULL_H, 1.0)
     observability = np.where(has_class, observability, 0.0)
+    if tier == TIER_BRIGHT:
+        broadband_mode = np.isin(mode, BROADBAND_INDEX)
+        observability = np.where(broadband_mode, observability * bright_broadband_factor, observability)
 
     have_u = (hist.class_h * pair).sum(axis=1)
     have = np.where(have_u > 0, have_u, hist.total_h)
@@ -394,12 +443,13 @@ def evaluate_rig(rig: RigSpec, pool: CandidatePool, feats: NightFeatures, hist: 
         "momentum": hist.momentum,
         "urgency": urgency,
         "prior": pool.prior,
+        "recency_rank": hist.recency_rank if hist.recency_rank is not None else np.zeros(n),
     }
     w = weights.as_dict()
     score = sum(w[k] * comps[k] for k in COMPONENTS)
     score = np.where(excluded == 0, score, np.nan)
     return RigEval(rig=rig, score=score, excluded=excluded, mode=mode, avail_h=avail, pair_mask=pair, fit=fit,
-                   ratio=ratio, px=px, have_h=have, components=comps)
+                   ratio=ratio, px=px, have_h=have, components=comps, avail_hard_h=avail_hard)
 
 
 def best_rigs(evals: Sequence[RigEval]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
