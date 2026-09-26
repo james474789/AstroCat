@@ -34,13 +34,14 @@ def test_get_spec():
 
 def test_p0_migrations_appended_in_order():
     ids = [spec.id for spec in REGISTRY]
-    assert ids[:6] == [
+    assert ids[:7] == [
         "0001_backfill_frame_types",
         "0002_repair_field_radius",
         "0003_backfill_targets",
         "0004_canonicalize_target_keys",
         "0005_capture_time_provenance",
         "0006_image_site_coordinates",
+        "0007_split_barnards_loop",
     ]
 
 
@@ -72,3 +73,11 @@ def test_0005_and_0006_call_incremental_backfills():
         get_spec("0006_image_site_coordinates").run()
     bct.assert_called_once_with(process_all=False)
     bs.assert_called_once_with(process_all=False)
+
+
+def test_0007_reresolves_ngc1981():
+    from unittest.mock import patch
+
+    with patch("app.scripts.recanonicalize_targets.reresolve_target_keys", return_value={"changed": 3}) as rr:
+        assert get_spec("0007_split_barnards_loop").run() == {"changed": 3}
+    rr.assert_called_once_with(["NGC1981"])

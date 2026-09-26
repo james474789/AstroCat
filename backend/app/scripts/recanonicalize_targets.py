@@ -228,5 +228,41 @@ def mark_unresolved_lights_none(session=None) -> int:
             session.close()
 
 
+def reresolve_target_keys(keys: Iterable[str]) -> dict:
+    """
+    Re-run the resolver on non-MANUAL lights currently keyed to any of `keys`.
+    Used when a cross-ID turns out to be wrong: recanonicalize_targets merges
+    keys in place and can't split them again, but MATCH/HEADER rows can be
+    re-derived from their catalog matches and header text.
+    """
+    from sqlalchemy import select
+    from app.database import SessionLocal
+    from app.models.image import Image, FrameType
+    from app.services.targets import assign_target_sync
+
+    keys = sorted(set(keys))
+    _reset_alias_index_cache()
+    processed = changed = 0
+    moved = {}
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(Image)
+            .where(Image.frame_type == FrameType.LIGHT)
+            .where(Image.target_key.in_(keys))
+            .where((Image.target_source.is_(None)) | (Image.target_source != "MANUAL"))
+        ).scalars().all()
+        for image in rows:
+            before = image.target_key
+            if assign_target_sync(session, image):
+                changed += 1
+                k = f"{before}->{image.target_key}"
+                moved[k] = moved.get(k, 0) + 1
+            processed += 1
+        session.commit()
+    _clear_targets_cache()
+    log(f"Re-resolved {processed} rows for {keys}: {changed} changed {moved}")
+    return {"keys": keys, "processed": processed, "changed": changed, "moved": moved}
+
+
 if __name__ == "__main__":
     print(recanonicalize_targets())

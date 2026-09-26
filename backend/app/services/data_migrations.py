@@ -63,6 +63,11 @@ def _canonicalize_target_keys():
     return summary
 
 
+def _split_barnards_loop():
+    from app.scripts.recanonicalize_targets import reresolve_target_keys
+    return reresolve_target_keys(["NGC1981"])
+
+
 def _capture_time_provenance():
     from app.scripts.backfill_capture_time import backfill_capture_time
     return backfill_capture_time(process_all=False)
@@ -103,6 +108,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0006_image_site_coordinates",
         "Fill per-image site coordinates from FITS SITELAT/SITELONG (decimal or sexagesimal) and EXIF GPS.",
         _image_site_coordinates,
+    ),
+    DataMigrationSpec(
+        "0007_split_barnards_loop",
+        "Undo the Sh2-276 (Barnard's Loop) -> NGC1981 cross-ID merge from 0004 by re-resolving lights keyed NGC1981.",
+        _split_barnards_loop,
     ),
 ]
 
