@@ -133,6 +133,8 @@ class AliasIndex:
 
     def __init__(self):
         self._map = {}
+        # Sh2 <-> NGC/IC pairs applied by build_alias_index (for reporting).
+        self.sh2_cross_ids = []
 
     def add_alias(self, alias: Optional[str], canonical: str) -> None:
         if not alias or not canonical:
@@ -165,6 +167,135 @@ def _split_common_names(common_name: Optional[str]) -> List[str]:
     if not common_name:
         return []
     return [n.strip() for n in common_name.split(",") if n.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Sh2 <-> NGC/IC cross-identification (P0 §3.1)
+# ---------------------------------------------------------------------------
+
+# OpenNGC object types that can be the same physical nebula as a Sharpless
+# HII region. Galaxies, clusters without nebulosity, PNe etc. never merge.
+SH2_CROSS_ID_NGC_TYPES = frozenset({"HII", "EmN", "Neb", "Cl+N", "SNR", "RfN"})
+
+# Minimum centre-separation threshold, and the fraction of the larger of the
+# two objects' major axes allowed as separation.
+SH2_CROSS_ID_MIN_SEP_DEG = 0.25
+SH2_CROSS_ID_SIZE_FRACTION = 0.25
+# min(size)/max(size) must be at least this (unless the NGC/IC row is Cl+N:
+# a cluster catalogued inside a much larger HII region, e.g. IC1396 in Sh2-131).
+SH2_CROSS_ID_MIN_SIZE_RATIO = 1.0 / 3.0
+
+# Force (value = NGC/IC designation) or suppress (value = None) individual
+# pairs. Keys and values are matched after normalize_designation. The forced
+# pairs are well-known identities, pinned so they hold even if catalog
+# positions/sizes drift on a reseed.
+SH2_CROSS_ID_OVERRIDES = {
+    "Sh2-117": "NGC7000",   # North America Nebula
+    "Sh2-125": "IC5146",    # Cocoon Nebula
+    "Sh2-131": "IC1396",    # Elephant's Trunk region
+    "Sh2-162": "NGC7635",   # Bubble Nebula
+    "Sh2-190": "IC1805",    # Heart Nebula
+}
+
+
+def _angular_separation_deg(ra1, dec1, ra2, dec2) -> float:
+    """Great-circle separation in degrees (haversine; stable for small angles)."""
+    import math
+
+    ra1, dec1, ra2, dec2 = (math.radians(float(v)) for v in (ra1, dec1, ra2, dec2))
+    sin_ddec = math.sin((dec2 - dec1) / 2.0)
+    sin_dra = math.sin((ra2 - ra1) / 2.0)
+    h = sin_ddec * sin_ddec + math.cos(dec1) * math.cos(dec2) * sin_dra * sin_dra
+    return math.degrees(2.0 * math.asin(min(1.0, math.sqrt(h))))
+
+
+def sh2_cross_id_details(sh2_rows: Sequence, ngc_rows: Sequence, overrides=None) -> List[dict]:
+    """
+    Pair Sharpless regions with the NGC/IC nebula they are the same object as.
+
+    Rule, per Sh2 row (sizes are major axes in arcmin):
+      - NGC/IC object_type in SH2_CROSS_ID_NGC_TYPES;
+      - centre separation < max(0.25 deg, 0.25 * max(size_sh2, size_ngc));
+      - min(size)/max(size) >= 1/3, or the NGC/IC row is Cl+N;
+      - the closest qualifying row wins.
+    `overrides` (default SH2_CROSS_ID_OVERRIDES) force or suppress pairs.
+
+    Returns a list of {"sh2", "ngc", "separation_deg", "via"} dicts, where
+    via is "rule" or "override", sorted by Sh2 designation. Pure: rows are
+    ORM objects or anything with the same attributes.
+    """
+    if overrides is None:
+        overrides = SH2_CROSS_ID_OVERRIDES
+    norm_overrides = {
+        normalize_designation(k): (normalize_designation(v) if v else None)
+        for k, v in overrides.items()
+    }
+
+    candidates = []
+    ngc_by_norm = {}
+    for row in ngc_rows:
+        ngc_by_norm.setdefault(normalize_designation(row.designation), row)
+        if getattr(row, "object_type", None) in SH2_CROSS_ID_NGC_TYPES:
+            if getattr(row, "ra_degrees", None) is None or getattr(row, "dec_degrees", None) is None:
+                continue
+            candidates.append(row)
+
+    results = []
+    for sh2 in sh2_rows:
+        sh2_norm = normalize_designation(sh2.designation)
+        if sh2_norm in norm_overrides:
+            forced = norm_overrides[sh2_norm]
+            if forced:
+                target = ngc_by_norm.get(forced)
+                sep = None
+                if target is not None and sh2.ra_degrees is not None and sh2.dec_degrees is not None:
+                    sep = round(_angular_separation_deg(
+                        sh2.ra_degrees, sh2.dec_degrees, target.ra_degrees, target.dec_degrees), 4)
+                results.append({
+                    "sh2": sh2.designation,
+                    "ngc": target.designation if target is not None else forced,
+                    "separation_deg": sep,
+                    "via": "override",
+                })
+            continue
+
+        if getattr(sh2, "ra_degrees", None) is None or getattr(sh2, "dec_degrees", None) is None:
+            continue
+        size_sh2 = getattr(sh2, "major_axis_arcmin", None) or 0.0
+
+        best = None
+        for ngc in candidates:
+            size_ngc = getattr(ngc, "major_axis_arcmin", None) or 0.0
+            big = max(size_sh2, size_ngc)
+            threshold = max(SH2_CROSS_ID_MIN_SEP_DEG, SH2_CROSS_ID_SIZE_FRACTION * big / 60.0)
+            # Cheap declination pre-filter before the trig.
+            if abs(float(ngc.dec_degrees) - float(sh2.dec_degrees)) >= threshold:
+                continue
+            sep = _angular_separation_deg(sh2.ra_degrees, sh2.dec_degrees, ngc.ra_degrees, ngc.dec_degrees)
+            if sep >= threshold:
+                continue
+            if ngc.object_type != "Cl+N":
+                small = min(size_sh2, size_ngc)
+                if big <= 0 or small / big < SH2_CROSS_ID_MIN_SIZE_RATIO:
+                    continue
+            if best is None or sep < best[0]:
+                best = (sep, ngc)
+
+        if best is not None:
+            results.append({
+                "sh2": sh2.designation,
+                "ngc": best[1].designation,
+                "separation_deg": round(best[0], 4),
+                "via": "rule",
+            })
+
+    results.sort(key=lambda d: normalize_designation(d["sh2"]))
+    return results
+
+
+def sh2_cross_ids(sh2_rows: Sequence, ngc_rows: Sequence, overrides=None) -> dict:
+    """{sh2_designation -> ngc_designation} for the pairs in sh2_cross_id_details."""
+    return {d["sh2"]: d["ngc"] for d in sh2_cross_id_details(sh2_rows, ngc_rows, overrides)}
 
 
 def build_alias_index(
@@ -218,10 +349,18 @@ def build_alias_index(
         for name in _split_common_names(getattr(row, "common_name", None)):
             index.add_alias(name, canonical)
 
-    # Sh2
+    # Sh2. Regions that are the same object as an NGC/IC nebula (P0 §3.1)
+    # are registered under that nebula's canonical key (which itself prefers
+    # Messier/Caldwell canonicals via resolve).
+    cross_ids = sh2_cross_id_details(sh2_rows, ngc_rows) if sh2_rows and ngc_rows else []
+    index.sh2_cross_ids = cross_ids
+    cross_map = {d["sh2"]: d["ngc"] for d in cross_ids}
     for row in sh2_rows:
         source_designation = getattr(row, "source_designation", None)
         resolved = index.resolve(source_designation) if source_designation else None
+        cross = cross_map.get(row.designation)
+        if cross:
+            resolved = index.resolve(cross) or normalize_designation(cross)
         canonical = resolved or normalize_designation(row.designation)
         index.add_alias(row.designation, canonical)
         index.add_alias(source_designation, canonical)
@@ -251,6 +390,10 @@ MatchInfo = namedtuple(
 _CATALOG_PRIORITY = {"MESSIER": 0, "NGC": 1, "IC": 1, "CALDWELL": 2, "SH2": 3}
 
 _LIGHT_VALUES = {"LIGHT"}
+
+# target_source for a LIGHT frame that went through the resolver and has no
+# target. NULL target_source means "never resolved".
+NONE_SOURCE = "NONE"
 
 # A MATCH candidate must lie within this fraction of the field radius from
 # the image center. 0.5 still rejects edge objects but tolerates offset
@@ -320,7 +463,9 @@ def resolve_target(
                 return (separation_deg, priority, mag)
 
             best = sorted(candidates, key=sort_key)[0]
-            return (normalize_designation(best[1]), "MATCH")
+            # Canonicalise through the alias index (P0 §3.1) so a solved frame
+            # of NGC3031 is keyed M81, C11 -> NGC7635, Sh2-131 -> IC1396, etc.
+            return (alias_index.resolve(best[1]) or normalize_designation(best[1]), "MATCH")
 
     # 4. HEADER_RAW — unresolved header text becomes an OBJ: key.
     if object_name:
@@ -329,8 +474,9 @@ def resolve_target(
         if norm:
             return (f"OBJ:{norm}", "HEADER_RAW")
 
-    # 5. Unassigned
-    return (None, None)
+    # 5. Unassigned. LIGHT frames get the NONE sentinel ("resolved, no
+    # target") so they are distinguishable from never-processed rows (P0 §3.1).
+    return (None, NONE_SOURCE)
 
 
 # ---------------------------------------------------------------------------
