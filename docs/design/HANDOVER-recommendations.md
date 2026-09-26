@@ -1,9 +1,14 @@
-# Handover: Target Recommendations. P0 done; R0 → R4 remaining
+# Handover: Target Recommendations. P0 + R0 done; R1 spec written; R1 → R4 remaining
 
 Written: 2026-09-26 · Author: Claude (orchestrating session) · For: the agent or developer picking up R0 next
 
-`main` HEAD: **`878ca7f`** (local; **not pushed**). Live stack: backend **`20260926.14`**, healthy.
-Alembic head: **`d7f9b3e41007`**. Data migrations applied: `0001`–`0007`.
+`main` HEAD: **`97798a5`** + this doc update (local; **not pushed**). Live stack: backend and frontend
+**`20260926.15`**, healthy. Alembic head: **`e8a0c4f51008`**. Data migrations applied: `0001`–`0007`.
+Backups: `library/backups/pre_p0_20260926.dump`, `library/backups/pre_r0_20260926.dump`.
+
+> **Update, 2026-09-26 (late):** R0 is deployed and owner-checked (see §2a). The **R1 spec is
+> [R1-recommendation-engine.md](R1-recommendation-engine.md)**, which supersedes §4 of this file for
+> R1 work. §3 below is kept as a record of how R0 was run; R1 uses the same pattern (R1 spec §12).
 
 ## 0. Read in this order
 
@@ -24,8 +29,8 @@ Alembic head: **`d7f9b3e41007`**. Data migrations applied: `0001`–`0007`.
 |---|---|---|---|
 | Research + prototypes | Survey, live-data analysis, local and Telescopius-hybrid prototypes | ✅ done | — |
 | **P0** | Canonical target keys + Sh2 cross-IDs + `NONE` sentinel, capture-time provenance, site persistence | ✅ **deployed & verified** | actual: ~250k agent + ~150k orchestration |
-| **R0** | Equipment & Sites: spec §4 | ⏭ **next** | 0.65–1.05M incl. deploy |
-| R1 | Local recommendation engine + replay test on past nights + Tonight page | not started | 0.8–1.1M |
+| **R0** | Equipment & Sites: spec §4 | ✅ **deployed & owner-checked** (§2a) | actual: ~340k B1 + ~260k B2 + ~120k orchestration |
+| **R1** | Local recommendation engine + replay test + Tonight page. Spec: [R1-recommendation-engine.md](R1-recommendation-engine.md) | ⏭ **next** (spec written, awaiting owner sign-off) | 0.8–1.15M |
 | R2 | Affinity/novelty/revisit lanes, inferred goals, feedback, Dashboard tile, optional Telescopius enrichment | not started | 0.5–0.7M |
 | R3 | Season planner, opt-in weather, `.hrz`/Target Scheduler export | not started | 0.6–0.9M |
 | R4 | Optional LLM nightly briefing | not started | 0.2–0.4M |
@@ -102,7 +107,46 @@ Commits on `main`:
 - **0004 summary:** 45 Sh2 pairs (40 rule, 5 override), 73 keys remapped, 4,065 rows. Review it with
   `SELECT result::json->'sh2_cross_ids' FROM data_migrations WHERE id='0004_canonicalize_target_keys';`
 
-## 3. Next step: R0 (spec §4), and how to run it
+## 2a. What R0 shipped
+
+Merges `d651616` (backend) and `5d69d7a` (frontend), then VERSION bump `97798a5`.
+
+- **Backend:**
+  - models `cameras`, `optics`, `filters`, `rigs`, `rig_filters` and `sites`, plus `images.rig_id`,
+    `rig_source` and `site_id` (Alembic `e8a0c4f51008`, schema only);
+  - `utils/optics.py`, `utils/horizon.py`;
+  - `services/equipment_{detection,assignment}.py`, `services/telescopius.py`;
+  - `tasks/equipment.py` (debounced `assign_equipment`, per-camera UTC-clock inference cached as
+    `equipment:clock_modes`), plus an indexer hook;
+  - `/api/equipment`, `/api/sites`.
+- **Frontend:**
+  - `pages/Equipment.jsx`, and `components/icons/TelescopeIcon.jsx` (the pinned lucide 0.292 has no
+    `Telescope`);
+  - a rig row with override in `ImageDetail`;
+  - rig names in the TargetDetail "By Filter & Rig" table.
+- **Compose:** `TELESCOPIUS_API_KEY=${TELESCOPIUS_API_KEY:-}` was added to the backend env in all three
+  compose files, including the untracked local `docker-compose.yml`. **The key is still not set**,
+  so the import button is hidden.
+- **Tests:** 414 passed, 1 known failure. The host test `SECRET_KEY` must not contain "test"; use
+  `a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2`.
+
+**Live state after the owner accepted detection** (regression anchors):
+- **9 rigs**, all with `(detected)` optic names because there's no Telescopius import yet. The known
+  four reproduce: 2.27″, 0.34″, 2.46″, 6.50″. There are extra `~23 mm`/`~28 mm` ASI294 and `~677 mm`
+  rigs for the owner to prune or keep.
+- **None is mounted yet.**
+- **2 sites**, both ~56°N and Europe/London, with 15,267 images assigned. Solved lights from the last
+  36 months with a rig: **2,676 / 2,712 (98.7%)**.
+- **Not yet covered:**
+  - 13.3k lights from 2019–2020 at an older site (outside the 36-month detection
+    window: the owner should run "include older");
+  - a remote cluster (6.5k);
+  - **all 16,512 `EXIF_LOCAL` rows still lack UTC** (they have no coordinates, site or rig). R1 §3.2
+    fixes this.
+- **Nights with resolved light targets: 351** (not ~790; that figure counted nights of `NONE` lights
+  too). 244 have UTC, and 104 have a site.
+
+## 3. How R0 was run (record; R1 repeats the pattern)
 
 Execution pattern (proven twice). One orchestrator, and agents in isolated git worktrees that
 **must not touch Docker, the live DB, or `main`, and must not push**:
@@ -167,7 +211,7 @@ timezone is assigned (spec §4.5 "Timezone fill"). The owner's DSLR clocks appea
 (EXIF matched GPS time within seconds in winter samples). Some R7 frames carry
 `OffsetTimeOriginal +02:00`. Handle both; don't assume.
 
-## 4. After R0: R1 engine notes (from the prototypes)
+## 4. R1 engine notes (from the prototypes; now encoded in the R1 spec)
 
 Prototypes are in [prototypes/](prototypes/). They're throwaway reference code, not production:
 - `rec_local_prototype.py`: local ephemeris (astropy for the Sun and Moon, numpy for 14k objects),
@@ -242,9 +286,10 @@ Lessons that the R1 spec must encode (research §9, §8b):
 |---|---|
 | Sh2-277 → IC434 | Sh2-277 is strictly the Flame (NGC2024) area. It was left merged because the owner frames the two together. Suppress it via `SH2_CROSS_ID_OVERRIDES` + `reresolve_target_keys(["IC434"])` in a new data migration if the owner asks. |
 | New-file indexing | The fix is deployed but untested end to end (§2 item 6). |
-| Remote site cluster | 6.5k frames; ask the owner when R0 detection proposes it. |
-| UI label | `ImageDetail.jsx` shows "(auto: none)" next to "Unassigned" for `NONE` rows. Cosmetic; fix during B2. |
+| Remote site cluster | 6.5k frames; the owner decides via Equipment > detect (include older). |
+| 2019–2020 site | 13.3k lights at an older site, outside the 36-month detection window. The owner should accept it via "include older". |
+| Mounted rig | None marked yet. R1 falls back to "all rigs". |
 | 0001 summary | Contains a Counter with tuple keys that `json.dumps(default=str)` can't serialise. Pre-existing and untouched. |
-| Targets "nights" | Still `date(capture_date - 12h)`. Switch to `capture_date_utc` + site longitude in R1. |
+| Targets "nights" | Still `date(capture_date - 12h)`. R1 §3.1 (`night_of`) switches it. |
 | Spec text drift | `P0-R0-equipment-sites.md` §3 doesn't mention the `OTHER` source, the separation cap or 0007; see §2 above. Its §8 estimates are superseded by §1 here. |
-| Telescopius key | Regenerate (owner); set in `.env` only when R0's import is deployed. |
+| Telescopius key | R0 is deployed. The owner regenerates the key, puts it in `.env`, then runs `docker compose up -d backend`. |
