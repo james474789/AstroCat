@@ -20,6 +20,7 @@ from astropy.wcs import WCS
 from astropy.utils.exceptions import AstropyWarning
 
 from app.extractors.base import BaseExtractor
+from app.utils.header_values import parse_sexagesimal
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +71,10 @@ class FITSExtractor(BaseExtractor):
                 metadata["observer"] = self._safe_get(header, "OBSERVER")
                 metadata["object_name"] = self._safe_get(header, "OBJECT")
                 
-                # Site
-                metadata["site_lat"] = self._parse_float(self._safe_get(header, "SITELAT"))
-                metadata["site_long"] = self._parse_float(self._safe_get(header, "SITELONG"))
+                # Site (decimal or sexagesimal, e.g. "56d0m0.000s N")
+                metadata["site_lat"] = parse_sexagesimal(self._safe_get(header, "SITELAT"))
+                metadata["site_long"] = parse_sexagesimal(self._safe_get(header, "SITELONG"))
+                metadata["site_name"] = self._safe_get(header, "SITENAME", "OBSERVAT")
                 
                 # WCS / Plate Solve Info
                 wcs_info = self._extract_wcs(header)

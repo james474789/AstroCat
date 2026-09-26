@@ -281,6 +281,15 @@ class ExifExtractor(BaseExtractor):
         except Exception as e:
             print(f"Error parsing sidecar for {self.file_path}: {e}")
 
+        # Site from EXIF GPS (P0 §3.3)
+        try:
+            from app.utils.header_values import parse_exif_gps
+            gps = parse_exif_gps(raw_header)
+            if gps:
+                metadata["site_lat"], metadata["site_long"] = gps
+        except Exception:
+            pass
+
         metadata["raw_header"] = raw_header
         return metadata
 
