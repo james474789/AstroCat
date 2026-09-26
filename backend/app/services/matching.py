@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import math
 
 from app.models.image import Image
-from app.models.catalog import MessierCatalog, NGCCatalog, NamedStarCatalog, CaldwellCatalog
+from app.models.catalog import MessierCatalog, NGCCatalog, NamedStarCatalog, CaldwellCatalog, Sh2Catalog
 from app.models.matches import ImageCatalogMatch, CatalogType
 
 
@@ -73,7 +73,13 @@ class CatalogMatcher:
             image.ra_center_degrees, image.dec_center_degrees, radius
         )
         all_matches.append((CatalogType.NAMED_STAR, star_rows))
-        
+
+        # Match Sharpless (Sh2)
+        sh2_rows = await self._find_sh2_in_field(
+            image.ra_center_degrees, image.dec_center_degrees, radius
+        )
+        all_matches.append((CatalogType.SH2, sh2_rows))
+
         # Attempt to construct WCS for pixel validation
         wcs = await self._construct_wcs(image)
         
@@ -216,6 +222,32 @@ class CatalogMatcher:
         })
         return result.fetchall()
 
+    async def _find_sh2_in_field(self, ra: float, dec: float, radius: float):
+        """Find Sharpless (Sh2) objects within radius."""
+        query = text("""
+            SELECT designation,
+                   ST_Distance(
+                       location,
+                       ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography
+                   ) / 111320.0 as dist
+            FROM sh2_catalog
+            WHERE ST_DWithin(
+                location,
+                ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography,
+                :radius_meters
+            )
+            LIMIT 50
+        """)
+
+        radius_meters = radius * 111320
+
+        result = await self.session.execute(query, {
+            "ra": ra,
+            "dec": dec,
+            "radius_meters": radius_meters
+        })
+        return result.fetchall()
+
     async def _construct_wcs(self, image: Image):
         """
         Construct WCS from image metadata.
@@ -311,7 +343,7 @@ class CatalogMatcher:
                 obj = result.scalar_one_or_none()
                 if obj:
                     return (obj.ra_degrees, obj.dec_degrees)
-                
+
                 # Try normalized match (no spaces)
                 from sqlalchemy import func
                 result = await self.session.execute(
@@ -322,10 +354,18 @@ class CatalogMatcher:
                 obj = result.scalar_one_or_none()
                 if obj:
                     return (obj.ra_degrees, obj.dec_degrees)
-                    
+
+            elif cat_type == CatalogType.SH2:
+                result = await self.session.execute(
+                    select(Sh2Catalog).where(Sh2Catalog.designation == designation)
+                )
+                obj = result.scalar_one_or_none()
+                if obj:
+                    return (obj.ra_degrees, obj.dec_degrees)
+
         except Exception as e:
             print(f"Error fetching coordinates for {cat_type} {designation}: {e}")
-            
+
         return None
 
     def _is_in_image_bounds(self, wcs, ra: float, dec: float, width: int, height: int) -> bool:
@@ -335,15 +375,15 @@ class CatalogMatcher:
         """
         try:
             x, y = wcs.world_to_pixel_values(ra, dec)
-            
+
             margin = 100
             if -margin <= x <= width + margin and -margin <= y <= height + margin:
                 return True
-                
+
         except Exception as e:
             # If transformation fails, exclude the object
             print(f"WCS transformation failed for RA={ra}, Dec={dec}: {e}")
-            
+
         return False
 
     async def _save_matches(self, image_id: int, cat_type: CatalogType, matches: List) -> int:
@@ -419,7 +459,13 @@ class SyncCatalogMatcher:
             image.ra_center_degrees, image.dec_center_degrees, radius
         )
         all_matches.append((CatalogType.NAMED_STAR, star_rows))
-        
+
+        # Match Sharpless (Sh2)
+        sh2_rows = self._find_sh2_in_field(
+            image.ra_center_degrees, image.dec_center_degrees, radius
+        )
+        all_matches.append((CatalogType.SH2, sh2_rows))
+
         # Attempt to construct WCS for pixel validation
         wcs = self._construct_wcs(image)
         
@@ -550,6 +596,29 @@ class SyncCatalogMatcher:
         })
         return result.fetchall()
 
+    def _find_sh2_in_field(self, ra: float, dec: float, radius: float):
+        query = text("""
+            SELECT designation,
+                   ST_Distance(
+                       location,
+                       ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography
+                   ) / 111320.0 as dist
+            FROM sh2_catalog
+            WHERE ST_DWithin(
+                location,
+                ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography,
+                :radius_meters
+            )
+            LIMIT 50
+        """)
+        radius_meters = radius * 111320
+        result = self.session.execute(query, {
+            "ra": ra,
+            "dec": dec,
+            "radius_meters": radius_meters
+        })
+        return result.fetchall()
+
     def _construct_wcs(self, image: Image):
         """
         Construct WCS from image metadata (synchronous).
@@ -645,7 +714,7 @@ class SyncCatalogMatcher:
                 obj = result.scalar_one_or_none()
                 if obj:
                     return (obj.ra_degrees, obj.dec_degrees)
-                
+
                 # Try normalized match (no spaces)
                 from sqlalchemy import func
                 result = self.session.execute(
@@ -656,10 +725,18 @@ class SyncCatalogMatcher:
                 obj = result.scalar_one_or_none()
                 if obj:
                     return (obj.ra_degrees, obj.dec_degrees)
-                    
+
+            elif cat_type == CatalogType.SH2:
+                result = self.session.execute(
+                    select(Sh2Catalog).where(Sh2Catalog.designation == designation)
+                )
+                obj = result.scalar_one_or_none()
+                if obj:
+                    return (obj.ra_degrees, obj.dec_degrees)
+
         except Exception as e:
             print(f"Error fetching coordinates for {cat_type} {designation}: {e}")
-            
+
         return None
 
     def _is_in_image_bounds(self, wcs, ra: float, dec: float, width: int, height: int) -> bool:
@@ -669,13 +746,13 @@ class SyncCatalogMatcher:
         """
         try:
             x, y = wcs.world_to_pixel_values(ra, dec)
-            
+
             margin = 100
             if -margin <= x <= width + margin and -margin <= y <= height + margin:
                 return True
-                
+
         except Exception as e:
             # If transformation fails, exclude the object
             print(f"WCS transformation failed for RA={ra}, Dec={dec}: {e}")
-            
+
         return False
