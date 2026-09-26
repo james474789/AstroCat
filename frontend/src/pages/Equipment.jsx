@@ -1036,9 +1036,14 @@ export default function Equipment() {
         () => (detectQuery.data?.rigs || []).filter((p) => !p.exists).length,
         [detectQuery.data],
     );
-    const hasDetected = detectedRigCount > 0 || ['cameras', 'optics', 'filters', 'sites'].some(
-        (k) => (detectQuery.data?.[k] || []).some((p) => !p.exists),
-    );
+    const totalNewProposals = useMemo(() => {
+        if (!detectQuery.data) return 0;
+        return ['cameras', 'optics', 'filters', 'rigs', 'sites'].reduce(
+            (sum, k) => sum + (detectQuery.data[k] || []).filter((p) => !p.exists).length,
+            0,
+        );
+    }, [detectQuery.data]);
+    const hasDetected = totalNewProposals > 0;
 
     async function handleAssignImages() {
         try {
@@ -1156,7 +1161,7 @@ export default function Equipment() {
             {hasDetected && (
                 <div className="detect-banner">
                     <Sparkles size={18} />
-                    <span>AstroCat found {detectedRigCount || Object.values(detectQuery.data || {}).flat().length} setup{detectedRigCount === 1 ? '' : 's'} in your library.</span>
+                    <span>AstroCat found {detectedRigCount || totalNewProposals} setup{(detectedRigCount || totalNewProposals) === 1 ? '' : 's'} in your library.</span>
                     <button className="btn btn-primary btn-sm" onClick={() => setReviewOpen(true)}>Review</button>
                 </div>
             )}
