@@ -24,6 +24,7 @@ celery_app = Celery(
         "app.tasks.bulk",
         "app.tasks.sync_ratings",
         "app.tasks.maintenance",
+        "app.tasks.equipment",
     ]
 )
 
@@ -72,6 +73,7 @@ celery_app.conf.task_routes = {
     "app.tasks.thumbnails.*": {"queue": "thumbnails"},
     "app.tasks.bulk.*": {"queue": "indexer"},
     "app.tasks.maintenance.*": {"queue": "indexer"},
+    "app.tasks.equipment.*": {"queue": "celery"},  # R0: the default queue
 }
 
 
