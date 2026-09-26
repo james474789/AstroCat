@@ -254,7 +254,7 @@ export default function TargetDetail() {
                             {target.by_filter_rig.map((r, idx) => (
                                 <tr key={idx}>
                                     <td>{r.filter}</td>
-                                    <td>{r.camera || 'Unknown'}</td>
+                                    <td>{r.rig_name || r.camera || 'Unknown'}</td>
                                     <td>{r.pixel_scale != null ? `${r.pixel_scale.toFixed(2)}"/px` : '—'}</td>
                                     <td>{r.focal_length != null ? `${Math.round(r.focal_length)} mm` : '—'}</td>
                                     <td>{r.subs}</td>
