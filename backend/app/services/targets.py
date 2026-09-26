@@ -184,6 +184,11 @@ SH2_CROSS_ID_SIZE_FRACTION = 0.25
 # min(size)/max(size) must be at least this (unless the NGC/IC row is Cl+N:
 # a cluster catalogued inside a much larger HII region, e.g. IC1396 in Sh2-131).
 SH2_CROSS_ID_MIN_SIZE_RATIO = 1.0 / 3.0
+# Hard cap on the separation threshold. Without it a very large region
+# (Barnard's Loop, Sh2-276, ~600') gets a multi-degree radius and swallows an
+# unrelated cluster (NGC1981, 1.97 deg away). Largest genuine pair seen on the
+# live catalog: Sh2-220/NGC1499 at 0.58 deg.
+SH2_CROSS_ID_MAX_SEP_DEG = 1.0
 
 # Force (value = NGC/IC designation) or suppress (value = None) individual
 # pairs. Keys and values are matched after normalize_designation. The forced
@@ -195,6 +200,7 @@ SH2_CROSS_ID_OVERRIDES = {
     "Sh2-131": "IC1396",    # Elephant's Trunk region
     "Sh2-162": "NGC7635",   # Bubble Nebula
     "Sh2-190": "IC1805",    # Heart Nebula
+    "Sh2-276": None,        # Barnard's Loop - not NGC1981 (see SH2_CROSS_ID_MAX_SEP_DEG)
 }
 
 
@@ -267,7 +273,10 @@ def sh2_cross_id_details(sh2_rows: Sequence, ngc_rows: Sequence, overrides=None)
         for ngc in candidates:
             size_ngc = getattr(ngc, "major_axis_arcmin", None) or 0.0
             big = max(size_sh2, size_ngc)
-            threshold = max(SH2_CROSS_ID_MIN_SEP_DEG, SH2_CROSS_ID_SIZE_FRACTION * big / 60.0)
+            threshold = min(
+                SH2_CROSS_ID_MAX_SEP_DEG,
+                max(SH2_CROSS_ID_MIN_SEP_DEG, SH2_CROSS_ID_SIZE_FRACTION * big / 60.0),
+            )
             # Cheap declination pre-filter before the trig.
             if abs(float(ngc.dec_degrees) - float(sh2.dec_degrees)) >= threshold:
                 continue
