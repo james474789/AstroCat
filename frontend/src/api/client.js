@@ -978,3 +978,32 @@ export function computeScaleCheck(declared, measured, tol = 0.05) {
     const verdict = Math.abs(deltaPct) / 100 <= tol ? 'ok' : 'mismatch';
     return { declared, measured, delta_pct: deltaPct, verdict };
 }
+
+// ============ Recommendations (R1) ============
+// Binding contract: docs/design/R1-recommendation-engine.md §7. The backend (feat/r1-engine-backend)
+// is built in parallel on a separate branch; these calls are written strictly against that spec.
+
+export async function fetchRecommendations({ date, siteId, rig, perLane } = {}) {
+    const queryParams = {
+        date: date || undefined,
+        site_id: siteId || undefined,
+        rig: rig || undefined,
+        per_lane: perLane || undefined,
+    };
+    const queryString = buildQueryString(queryParams);
+    return handleResponse(await fetch(`${API_BASE_URL}/recommendations?${queryString}`, { credentials: 'include' }));
+}
+
+export async function fetchTargetRecommendation(key, { date, siteId, rig } = {}) {
+    const queryParams = {
+        date: date || undefined,
+        site_id: siteId || undefined,
+        rig: rig || undefined,
+    };
+    const queryString = buildQueryString(queryParams);
+    return handleResponse(await fetch(`${API_BASE_URL}/recommendations/target/${encodeURIComponent(key)}?${queryString}`, { credentials: 'include' }));
+}
+
+export async function fetchLatestReplay() {
+    return handleResponse(await fetch(`${API_BASE_URL}/recommendations/replay/latest`, { credentials: 'include' }));
+}
