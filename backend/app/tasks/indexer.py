@@ -519,6 +519,10 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
         from app.services.targets import assign_target_sync
         assign_target_sync(session, image)
 
+        # 5. Rig / site assignment (R0). Never raises (savepoint + try inside).
+        from app.services.equipment_assignment import assign_equipment_sync
+        assign_equipment_sync(session, image)
+
         session.commit()
     
     return {"status": "completed", "file": file_path, "matches": matches_count}
