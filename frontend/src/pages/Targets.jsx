@@ -150,7 +150,7 @@ export default function Targets() {
                 </button>
 
                 <div className="catalog-chip-group">
-                    {['', 'MESSIER', 'NGC', 'IC', 'CALDWELL', 'OTHER'].map((c) => (
+                    {['', 'MESSIER', 'NGC', 'IC', 'CALDWELL', 'SH2', 'OTHER'].map((c) => (
                         <button
                             key={c || 'all'}
                             className={`catalog-chip ${catalog === c ? 'active' : ''}`}
