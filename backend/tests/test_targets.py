@@ -501,3 +501,24 @@ def test_alias_index_reports_applied_cross_ids():
     assert ("Sh2-131", "IC1396") in pairs
     assert ("Sh2-117", "NGC7000") in pairs
     assert ("Sh2-162", "NGC7635") in pairs
+
+
+def test_sh2_cross_id_huge_region_capped_at_max_separation():
+    # Barnard's Loop (Sh2-276, ~600') vs NGC1981 (Cl+N) ~1.97 deg away: the
+    # size-scaled threshold (2.5 deg) would accept it; the 1 deg cap must not.
+    barnards_loop = Sh2Row("Sh2-276", "Sh 2-276", None, 86.5, -1.0, 600.0)
+    ngc1981 = _ngc("NGC1981", "Cl+N", 83.79, -4.43, 25.0)
+    assert sh2_cross_ids([barnards_loop], [ngc1981], overrides={}) == {}
+
+
+def test_sh2_cross_id_cap_keeps_large_genuine_pair():
+    # California Nebula: Sh2-220 vs NGC1499, 0.58 deg apart on the live catalog.
+    sh2_220 = Sh2Row("Sh2-220", "Sh 2-220", None, 60.2, 36.4, 145.0)
+    ngc1499 = _ngc("NGC1499", "HII", 60.2, 36.98, 145.0)
+    assert sh2_cross_ids([sh2_220], [ngc1499], overrides={}) == {"Sh2-220": "NGC1499"}
+
+
+def test_sh2_cross_id_default_overrides_suppress_barnards_loop():
+    barnards_loop = Sh2Row("Sh2-276", "Sh 2-276", None, 83.9, -4.4, 600.0)  # even if centred on it
+    ngc1981 = _ngc("NGC1981", "Cl+N", 83.79, -4.43, 25.0)
+    assert sh2_cross_ids([barnards_loop], [ngc1981]) == {}
