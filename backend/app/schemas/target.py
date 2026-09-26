@@ -55,7 +55,8 @@ class UnassignedSummary(BaseModel):
 class ByFilterRig(BaseModel):
     filter: str
     camera: Optional[str] = None
-    telescope: Optional[str] = None
+    pixel_scale: Optional[float] = None  # arcsec/px (median of plate solves)
+    focal_length: Optional[float] = None  # mm, derived from pixel size + scale
     subs: int
     seconds: float
 

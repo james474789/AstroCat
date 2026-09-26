@@ -11,7 +11,7 @@ import logging
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, text, delete
+from sqlalchemy import select, func, text, delete, Numeric
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as redis
 
@@ -22,6 +22,9 @@ from app.models.target import TargetGoal
 from app.schemas.target import TargetGoalInput
 from app.services.targets import normalize_designation
 from app.utils.filter_names import normalize_filter, filter_sort_key
+from app.utils.rig_optics import (
+    build_filter_rig_rows, valid_pixel_scale, parse_pixel_size, known_pixel_size, binning_factor,
+)
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -465,30 +468,47 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
 
     light_clause = _light_subs_clause()
 
-    # by_filter_rig
+    # by_filter_rig - rig identified by camera + measured pixel scale (telescope
+    # names are usually the mount driver); focal length derived from pixel size.
+    header_pix = func.coalesce(
+        Image.raw_header["XPIXSZ"].astext, Image.raw_header["PIXSIZE1"].astext
+    )
+    header_bin = Image.raw_header["XBINNING"].astext
+    scale_bucket = func.round(func.cast(Image.pixel_scale_arcsec, Numeric), 2)
     rig_stmt = (
         select(
             Image.filter_name,
             Image.camera_name,
-            Image.telescope_name,
+            scale_bucket.label("scale"),
+            header_pix.label("pix"),
+            func.coalesce(Image.binning, header_bin).label("bin"),
             func.count(Image.id).label("subs"),
             func.sum(Image.exposure_time_seconds).label("secs"),
         )
         .where(light_clause, Image.target_key == target_key)
-        .group_by(Image.filter_name, Image.camera_name, Image.telescope_name)
+        .group_by(Image.filter_name, Image.camera_name, scale_bucket, header_pix,
+                  func.coalesce(Image.binning, header_bin))
     )
     rig_rows = (await db.execute(rig_stmt)).all()
-    by_filter_rig_map: Dict[tuple, dict] = {}
+    rig_buckets = []
     for r in rig_rows:
-        norm = normalize_filter(r.filter_name)
-        k = (norm, r.camera_name, r.telescope_name)
-        entry = by_filter_rig_map.setdefault(k, {
-            "filter": norm, "camera": r.camera_name, "telescope": r.telescope_name,
-            "subs": 0, "seconds": 0.0,
+        # Header XPIXSZ is already the binned size; table sizes are unbinned.
+        pix = parse_pixel_size(r.pix)
+        if pix is None:
+            known = known_pixel_size(r.camera_name)
+            pix = known * binning_factor(r.bin) if known else None
+        rig_buckets.append({
+            "filter": normalize_filter(r.filter_name),
+            "camera": r.camera_name,
+            "pixel_scale": valid_pixel_scale(r.scale),
+            "pixel_size_um": pix,
+            "subs": r.subs or 0,
+            "seconds": float(r.secs or 0),
         })
-        entry["subs"] += r.subs or 0
-        entry["seconds"] += float(r.secs or 0)
-    by_filter_rig = sorted(by_filter_rig_map.values(), key=lambda e: filter_sort_key(e["filter"]))
+    by_filter_rig = sorted(
+        build_filter_rig_rows(rig_buckets),
+        key=lambda e: (filter_sort_key(e["filter"]), -e["seconds"]),
+    )
 
     # nights_detail
     nights_stmt = text("""
