@@ -151,6 +151,20 @@ async def trigger_reclassify_frame_types(payload: dict = None):
     return {"message": "Frame type reclassification started", "task_id": task.id}
 
 
+@router.post("/backfill-targets")
+async def trigger_backfill_targets(payload: dict = None):
+    """
+    Trigger a global target_key/target_source backfill (F2).
+    Uses stored header/match data -- no file IO required.
+    payload: {"all": boolean}  # re-resolve every non-MANUAL row, not just unassigned ones
+    """
+    reclassify_all = bool((payload or {}).get("all", False))
+    logger.info(f"Triggering target backfill (all={reclassify_all})")
+    from app.tasks.indexer import backfill_targets
+    task = backfill_targets.delay(reclassify_all)
+    return {"message": "Target backfill started", "task_id": task.id}
+
+
 
 @router.get("/status")
 async def get_indexer_status():

@@ -582,6 +582,21 @@ def reindex_all(self):
                 r.set("indexer:files_updated", "0")
                 r.set("indexer:files_removed", str(total_files_removed))
                 logger.info(f"Scan progress: {path} done; scanned={total_files_scanned} added={total_files_added} removed={total_files_removed}")
+
+        # Self-healing catch-up (F1/F2): fill in frame_type/target data for
+        # rows that predate those columns (e.g. after upgrading to a build
+        # that added them, when no one has run the one-off backfill script).
+        # Incremental only -- never reclassify_all -- so a routine rescan can
+        # never clobber a user override or force a full re-resolve; it only
+        # fills in rows that still have no value. Order matters: target
+        # resolution filters on frame_type == LIGHT.
+        logger.info("Running post-scan data backfill (frame types, targets)...")
+        from app.scripts.backfill_frame_types import backfill_frame_types as _backfill_frame_types
+        ft_summary = _backfill_frame_types(dry_run=False, reclassify_all=False)
+        logger.info(f"Frame type catch-up: scanned={ft_summary['total']} updated={ft_summary['updated']}")
+
+        from app.scripts.backfill_targets import backfill_targets as _backfill_targets
+        _backfill_targets(process_all=False)
     except SoftTimeLimitExceeded:
         logger.warning("Indexer scan soft time limit (6 hours) exceeded, saving state and stopping gracefully")
         # Ensure is_running is cleared so UI isn't blocked
@@ -760,4 +775,29 @@ def backfill_frame_types(self, reclassify_all: bool = False):
         }
     except Exception as e:
         logger.error(f"Error during frame type backfill: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+
+@celery_app.task(bind=True, name="app.tasks.indexer.backfill_targets",
+                 soft_time_limit=21600, time_limit=28800)
+def backfill_targets(self, reclassify_all: bool = False):
+    """
+    Celery wrapper around app.scripts.backfill_targets (F2).
+
+    Resolves target_key/target_source for LIGHT rows that don't have one yet
+    (or, with reclassify_all=True, every non-MANUAL row -- e.g. after an alias
+    index update or catalog reseed). Every reindex_all already does the
+    incremental version of this automatically; this task exists for the
+    explicit --all case and for on-demand re-runs without waiting on a full
+    mount rescan. Safe to re-run; a no-op once every LIGHT row has a source.
+    """
+    from app.scripts.backfill_targets import backfill_targets as _run_backfill
+
+    logger.info(f"Starting target backfill (reclassify_all={reclassify_all})...")
+    try:
+        _run_backfill(process_all=reclassify_all)
+        logger.info("Target backfill complete.")
+        return {"status": "completed"}
+    except Exception as e:
+        logger.error(f"Error during target backfill: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}

@@ -488,6 +488,15 @@ export async function triggerReclassifyFrameTypes(all = false) {
     }));
 }
 
+export async function triggerBackfillTargets(all = false) {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/backfill-targets`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ all }),
+        credentials: 'include'
+    }));
+}
+
 // ============ Settings API ============
 
 export async function fetchSettings() {
