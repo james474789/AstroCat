@@ -7,6 +7,7 @@ import ImageDetail from './pages/ImageDetail';
 import MetadataViewer from './pages/MetadataViewer';
 import MetadataSearch from './pages/MetadataSearch';
 import Catalogs from './pages/Catalogs';
+import Tonight from './pages/Tonight';
 import Targets from './pages/Targets';
 import TargetDetail from './pages/TargetDetail';
 import Stats from './pages/Stats';
@@ -103,6 +104,8 @@ const AppRoutes = () => {
                   <Route path="/metadata-search" element={<MetadataSearch />} />
                   <Route path="/catalogs" element={<Catalogs />} />
                   <Route path="/catalogs/:type/:designation" element={<Catalogs />} />
+                  {/* R1: inserted before Targets per docs/design/R1-recommendation-engine.md §8 */}
+                  <Route path="/tonight" element={<ErrorBoundary><Tonight /></ErrorBoundary>} />
                   <Route path="/targets" element={<Targets />} />
                   <Route path="/targets/:targetKey" element={<TargetDetail />} />
                   {/* R0: inserted after Targets per docs/design/README.md §4 */}
