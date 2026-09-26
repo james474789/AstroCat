@@ -731,6 +731,7 @@ export async function fetchTargets(params = {}) {
         filter: params.filter,
         has_master: params.has_master,
         catalog: params.catalog,
+        path: params.path || undefined,
         page: params.page || 1,
         page_size: params.page_size || 50,
         keys_only: params.keys_only,
@@ -744,8 +745,9 @@ export async function fetchTargetKeys() {
     return data.keys || [];
 }
 
-export async function fetchUnassignedTargetsSummary() {
-    return handleResponse(await fetch(`${API_BASE_URL}/targets/unassigned/summary`, { credentials: 'include' }));
+export async function fetchUnassignedTargetsSummary(path) {
+    const queryString = path ? buildQueryString({ path }) : '';
+    return handleResponse(await fetch(`${API_BASE_URL}/targets/unassigned/summary?${queryString}`, { credentials: 'include' }));
 }
 
 export async function fetchTarget(key) {
