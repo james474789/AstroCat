@@ -315,7 +315,8 @@ async def _compute_targets_list(db: AsyncSession) -> List[dict]:
 
         meta = catalog_meta.get(key)
         if meta:
-            display_name = f"{key} — {meta['common_name']}" if meta.get("common_name") else key
+            base_name = meta.get("designation") or key
+            display_name = f"{base_name} — {meta['common_name']}" if meta.get("common_name") else base_name
             catalog_type = meta.get("catalog_type")
             object_type = meta.get("object_type")
             constellation = meta.get("constellation")
