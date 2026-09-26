@@ -488,6 +488,12 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
             session.add(image)
             session.flush() # Get ID
 
+        # Capture-time provenance + site coordinates (P0), both branches.
+        from app.utils.capture_time import apply_capture_time
+        from app.utils.header_values import apply_site
+        apply_capture_time(image, metadata)
+        apply_site(image, metadata)
+
         # 3. Match Catalogs (if plate solved, LIGHT frames only)
         matches_count = 0
         if image.frame_type != FrameType.LIGHT:
