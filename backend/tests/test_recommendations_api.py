@@ -158,8 +158,11 @@ def test_target_endpoint_shape_and_unknown_key_404(fake_loader, monkeypatch):
     assert body["target_key"] == "NGC7000" and body["night"] == "2026-09-26"
     by_rig = {r["rig_id"]: r for r in body["results"]}
     assert by_rig[1]["pick"] is not None and by_rig[1]["excluded_reason"] is None
-    assert by_rig[2]["pick"] is None and by_rig[2]["excluded_reason"] in ("MOON", "TIER")
-    assert "usable_hours" in by_rig[2]["details"]
+    # The OSC rig survives the generous hard Moon filter but has no Moon-clear hours.
+    assert by_rig[2]["pick"] is not None and by_rig[2]["pick"]["available_hours"] < 0.5
+    d = by_rig[2]["details"]
+    assert {"usable_hours", "usable_hours_hard", "available_hours_hard", "required_sep_deg", "target_px",
+            "max_alt_deg", "moon_sep_min_deg", "mode"} <= set(d)
 
     alias = asyncio.run(api.explain_target("Andromeda", date(2026, 9, 26), None, "mounted"))
     assert alias["target_key"] == "M31"

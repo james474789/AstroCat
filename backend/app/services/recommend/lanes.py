@@ -161,7 +161,7 @@ def verdict(hero: Optional[Pick], tier: str) -> Tuple[str, List[Dict[str, str]]]
     if tier == TIER_NAUTICAL:
         reasons.append({"code": "TIER", "text": "nautical darkness only"})
     elif tier == TIER_BRIGHT:
-        reasons.append({"code": "TIER", "text": "bright twilight only: narrowband"})
+        reasons.append({"code": "TIER", "text": "bright twilight only (broadband penalised)"})
     if hero.available_hours >= GO_MIN_HOURS and tier in (TIER_ASTRO, TIER_NAUTICAL):
         return VERDICT_GO, reasons
     if hero.available_hours >= MARGINAL_MIN_HOURS or tier == TIER_BRIGHT:
@@ -173,6 +173,8 @@ def verdict(hero: Optional[Pick], tier: str) -> Tuple[str, List[Dict[str, str]]]
 def pick_reasons(pick: Pick, tier: str) -> List[Dict[str, str]]:
     label = MODE_LABELS.get(pick.mode, pick.mode)
     out = [{"code": "MOON_CLEAR", "text": f"{pick.available_hours:.1f} h clear of Moon ({label})"}]
+    if pick.usable_hours < 0.5 and pick.max_alt_deg is not None:
+        out.append({"code": "LOW", "text": f"below your usual horizon (max {pick.max_alt_deg:.0f}°)"})
     if pick.components.get("momentum", 0.0) > 0 and pick.days_since is not None:
         days = pick.days_since
         out.append({"code": "ACTIVE", "text": f"last imaged {days} day{'s' if days != 1 else ''} ago"})
@@ -192,5 +194,6 @@ def pick_reasons(pick: Pick, tier: str) -> List[Dict[str, str]]:
     if tier == TIER_NAUTICAL:
         out.append({"code": "TIER", "text": "nautical darkness only"})
     elif tier == TIER_BRIGHT:
-        out.append({"code": "TIER", "text": "bright twilight only: narrowband"})
+        out.append({"code": "TIER", "text": "bright twilight: broadband penalised" if pick.mode in ("BB", "OSC")
+                    else "bright twilight only"})
     return out

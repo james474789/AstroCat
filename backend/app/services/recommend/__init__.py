@@ -29,9 +29,9 @@ from app.services.recommend.lanes import (
     DEFAULT_PER_LANE, Pick, build_lanes, pick_reasons, verdict,
 )
 from app.services.recommend.scoring import (
-    CLASS_INDEX, DEFAULT_MIN_USABLE_H, EXCL_NONE, EXCLUDED_CODES, EXCLUDED_REASONS, MOON_RULES, RigEval, RigSpec,
-    Weights, best_rigs, evaluate_rig, future_usable_hours, history_arrays, night_features, urgency_scores,
-    useful_mask,
+    BRIGHT_BROADBAND_FACTOR, CLASS_INDEX, DEFAULT_MIN_USABLE_H, EXCL_NONE, EXCLUDED_CODES, EXCLUDED_REASONS,
+    MOMENTUM_TAU_DAYS, MOON_HARD_FRACTION, MOON_RULES, RigEval, RigSpec, Weights, best_rigs, evaluate_rig,
+    future_usable_hours, history_arrays, night_features, urgency_scores, useful_mask,
 )
 
 RIG_MODE_MOUNTED = "MOUNTED"
@@ -71,8 +71,11 @@ class Params:
     rig_mode: str = RIG_MODE_ALL
     weights: Weights = field(default_factory=Weights)
     moon_rules: Mapping[str, Tuple[float, float]] = field(default_factory=lambda: dict(MOON_RULES))
-    min_usable_h: float = DEFAULT_MIN_USABLE_H
+    min_usable_h: float = DEFAULT_MIN_USABLE_H          # hard filter, hours above the relaxed limit
     per_lane: int = DEFAULT_PER_LANE
+    momentum_tau_days: float = MOMENTUM_TAU_DAYS
+    moon_hard_fraction: float = MOON_HARD_FRACTION
+    bright_broadband_factor: float = BRIGHT_BROADBAND_FACTOR
     include_excluded: bool = False
     light: bool = False            # replay: ranked list only (no lanes, reasons or curves)
 
@@ -105,8 +108,8 @@ class Result:
     evals: List[RigEval] = field(repr=False, default_factory=list)
 
 
-def _moon_key(rules: Mapping[str, Tuple[float, float]]) -> tuple:
-    return tuple(sorted((k, tuple(v)) for k, v in rules.items()))
+def _moon_key(rules: Mapping[str, Tuple[float, float]], hard_fraction: float = MOON_HARD_FRACTION) -> tuple:
+    return tuple(sorted((k, tuple(v)) for k, v in rules.items())) + (("hard", hard_fraction),)
 
 
 def prepare_night(inputs: EngineInputs, params: Params) -> PreparedNight:
@@ -114,28 +117,29 @@ def prepare_night(inputs: EngineInputs, params: Params) -> PreparedNight:
     site = inputs.site
     sky = night_sky(pool, inputs.night, site.latitude, site.longitude)
     ctx = build_context(sky.eph, site, inputs.horizon)
-    feats = night_features(ctx, sky, params.moon_rules)
+    feats = night_features(ctx, sky, params.moon_rules, params.moon_hard_fraction)
     if ctx.tier == TIER_NONE or len(pool) == 0:
         future = np.zeros((len(pool), 12), dtype=np.float32)
     else:
         future = future_usable_hours(pool, site.latitude, site.longitude, inputs.night, ctx.horizon, ctx.floor_deg)
-    urgency, weeks_left = urgency_scores(feats.usable_h, future, params.min_usable_h)
+    urgency, weeks_left = urgency_scores(feats.usable_h, future)
     return PreparedNight(ctx=ctx, sky=sky, feats=feats, future=future, urgency=urgency, weeks_left=weeks_left,
-                         moon_rules_key=_moon_key(params.moon_rules), useful=useful_mask(pool))
+                         moon_rules_key=_moon_key(params.moon_rules, params.moon_hard_fraction),
+                         useful=useful_mask(pool))
 
 
 def _prepared(inputs: EngineInputs, params: Params, prepared: Optional[PreparedNight]) -> PreparedNight:
     if (prepared is None or prepared.ctx.night != inputs.night or prepared.ctx.site.id != inputs.site.id
-            or prepared.moon_rules_key != _moon_key(params.moon_rules)):
+            or prepared.moon_rules_key != _moon_key(params.moon_rules, params.moon_hard_fraction)):
         prepared = prepare_night(inputs, params)
     return prepared
 
 
 def _evaluate(inputs: EngineInputs, params: Params, prep: PreparedNight):
     pool = inputs.pool
-    hist = history_arrays(pool, inputs.history, inputs.goals, inputs.night)
+    hist = history_arrays(pool, inputs.history, inputs.goals, inputs.night, params.momentum_tau_days)
     evals = [evaluate_rig(r, pool, prep.feats, hist, prep.urgency, prep.ctx.tier, params.weights, prep.useful,
-                          params.min_usable_h) for r in inputs.rigs]
+                          params.min_usable_h, params.bright_broadband_factor) for r in inputs.rigs]
     return hist, evals
 
 
@@ -238,6 +242,37 @@ def recommend(inputs: EngineInputs, params: Optional[Params] = None,
 # One target, every rig ("why / why not")
 # ---------------------------------------------------------------------------
 
+def pair_details(prep: PreparedNight, ev: RigEval, i: int, params: Params) -> Dict[str, Any]:
+    """Numbers behind one (target, rig) verdict (per-target endpoint and replay misses)."""
+    feats = prep.feats
+    mode_idx = int(ev.mode[i])
+    mode = CLASSES[mode_idx] if mode_idx >= 0 else None
+
+    def r(v, nd=2):
+        return None if v is None or np.isnan(v) else round(float(v), nd)
+
+    return {
+        "tier": prep.ctx.tier,
+        "rig_id": ev.rig.id,
+        "rig_name": ev.rig.name,
+        "usable_hours": round(float(feats.usable_h[i]), 2),
+        "usable_hours_hard": r(feats.usable_hard_h[i]) if feats.usable_hard_h is not None else None,
+        "available_hours": round(float(ev.avail_h[i]), 2),
+        "available_hours_hard": r(ev.avail_hard_h[i]) if ev.avail_hard_h is not None else None,
+        "mode": mode,
+        "fill_ratio": r(ev.ratio[i], 3),
+        "target_px": r(ev.px[i], 1),
+        "max_alt_deg": round(float(feats.max_alt[i]), 1) if feats.max_alt[i] > -90 else None,
+        "moon_sep_min_deg": r(feats.sep_min[i], 1),
+        "required_sep_deg": round(float(feats.required[mode]), 1) if mode else None,
+        "moon_clear_hours": {c: round(float(feats.moon_ok_h[i, CLASS_INDEX[c]]), 2)
+                             for c in CLASSES if ev.pair_mask[i, CLASS_INDEX[c]]},
+        "required_moon_sep_deg": {c: round(float(v), 1) for c, v in feats.required.items()},
+        "rig_classes": sorted(ev.rig.classes),
+        "min_usable_hours": params.min_usable_h,
+    }
+
+
 def explain_target(inputs: EngineInputs, params: Params, key: str,
                    prepared: Optional[PreparedNight] = None) -> Optional[Dict[str, Any]]:
     """The §7 per-target shape, or None when the key isn't in the candidate pool."""
@@ -257,22 +292,7 @@ def explain_target(inputs: EngineInputs, params: Params, key: str,
             p = _build_pick(inputs, prep, hist, ev, i)
             p.reasons = pick_reasons(p, prep.ctx.tier)
             pick = pick_to_dict(p, prep)
-        mode_idx = int(ev.mode[i])
-        details = {
-            "tier": prep.ctx.tier,
-            "usable_hours": round(float(feats.usable_h[i]), 2),
-            "available_hours": round(float(ev.avail_h[i]), 2),
-            "mode": CLASSES[mode_idx] if mode_idx >= 0 else None,
-            "fill_ratio": None if np.isnan(ev.ratio[i]) else round(float(ev.ratio[i]), 3),
-            "target_px": None if np.isnan(ev.px[i]) else round(float(ev.px[i]), 1),
-            "max_alt_deg": round(float(feats.max_alt[i]), 1) if feats.max_alt[i] > -90 else None,
-            "moon_sep_min_deg": None if np.isnan(feats.sep_min[i]) else round(float(feats.sep_min[i]), 1),
-            "moon_clear_hours": {c: round(float(feats.moon_ok_h[i, CLASS_INDEX[c]]), 2)
-                                 for c in CLASSES if ev.pair_mask[i, CLASS_INDEX[c]]},
-            "required_moon_sep_deg": {c: round(float(v), 1) for c, v in feats.required.items()},
-            "rig_classes": sorted(ev.rig.classes),
-            "min_usable_hours": params.min_usable_h,
-        }
+        details = pair_details(prep, ev, i, params)
         results.append({"rig_id": ev.rig.id, "rig_name": ev.rig.name, "pick": pick,
                         "excluded_reason": EXCLUDED_CODES.get(code), "details": details})
     return {"target_key": cand.key, "name": cand.name, "night": inputs.night.isoformat(), "results": results}
