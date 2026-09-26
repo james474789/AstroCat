@@ -18,6 +18,7 @@ Pure functions of (RA/Dec arrays, lat, lon, night). `night_ephemeris` and
 """
 
 import math
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -174,24 +175,35 @@ def moon_separation(eph: NightEphemeris, ra_deg: np.ndarray, dec_deg: np.ndarray
 # ---------------------------------------------------------------------------
 
 class _LRU:
+    """
+    Small thread-safe LRU (the API runs the engine in a threadpool). An entry
+    may be tied to an owner object (the candidate pool): it only hits for
+    that same object, so a recycled id() can never serve stale arrays.
+    """
+
     def __init__(self, size: int):
         self.size = size
         self.data: "OrderedDict" = OrderedDict()
+        self.lock = threading.Lock()
 
-    def get(self, key):
-        if key in self.data:
+    def get(self, key, owner=None):
+        with self.lock:
+            hit = self.data.get(key)
+            if hit is None or hit[0] is not owner:
+                return None
             self.data.move_to_end(key)
-            return self.data[key]
-        return None
+            return hit[1]
 
-    def put(self, key, value):
-        self.data[key] = value
-        self.data.move_to_end(key)
-        while len(self.data) > self.size:
-            self.data.popitem(last=False)
+    def put(self, key, value, owner=None):
+        with self.lock:
+            self.data[key] = (owner, value)
+            self.data.move_to_end(key)
+            while len(self.data) > self.size:
+                self.data.popitem(last=False)
 
     def clear(self):
-        self.data.clear()
+        with self.lock:
+            self.data.clear()
 
 
 _EPH_CACHE = _LRU(64)
@@ -218,14 +230,14 @@ class NightSky:
 
 def night_sky(pool, night: date, lat: float, lon: float, step_min: int = STEP_MIN, cache: bool = True) -> NightSky:
     key = (id(pool), len(pool), night, round(lat, 5), round(lon, 5), step_min)
-    sky = _SKY_CACHE.get(key) if cache else None
+    sky = _SKY_CACHE.get(key, owner=pool) if cache else None
     if sky is None:
         eph = night_ephemeris(night, lat, lon, step_min)
         alt, az = target_altaz(eph, pool.ra, pool.dec)
         sep = moon_separation(eph, pool.ra, pool.dec)
         sky = NightSky(eph=eph, alt=alt, az=az, sep=sep)
         if cache:
-            _SKY_CACHE.put(key, sky)
+            _SKY_CACHE.put(key, sky, owner=pool)
     return sky
 
 

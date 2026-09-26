@@ -206,7 +206,7 @@ def future_usable_hours(pool: CandidatePool, lat: float, lon: float, night: date
     for wk in range(1, weeks + 1):
         fut = night + timedelta(days=7 * wk)
         key = (id(pool), len(pool), round(lat, 5), round(lon, 5), fut, hz, round(floor_deg, 3), step_min)
-        col = _SEASON_CACHE.get(key)
+        col = _SEASON_CACHE.get(key, owner=pool)
         if col is None:
             eph = compute_night_ephemeris(fut, lat, lon, step_min, moon_fn=_no_moon)
             tier, mask = darkness_tier(eph.sun_alt, eph.step_h)
@@ -217,7 +217,7 @@ def future_usable_hours(pool: CandidatePool, lat: float, lon: float, night: date
                 alt, az = alt_az(pool.ra[:, None], pool.dec[:, None], jd[None, :], lat, lon)
                 lim = horizon_limit(horizon, floor_deg, az)
                 col = ((alt > lim).sum(axis=1) * eph.step_h).astype(np.float32)
-            _SEASON_CACHE.put(key, col)
+            _SEASON_CACHE.put(key, col, owner=pool)
         out[:, wk - 1] = col
     return out
 
