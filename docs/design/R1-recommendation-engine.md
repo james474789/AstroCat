@@ -655,3 +655,71 @@ every change to them is additive.
   `pool_coverage`. The learned horizon used for replay is today's (static, like the catalog).
 - **New-file UTC:** the indexer hook also applies the default-site rule, so new site-less
   local-clock files get UTC immediately.
+
+
+### 14.1 Tuning round (`feat/r1-tuning`, after the first live replay)
+
+The first live replay (272 nights, default weights) gave hit@5 0.268 and MRR 0.179, below the
+recency baseline (0.493 / 0.407), and `feasible_recall` 0.667. The misses were: MOON 56,
+TOO_SMALL 43, BELOW_HORIZON 35, TIER 6, TOO_BIG 2 and NOT_IN_POOL 51. The changes below
+supersede §4.5–§4.6 and §5 where they differ. The default weights and Moon rules are
+unchanged; new weights are chosen with the owner from a re-run.
+
+- **Hard filters are generous.** They drop only clear-cut cases. The full soft rules still
+  drive `available_hours`, `observability` and the score.
+  - **MOON:** excluded only when the pair has < 0.5 h (on the relaxed horizon) clear of
+    **0.5 × the required distance**, with the same 5° sigmoid (`Params.moon_hard_fraction`).
+    Broadband is routinely imaged 25–80° from the Moon.
+  - **BELOW_HORIZON:** hard limit = `max(15°, limit(az) − 10°)`; `min_usable_h` defaults to
+    **0.5 h** above it. `usable_hours`, `observability` and the Moon-clear hours use the real
+    limit, so a low target (Orion from ~56°N culminates at 28–30°) survives but scores low.
+    A `LOW` reason chip says "below your usual horizon (max N°)". Seasonal urgency keeps the
+    real limit and 1 h.
+  - **TIER:** only `NONE` removes classes. In `BRIGHT`, broadband/OSC is allowed with
+    `observability × 0.3` (`Params.bright_broadband_factor`), and the TIER chip says
+    "bright twilight: broadband penalised". `TIER` as an exclusion now only means the rig has
+    no filter class useful for the target (or the tier is NONE).
+  - **TOO_SMALL** below 15 px; **TOO_BIG** above 4 × the FOV short side.
+  - Consequence for §11 item 3: near a full Moon, broadband picks can now appear. They have
+    ~0 `available_hours` and rank low. The check becomes "every BB pick < 60° from the Moon
+    has `available_hours` < 0.5 and ranks below the narrowband hero".
+- **Momentum:** `exp(−days/tau)` with `Params.momentum_tau_days` (default 45). It is zero
+  beyond 3 × tau (was: zero beyond 180 days), so with the default it is zero beyond 135 days.
+  "Committed" (momentum > 0) follows the same cutoff.
+- **`recency_rank`** is a new component: `1 / (1 + rank)`, where the rank is the number of
+  targets imaged more recently (ties share a rank). Its weight defaults to 0. It appears in
+  `components`, an additive change to the §7 shape.
+- **Pool fixes:**
+  - Imaged keys whose OpenNGC row is typed `*` or `Other` (IC1318, IC5067, IC155, IC3584,
+    NGC1990) were dropped by the NGC type skip. They are now candidates. An OTHER kind imaged
+    ≥ 50% in narrowband becomes EMISSION.
+  - `Dup` rows (IC11, IC395, NGC2244, …) fold into the candidate within 0.25° (the pool's
+    `dup_map`). An imaged Dup with nothing nearby becomes its own candidate.
+- **Stray history keys** (history mapping only; `images` is not modified): a key that isn't
+  in the pool folds into a pool key when it, or it with a trailing filter word (`LUM`, `HA`,
+  `L`, …) or one trailing panel digit removed, resolves through the alias index or the Dup
+  map. Examples: `OBJ:NGC78222` → NGC7822, `OBJ:IC13961` → IC1396, `OBJ:M81LUM` → M81,
+  `OBJ:NGC22441` → NGC2239. The folding applies to the live engine too.
+- **Replay evaluation set:**
+  - Each actual (key, night) pair is HOME (majority `site_latitude` within 1.5° of a
+    configured site), REMOTE, or UNKNOWN_SITE (no latitude).
+  - **Headline metrics, baselines and breakdowns use HOME + UNKNOWN_SITE**; `nights` counts
+    nights with at least one headline pair. `remote` holds the same metrics for REMOTE pairs.
+  - The breakdown adds `site_class` and `source` (HEADER = HEADER/HEADER_RAW/MANUAL vs
+    MATCH). `pair_counts` gives the pair counts.
+  - Every miss carries `site_class`, `source`, and `details` for the rig that got furthest
+    through the hard filters (rig, mode, usable and hard-usable hours, available and
+    hard-available hours, Moon separation and required separation, max altitude, fill
+    ratio, target px).
+  - `folded_keys` records the fold map and counts.
+- **Tuning grid** (`--grid`):
+  - The space is `replay.TUNING_SPACE`: momentum {0.3, 0.45, 0.6}, tau {10, 20, 45},
+    recency_rank {0, 0.2}, project {0, 0.1}, observability {0.125, 0.25}, framing {0.1, 0.2},
+    urgency {0.075}, prior {0.05, 0.1}. That is 288 combinations; `--grid-max N` takes a
+    seeded sample.
+  - `--grid-moon` adds a first stage over broadband/OSC D ∈ {60, 90, 120} at the default
+    weights. The best rule set is then used for the weight grid.
+  - Each row carries the recency baseline on the same headline pairs.
+  - The grid reuses the main run's per-night state. On a synthetic 272-night fixture that is
+    about 1 s per combination; expect about 3× that live.
+  - `--moon-bb D[,W]` sets the broadband/OSC rule for a single run.
