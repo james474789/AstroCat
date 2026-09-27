@@ -2,13 +2,24 @@
 
 Written: 2026-09-26 · Author: Claude (orchestrating session) · For: the agent or developer picking up R0 next
 
-`main` HEAD: **`97798a5`** + this doc update (local; **not pushed**). Live stack: backend and frontend
-**`20260926.15`**, healthy. Alembic head: **`e8a0c4f51008`**. Data migrations applied: `0001`–`0007`.
-Backups: `library/backups/pre_p0_20260926.dump`, `library/backups/pre_r0_20260926.dump`.
+`main` HEAD: **`10d9851`** + this doc update, **pushed to `origin/main` on 2026-09-27**. Live
+stack: backend and frontend **`20260927.02`**, healthy. Alembic head: **`a0c2e6b73010`**. Data
+migrations applied: `0001`–`0008`.
+Backups in `library/backups/`: `pre_p0_20260926.dump`, `pre_r0_20260926.dump`,
+`pre_r1_20260926.dump`, `pre_r2a_20260927.dump`.
 
 > **Update, 2026-09-26 (late):** R0 is deployed and owner-checked (see §2a). The **R1 spec is
 > [R1-recommendation-engine.md](R1-recommendation-engine.md)**, which supersedes §4 of this file for
 > R1 work. §3 below is kept as a record of how R0 was run; R1 uses the same pattern (R1 spec §12).
+
+> **Update, 2026-09-27:**
+> - **R1 is deployed**, with the owner keeping the default weights; see
+>   [R1-replay-results.md](R1-replay-results.md).
+> - **R2a is deployed and owner-checked** (`20260927.02`). Tonight picks now have feedback actions:
+>   pin, snooze, dismiss, "imaged it". The page logs what it showed for the current night, and the
+>   outcomes endpoint checks those picks against the library. There's also a Dashboard tile.
+> - **Next is R2b.** Tune it against the feedback and outcomes collected. Give it a few weeks of
+>   use first: the Outcomes panel shows "collecting data" until 5 imaged nights.
 
 ## 0. Read in this order
 
@@ -31,8 +42,8 @@ Backups: `library/backups/pre_p0_20260926.dump`, `library/backups/pre_r0_2026092
 | **P0** | Canonical target keys + Sh2 cross-IDs + `NONE` sentinel, capture-time provenance, site persistence | ✅ **deployed & verified** | actual: ~250k agent + ~150k orchestration |
 | **R0** | Equipment & Sites: spec §4 | ✅ **deployed & owner-checked** (§2a) | actual: ~340k B1 + ~260k B2 + ~120k orchestration |
 | **R1** | Local recommendation engine + replay test + Tonight page. Spec: [R1-recommendation-engine.md](R1-recommendation-engine.md), results: [R1-replay-results.md](R1-replay-results.md) | ✅ **deployed** (`20260927.01`). The owner kept default weights; replay §11.2 is knowingly not met (diagnostic only) | actual: ~1.3M |
-| **R2a** | Feedback actions, impressions and outcomes, Dashboard tile. Spec: [R2a-feedback-dashboard.md](R2a-feedback-dashboard.md) | ⏭ **next** (spec written) | 0.35–0.5M |
-| R2b | Affinity/novelty/revisit lanes, inferred goals, palette completeness, tuned on R2a feedback | not started | 0.4–0.6M |
+| **R2a** | Feedback actions, impressions and outcomes, Dashboard tile. Spec: [R2a-feedback-dashboard.md](R2a-feedback-dashboard.md) | ✅ **deployed & owner-checked** (`20260927.02`) | actual: ~0.25M B1 + ~0.17M B2 + orchestration |
+| R2b | Affinity/novelty/revisit lanes, inferred goals, palette completeness, tuned on R2a feedback | ⏭ next, after a few weeks of feedback | 0.4–0.6M |
 | R3 | Season planner, opt-in weather, `.hrz`/Target Scheduler export | not started | 0.6–0.9M |
 | R4 | Optional LLM nightly briefing | not started | 0.2–0.4M |
 | F7 / F16 | Sessions / mosaics (older design docs) | not started | F7 should build on R0's `sites` table |
@@ -272,7 +283,7 @@ Lessons that the R1 spec must encode (research §9, §8b):
 - **Git:**
   - Branch before committing (never commit straight to `main`); merge with `--no-ff`.
   - End commit messages with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-  - **Nothing has been pushed**; the owner decides when.
+  - **Pushing is the owner's call.** `main` was first pushed on 2026-09-27, after a scan of the outgoing diff for coordinates and keys. Ask before each push.
 - **Privacy:** the repo and Docker image are public. Don't put the owner's precise site coordinates
   in code, tests or docs. Use generic fixtures (e.g. 51.48, −0.0). "~56°N" is the agreed level of
   detail.
