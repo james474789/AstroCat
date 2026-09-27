@@ -530,6 +530,26 @@ These are the places where the implementation differs from the text above. Where
 - **Genuine optics findings.** The 3×3 grid shows a left/right HFR gradient on the R7 night (3.3 vs 2.3 px). The ASI294 30-Nov R subs have strongly elongated stars (major/minor ≈ 2), which N.I.N.A.'s single HFR number doesn't show.
 - **Library size at build time.** 64.7 k eligible frames (23 k FIT, 21 k FITS, 13 k CR2, 4.4 k JPG, 1.3 k CR3, 1 k TIF, 308 XISF, …). At 200 per 10 min the backfill takes about 2–3 days.
 
+## 11b. As built — Q1a-2 and Q1b (2026-09-27)
+
+**Q1a-2**
+- `ImageDetail.quality` block, re-measure endpoints, Admin ⭐ Star Quality section, and the ″/px toggle (sidebar and card).
+- Runtime switches live in the Redis system settings: `quality_units`, `star_metrics_enabled`, `star_metrics_backfill`. The env `STAR_METRICS_*` settings win when off.
+
+**Q1b**
+- **Targets list.** Every target and filter bucket gets `quality`: median FWHM/HFR in px and arcsec. Target-level values come from exact Postgres `percentile_cont`. Filter buckets that fold several raw names use a measured-weighted median of the per-name medians.
+- **Sort.** `sort=fwhm` puts the sharpest first. Unmeasured targets always sort last.
+- **By Filter & Rig.** Buckets carry `quality_samples` (`[fwhm_px, hfr_px, ecc, stars, scale]` per measured sub, via `json_agg`). Both row builders in `rig_optics.py` concatenate them, and `summarize_samples` produces median, best (p10) and p90 FWHM, HFR, eccentricity and star count after the fold.
+- **Nights.** Each `nights_detail[]` entry gets `quality`. Target Detail draws it as a right-axis line on the Nights chart.
+- **Masters.** Masters carry `fwhm_px`/`hfr_px` and arcsec, shown under each master card.
+- **ALGO_VERSION 2.** Real EdgeHD narrowband subs (0.34″/px, uncalibrated 300 s Hα/SII) gave FWHM 1.2 px against HFR 4.4 px, because fit candidates were ranked by peak and warm-pixel pairs out-peaked the soft stars. Three changes fixed it:
+  - Candidates are now ranked by flux.
+  - Objects whose HFR is below 0.5× the HFR of the brightest-by-flux stars are rejected as artefacts and not counted.
+  - Fits narrower than 0.8× the star's own HFR are discarded.
+
+  Those subs now measure 7.5–8.1 px, consistent with the rest of the night, and control frames are unchanged within about 5%. Rows measured by version 1 are re-measured automatically.
+- **Plate-scale guard.** 466 of 6,417 header-solved images store a plate scale more than 2.5× off their rig's measured scale (e.g. 72″/px on registered `_r.fit` subs of a 2.27″/px rig). `resolve_scale` / `SCALE_SQL` use the rig scale in that case (`scale_source: RIG_OVERRIDE`), and Image Detail explains why. The root cause is a separate task.
+
 ## 12. Decisions (owner, 2026-09-27)
 
 1. **Header/filename hints: use them when present.** The capture software only sometimes writes HFR. The hint parser (§4.7) ships in Q1a.

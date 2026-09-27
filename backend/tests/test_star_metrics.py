@@ -121,6 +121,23 @@ class TestRejection:
         assert m.status == "OK"
         assert m.fwhm_px == pytest.approx(4.0, rel=0.05)
 
+    def test_warm_pixel_pairs_do_not_hijack_fwhm_on_oversampled_data(self):
+        # Real case (NGC2392, EdgeHD at 0.34"/px, uncalibrated 300 s Ha): soft
+        # 8 px stars plus bright 2-pixel warm-pixel clusters whose peaks beat
+        # the stars'. Fits picked by peak landed on the warm pixels (FWHM 1.2 px
+        # vs HFR 4.4 px). Candidates must be chosen by flux and sharp outliers dropped.
+        rng = np.random.default_rng(21)
+        img = star_field(fwhm=8.0, n=300, shape=(1500, 1500), flux_range=(5e4, 6e5), seed=21)
+        for _ in range(400):
+            y, x = rng.integers(20, 1480, 2)
+            img[y, x] += 9000
+            img[y, x + 1] += 6000
+        m = measure_array(img)
+        assert m.status == "OK"
+        assert m.fwhm_px == pytest.approx(8.0, rel=0.08)
+        assert m.hfr_px == pytest.approx(_moffat_hfr(8.0), rel=0.08)
+        assert m.star_count < 400   # warm pixels are not counted as stars
+
     def test_blank_frame_is_no_stars(self):
         rng = np.random.default_rng(5)
         blank = (1000 + rng.normal(0, 10, (800, 800))).astype(np.float32)

@@ -218,3 +218,28 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
 }
+
+/* Inline values (tables, lists) */
+.quality-inline {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.quality-inline.fell-back {
+    color: var(--color-text-secondary);
+}
+
+.quality-coverage {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+}
+
+.master-quality {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    padding: 0.3rem 0.2rem 0;
+}

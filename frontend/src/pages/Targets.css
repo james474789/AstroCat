@@ -172,7 +172,7 @@
 
 .target-row {
     display: grid;
-    grid-template-columns: 64px 1fr 110px 80px 120px 160px;
+    grid-template-columns: 64px 1fr 110px 80px 80px 120px 160px;
     align-items: center;
     gap: 1rem;
     background: var(--color-surface);

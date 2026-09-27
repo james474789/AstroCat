@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
+    ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Pin, PinOff } from 'lucide-react';
 import {
@@ -9,6 +9,8 @@ import {
     fetchTargetRecommendation, postRecommendationFeedback,
 } from '../api/client';
 import ImageCard from '../components/images/ImageCard';
+import QualityValue from '../components/quality/QualityValue';
+import { useQualityUnits } from '../context/QualityUnitsContext';
 import './TargetDetail.css';
 
 // R2a §7: "Pin for Tonight" toggle. Binding contract: docs/design/R2a-feedback-dashboard.md §6-§7.
@@ -39,6 +41,7 @@ export default function TargetDetail() {
     const [inPool, setInPool] = useState(false);
     const [pinned, setPinned] = useState(false);
     const [pinBusy, setPinBusy] = useState(false);
+    const { units } = useQualityUnits();
 
     useEffect(() => {
         load();
@@ -124,11 +127,19 @@ export default function TargetDetail() {
 
     const nightsChartData = useMemo(() => {
         if (!target?.nights_detail) return [];
-        return target.nights_detail.map((n) => ({
-            night: n.night,
-            ...n.filters,
-        }));
-    }, [target]);
+        return target.nights_detail.map((n) => {
+            const q = n.quality;
+            // Q1b: median FWHM of the night, in the viewer's units (px when no scale is known).
+            const fwhm = q ? (units === 'ARCSEC' && q.median_fwhm_arcsec != null ? q.median_fwhm_arcsec : q.median_fwhm_px) : null;
+            return { night: n.night, ...n.filters, fwhm };
+        });
+    }, [target, units]);
+
+    const hasNightQuality = useMemo(
+        () => nightsChartData.some((n) => n.fwhm != null),
+        [nightsChartData],
+    );
+    const fwhmUnit = units === 'ARCSEC' && target?.nights_detail?.some((n) => n.quality?.median_fwhm_arcsec != null) ? '″' : ' px';
 
     const filterKeysForChart = useMemo(() => {
         if (!target?.filters) return [];
@@ -197,6 +208,15 @@ export default function TargetDetail() {
                             <span className="hero-stat-value">{target.master_count}</span>
                             <span className="hero-stat-label">Masters</span>
                         </div>
+                        {target.quality && (
+                            <div className="hero-stat">
+                                <span className="hero-stat-value">
+                                    <QualityValue px={target.quality.median_fwhm_px} arcsec={target.quality.median_fwhm_arcsec}
+                                        title={`Median FWHM over ${target.quality.measured} measured subs (all rigs)`} />
+                                </span>
+                                <span className="hero-stat-label">Median FWHM</span>
+                            </div>
+                        )}
                         {target.planetary_count > 0 && (
                             <div className="hero-stat">
                                 <span className="hero-stat-value">{target.planetary_count}</span>
@@ -244,6 +264,7 @@ export default function TargetDetail() {
                             <th>Filter</th>
                             <th>Subs</th>
                             <th>Integration</th>
+                            <th title="Median FWHM of the measured subs in this filter (all rigs)">FWHM</th>
                             <th>Goal (hours)</th>
                             <th>Progress</th>
                         </tr>
@@ -261,6 +282,10 @@ export default function TargetDetail() {
                                     </td>
                                     <td>{f.subs}</td>
                                     <td>{formatHours(f.seconds)}</td>
+                                    <td>
+                                        <QualityValue px={f.quality?.median_fwhm_px} arcsec={f.quality?.median_fwhm_arcsec}
+                                            title={f.quality ? `Median over ${f.quality.measured} measured subs` : undefined} />
+                                    </td>
                                     <td>
                                         <input
                                             type="number"
@@ -308,6 +333,10 @@ export default function TargetDetail() {
                                 <th>Focal Length</th>
                                 <th>Subs</th>
                                 <th>Integration</th>
+                                <th title="Median FWHM of the measured subs">FWHM</th>
+                                <th title="Best 10% of subs (10th percentile FWHM)">Best</th>
+                                <th title="Median half-flux radius">HFR</th>
+                                <th title="Median eccentricity: 0 is round; above ~0.5 stars look elongated">Ecc.</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -319,6 +348,19 @@ export default function TargetDetail() {
                                     <td>{r.focal_length != null ? `${Math.round(r.focal_length)} mm` : '—'}</td>
                                     <td>{r.subs}</td>
                                     <td>{formatHours(r.seconds)}</td>
+                                    <td>
+                                        <QualityValue px={r.quality?.median_fwhm_px} arcsec={r.quality?.median_fwhm_arcsec}
+                                            title={r.quality ? `Median FWHM, ${r.quality.measured} of ${r.subs} subs measured` : undefined} />
+                                        {r.quality && r.quality.measured < r.subs && (
+                                            <span className="quality-coverage">{r.quality.measured}/{r.subs} measured</span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        <QualityValue px={r.quality?.best_fwhm_px} arcsec={r.quality?.best_fwhm_arcsec}
+                                            title="10th percentile FWHM: what this rig delivers on its better subs" />
+                                    </td>
+                                    <td><QualityValue px={r.quality?.median_hfr_px} arcsec={r.quality?.median_hfr_arcsec} title="Median HFR" /></td>
+                                    <td>{r.quality?.median_ecc != null ? r.quality.median_ecc.toFixed(2) : <span className="text-muted">—</span>}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -331,18 +373,28 @@ export default function TargetDetail() {
                 <section className="target-section">
                     <h3 className="section-title">Nights</h3>
                     <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={nightsChartData}>
+                        <ComposedChart data={nightsChartData}>
                             <XAxis dataKey="night" stroke="var(--color-text-secondary)" fontSize={11} />
-                            <YAxis stroke="var(--color-text-secondary)" fontSize={11} tickFormatter={(v) => `${(v / 3600).toFixed(0)}h`} />
+                            <YAxis yAxisId="hours" stroke="var(--color-text-secondary)" fontSize={11} tickFormatter={(v) => `${(v / 3600).toFixed(0)}h`} />
+                            {hasNightQuality && (
+                                <YAxis yAxisId="fwhm" orientation="right" stroke="var(--color-text-secondary)" fontSize={11}
+                                    tickFormatter={(v) => `${Number(v).toFixed(1)}${fwhmUnit.trim()}`} domain={['auto', 'auto']} />
+                            )}
                             <Tooltip
-                                formatter={(value) => formatHours(value)}
+                                formatter={(value, name) => (name === 'Median FWHM'
+                                    ? `${Number(value).toFixed(2)}${fwhmUnit}`
+                                    : formatHours(value))}
                                 contentStyle={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
                             />
                             <Legend />
                             {filterKeysForChart.map((f) => (
-                                <Bar key={f} dataKey={f} stackId="a" fill={filterColor(f)} name={f} />
+                                <Bar key={f} yAxisId="hours" dataKey={f} stackId="a" fill={filterColor(f)} name={f} />
                             ))}
-                        </BarChart>
+                            {hasNightQuality && (
+                                <Line yAxisId="fwhm" type="monotone" dataKey="fwhm" name="Median FWHM" connectNulls
+                                    stroke="var(--color-accent)" strokeWidth={2} dot={{ r: 3 }} />
+                            )}
+                        </ComposedChart>
                     </ResponsiveContainer>
                 </section>
             )}
@@ -353,7 +405,15 @@ export default function TargetDetail() {
                     <h3 className="section-title">Masters</h3>
                     <div className="target-masters-grid">
                         {target.masters.map((m) => (
-                            <ImageCard key={m.id} image={m} />
+                            <div key={m.id}>
+                                <ImageCard image={m} />
+                                {m.fwhm_px != null && (
+                                    <div className="master-quality">
+                                        <span>FWHM <QualityValue px={m.fwhm_px} arcsec={m.fwhm_arcsec} /></span>
+                                        <span>HFR <QualityValue px={m.hfr_px} arcsec={m.hfr_arcsec} /></span>
+                                    </div>
+                                )}
+                            </div>
                         ))}
                     </div>
                 </section>

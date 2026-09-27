@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, text, delete, Numeric
+from sqlalchemy import select, func, text, delete, Numeric, JSON
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as redis
 
@@ -21,6 +21,7 @@ from app.database import get_db
 from app.models.image import Image, ImageSubtype, FrameType
 from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, NamedStarCatalog, Sh2Catalog
 from app.models.target import TargetGoal
+from app.models.equipment import Rig as RigModel
 from app.schemas.target import TargetGoalInput
 from app.services.targets import normalize_designation
 from app.utils.filter_names import normalize_filter, filter_sort_key
@@ -28,9 +29,10 @@ from app.utils.observing_night import NIGHT_JOIN_SQL, NIGHT_SQL
 from app.utils.path_security import validate_path_safety
 from app.utils.rig_optics import (
     build_filter_rig_rows, valid_pixel_scale, parse_pixel_size, known_pixel_size, binning_factor,
-    build_filter_rig_rows_with_rigs,
+    build_filter_rig_rows_with_rigs, weighted_median, QUALITY_SAMPLES_KEY,
 )
 from app.config import settings
+from app.utils.star_quality import SCALE_SQL, SCALE_MISMATCH_FACTOR, resolve_scale, summarize_samples, to_arcsec
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -255,6 +257,56 @@ async def _fetch_obj_display_names(db: AsyncSession, obj_keys: List[str]) -> Dic
 # Core aggregation
 # ---------------------------------------------------------------------------
 
+# Q1b star quality. Arcsec uses each sub's plate scale, else its rig's measured scale.
+_SCALE_SQL = SCALE_SQL
+_QUALITY_FIELDS = ("fwhm_px", "hfr_px", "fwhm_arcsec", "hfr_arcsec")
+
+
+def _scale_expr():
+    """ORM mirror of SCALE_SQL (image plate scale unless its rig's disagrees)."""
+    from sqlalchemy import case, or_, and_
+    img, rig = Image.pixel_scale_arcsec, RigModel.measured_scale_arcsec
+    return case(
+        (and_(rig > 0, or_(img.is_(None), img < rig / SCALE_MISMATCH_FACTOR, img > rig * SCALE_MISMATCH_FACTOR)), rig),
+        else_=img,
+    )
+
+
+def _json_list(value) -> list:
+    """json_agg result as a list (asyncpg may hand back the raw JSON text)."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return json.loads(value)
+    return list(value)
+
+
+def _quality_row(r) -> dict:
+    q = {"measured": int(r.measured or 0)}
+    for k in _QUALITY_FIELDS:
+        v = getattr(r, k)
+        q[f"median_{k}"] = round(float(v), 3) if v is not None else None
+    return q
+
+
+def _fold_quality_parts(parts: Optional[List[dict]]) -> Optional[dict]:
+    """
+    Combine per-raw-filter-name medians into one normalized filter bucket
+    ("Ha" + "H-alpha"): a measured-count weighted median of the medians. Exact
+    when the bucket has a single raw name, which is the usual case.
+    """
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    out = {"measured": sum(p["measured"] for p in parts)}
+    for k in _QUALITY_FIELDS:
+        key = f"median_{k}"
+        v = weighted_median([(p[key], p["measured"]) for p in parts if p[key] is not None])
+        out[key] = round(v, 3) if v is not None else None
+    return out
+
+
 async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) -> List[dict]:
     """
     Build the full folded targets list (§3.5): one row per (target_key, raw
@@ -388,6 +440,30 @@ async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) ->
     for r in (await db.execute(cover_stmt, {"keys": keys, **_path_like_params(path)})).all():
         targets[r.target_key]["cover_image_id"] = r.id
 
+    # Star quality (Q1b): exact medians per target, and per raw filter name
+    # (folded into normalized filter buckets below). AstroCat-measured subs only.
+    quality_stmt = text(f"""
+        SELECT images.target_key, images.filter_name, GROUPING(images.filter_name) AS whole_target,
+               count(*) AS measured,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px) AS fwhm_px,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px) AS hfr_px,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px * {_SCALE_SQL}) AS fwhm_arcsec,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px * {_SCALE_SQL}) AS hfr_arcsec
+        FROM images LEFT JOIN rigs r ON r.id = images.rig_id
+        WHERE images.target_key = ANY(:keys) AND images.frame_type = 'LIGHT' AND images.subtype = 'SUB_FRAME'
+          AND images.star_metrics_status = 'OK'
+          {f"AND {path_like_sql}" if path_like_sql else ""}
+        GROUP BY GROUPING SETS ((images.target_key), (images.target_key, images.filter_name))
+    """)
+    for r in (await db.execute(quality_stmt, {"keys": keys, **_path_like_params(path)})).all():
+        q = _quality_row(r)
+        if r.whole_target:
+            targets[r.target_key]["quality"] = q
+        else:
+            bucket = targets[r.target_key]["_filter_raw"].get(normalize_filter(r.filter_name))
+            if bucket is not None:
+                bucket.setdefault("_quality_parts", []).append(q)
+
     # Display metadata
     catalog_meta = await _build_catalog_metadata_map(db)
     obj_keys = [k for k in keys if k.startswith("OBJ:")]
@@ -410,6 +486,7 @@ async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) ->
                 "subs": bucket["subs"],
                 "seconds": bucket["seconds"],
                 "goal_seconds": target_goals.get(norm),
+                "quality": _fold_quality_parts(bucket.get("_quality_parts")),
             })
         filters.sort(key=lambda f: filter_sort_key(f["filter"]))
 
@@ -443,6 +520,7 @@ async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) ->
             "telescopes": t.get("telescopes", []),
             "master_count": t.get("master_count", 0),
             "cover_image_id": t.get("cover_image_id"),
+            "quality": t.get("quality"),
         })
 
     return results
@@ -484,7 +562,7 @@ async def get_cached_targets_list(db: AsyncSession, path: Optional[str] = None) 
 @router.get("/")
 async def list_targets(
     search: Optional[str] = Query(None),
-    sort: str = Query("integration", description="integration|name|last|subs"),
+    sort: str = Query("integration", description="integration|name|last|subs|fwhm"),
     order: str = Query("desc"),
     min_hours: Optional[float] = Query(None),
     filter: Optional[str] = Query(None, description="Normalized filter bucket, e.g. Ha"),
@@ -534,8 +612,15 @@ async def list_targets(
         "last": lambda t: t["last_capture"] or "",
         "subs": lambda t: t["total_subs"],
     }
-    key_fn = sort_keys.get(sort, sort_keys["integration"])
-    items = sorted(items, key=key_fn, reverse=(order != "asc"))
+    if sort == "fwhm":
+        # Q1b: sharpest (smallest median FWHM in arcsec) first by default;
+        # targets without a measurement always sort last.
+        measured = [t for t in items if (t.get("quality") or {}).get("median_fwhm_arcsec") is not None]
+        rest = [t for t in items if (t.get("quality") or {}).get("median_fwhm_arcsec") is None]
+        items = sorted(measured, key=lambda t: t["quality"]["median_fwhm_arcsec"], reverse=(order == "desc")) + rest
+    else:
+        key_fn = sort_keys.get(sort, sort_keys["integration"])
+        items = sorted(items, key=key_fn, reverse=(order != "asc"))
 
     total = len(items)
     total_pages = math.ceil(total / page_size) if page_size > 0 else 1
@@ -630,7 +715,18 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
             Image.rig_id,
             func.count(Image.id).label("subs"),
             func.sum(Image.exposure_time_seconds).label("secs"),
+            # Q1b: one [fwhm_px, hfr_px, ecc, stars, scale] sample per measured
+            # sub, merged across buckets and summarised after the row fold.
+            func.json_agg(
+                func.json_build_array(
+                    Image.fwhm_px, Image.hfr_px, Image.eccentricity, Image.star_count,
+                    _scale_expr(),
+                ),
+                type_=JSON,
+            ).filter(Image.star_metrics_status == "OK").label("samples"),
         )
+        .select_from(Image)
+        .outerjoin(RigModel, RigModel.id == Image.rig_id)
         .where(light_clause, Image.target_key == target_key)
         .group_by(Image.filter_name, Image.camera_name, scale_bucket, header_pix,
                   func.coalesce(Image.binning, header_bin), Image.rig_id)
@@ -654,11 +750,14 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
             "subs": r.subs or 0,
             "seconds": float(r.secs or 0),
             "rig_id": r.rig_id,
+            QUALITY_SAMPLES_KEY: _json_list(r.samples),
         })
     by_filter_rig = sorted(
         build_filter_rig_rows_with_rigs(rig_buckets, declared_rigs),
         key=lambda e: (filter_sort_key(e["filter"]), -e["seconds"]),
     )
+    for row in by_filter_rig:
+        row["quality"] = summarize_samples(row.pop(QUALITY_SAMPLES_KEY, None))
 
     # nights_detail
     nights_stmt = text(f"""
@@ -676,8 +775,22 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
         norm = normalize_filter(r.filter_name)
         bucket = nights_map.setdefault(r.night, {})
         bucket[norm] = bucket.get(norm, 0.0) + float(r.secs or 0)
+    # Q1b: median star quality per night (all rigs/filters of this target).
+    nq_stmt = text(f"""
+        SELECT {NIGHT_SQL} AS night, count(*) AS measured,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px) AS fwhm_px,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px) AS hfr_px,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px * {_SCALE_SQL}) AS fwhm_arcsec,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px * {_SCALE_SQL}) AS hfr_arcsec
+        FROM images {NIGHT_JOIN_SQL} LEFT JOIN rigs r ON r.id = images.rig_id
+        WHERE images.target_key = :key AND images.frame_type = 'LIGHT' AND images.subtype = 'SUB_FRAME'
+          AND images.capture_date IS NOT NULL AND images.star_metrics_status = 'OK'
+        GROUP BY night
+    """)
+    night_quality = {r.night: _quality_row(r) for r in (await db.execute(nq_stmt, {"key": target_key})).all()}
     nights_detail = [
-        {"night": night.isoformat() if hasattr(night, "isoformat") else str(night), "filters": filters}
+        {"night": night.isoformat() if hasattr(night, "isoformat") else str(night), "filters": filters,
+         "quality": night_quality.get(night)}
         for night, filters in sorted(nights_map.items(), key=lambda kv: str(kv[0]))
     ]
 
@@ -692,17 +805,27 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
         .order_by(Image.capture_date.desc())
     )
     master_rows = (await db.execute(masters_stmt)).scalars().all()
-    masters = [
-        {
+    master_rig_ids = {m.rig_id for m in master_rows if m.rig_id is not None}
+    rig_scales = dict((await db.execute(
+        select(RigModel.id, RigModel.measured_scale_arcsec).where(RigModel.id.in_(master_rig_ids))
+    )).all()) if master_rig_ids else {}
+    masters = []
+    for m in master_rows:
+        scale, _ = resolve_scale(m.pixel_scale_arcsec, rig_scales.get(m.rig_id))
+        measured = m.star_metrics_status == "OK"
+        masters.append({
             "id": m.id,
             "file_name": m.file_name,
             "thumbnail_path": m.thumbnail_path,
             "rating": m.rating,
             "capture_date": m.capture_date.isoformat() if m.capture_date else None,
             "filter_name": m.filter_name,
-        }
-        for m in master_rows
-    ]
+            # Q1b: masters are measured too (never part of the sub aggregates).
+            "fwhm_px": m.fwhm_px if measured else None,
+            "hfr_px": m.hfr_px if measured else None,
+            "fwhm_arcsec": to_arcsec(m.fwhm_px, scale) if measured else None,
+            "hfr_arcsec": to_arcsec(m.hfr_px, scale) if measured else None,
+        })
 
     # goals (with have_seconds progress)
     goal_rows = (await db.execute(select(TargetGoal).where(TargetGoal.target_key == target_key))).scalars().all()
