@@ -34,10 +34,11 @@ FILTER_KEYS = {"id", "name", "band", "bandwidth_nm", "match_patterns", "source",
 RIG_KEYS = {"id", "name", "camera_id", "optic_id", "camera_name", "optic_name", "modifier_name",
             "modifier_factor", "binning", "is_active", "is_mounted", "mount_name", "filter_ids", "filters",
             "measured_scale_arcsec", "measured_count", "scale", "fov_deg", "focal_ratio", "effective_focal_mm",
-            "sampling", "scale_check", "image_count", "last_used", "created_at", "updated_at"}
+            "sampling", "scale_check", "image_count", "last_used", "created_at", "updated_at",
+            "sampling_seeing_source", "delivered_fwhm"}  # Q1d
 SITE_KEYS = {"id", "name", "latitude", "longitude", "elevation_m", "timezone", "bortle", "sqm",
              "typical_seeing_arcsec", "is_default", "horizon", "horizon_source", "image_count", "created_at",
-             "updated_at"}
+             "updated_at", "measured_seeing"}  # Q1d
 
 
 def _camera(**kw):
@@ -90,6 +91,18 @@ def test_rig_shape_and_computed_fields():
     assert unknown["scale"] is None and unknown["fov_deg"] is None and unknown["sampling"] is None
     assert unknown["scale_check"]["verdict"] == "unknown"
     assert unknown["image_count"] == 0 and unknown["last_used"] is None
+
+
+def test_rig_sampling_uses_measured_fwhm_with_enough_subs():
+    rig = SimpleNamespace(id=7, name="C11", camera_id=1, optic_id=2, camera=_camera(), optic=_optic(),
+                          modifier_name=None, modifier_factor=1.0, binning=1, is_active=True, is_mounted=True,
+                          mount_name=None, filters=[], measured_scale_arcsec=0.34, measured_count=850,
+                          created_at=NOW, updated_at=NOW)
+    few = api.rig_dict(rig, None, 2.5, {"n": 10, "median_arcsec": 1.8})
+    assert few["sampling_seeing_source"] == "SITE" and few["sampling"]["seeing_arcsec"] == 2.5
+    many = api.rig_dict(rig, None, 2.5, {"n": 386, "median_arcsec": 2.63})
+    assert many["sampling_seeing_source"] == "MEASURED" and many["sampling"]["seeing_arcsec"] == 2.63
+    assert many["delivered_fwhm"]["n"] == 386
 
 
 def test_site_shape():

@@ -588,6 +588,40 @@ These are the places where the implementation differs from the text above. Where
   - Image Detail: a compact chart with the current sub highlighted
 - The Target Detail Nights chart from Q1b had FWHM on a second y-axis. It now has its own synced chart.
 
+## 11d. As built — Q1d (2026-09-27)
+
+**Search** (`services/quality_filters.py`)
+- A `QualityFilters` dependency is shared by all six `_build_image_query` endpoints (list, CSV export, four bulk actions), so a quality selection can be exported or bulk-edited.
+- Filters:
+  - `fwhm_min`/`fwhm_max`/`hfr_max` in `quality_units` (ARCSEC via the rig-guarded scale, or PX)
+  - `eccentricity_max`, `star_count_min`
+  - `star_metrics_status` (incl. NEVER)
+  - `quality_flag` (ANY / SOFT / CLOUD / TRAILED)
+- Suspect flags are the Nights page rules in SQL, grouped by (night, rig, raw filter name). A check across the 60 most recent nights gave the same 80 flagged subs as the timeline.
+- New sort `sort_by=fwhm_arcsec`.
+- Image cards on Search show FWHM.
+
+**Plate scale**
+- A stored plate scale of 0 or less is treated as unknown in `SCALE_SQL` and the ORM mirrors. One image stored 0.0″/px and ranked as the "sharpest".
+
+**Equipment**
+- Rigs report `delivered_fwhm` (median, best p10, px and arcsec) over each rig's own last 90 days of use.
+- With at least 50 subs, the sampling check uses it (`sampling_seeing_source: MEASURED`). The EdgeHD shows 7.7 px per FWHM, i.e. oversampled.
+- Sites report `measured_seeing` from the sharpest rig able to resolve seeing (median scale ≤ 3″/px, ≥ 20 subs, used there within a year). The first version picked a 105 mm lens (22.5″); it is now the EdgeHD (2.63″).
+- Sites get a "Use as typical seeing" button.
+
+**Stats** (`GET /api/quality/stats`, FITS Analytics page), per rig:
+- FWHM histogram
+- monthly median
+- median by 10° altitude bin
+- per-filter FWHM offset against L (or the most-used filter)
+- HFR against focuser temperature, with a least-squares slope and advice
+
+On the owner's data: OIII +21% and B +14% softer than L, and HFR −0.074 px/°C.
+
+**Dashboard**
+- A "Last night" tile with subs, measured, suspect count, per-rig median FWHM and a focus-drift warning.
+
 ## 12. Decisions (owner, 2026-09-27)
 
 1. **Header/filename hints: use them when present.** The capture software only sometimes writes HFR. The hint parser (§4.7) ships in Q1a.

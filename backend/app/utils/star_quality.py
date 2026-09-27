@@ -49,7 +49,8 @@ SCALE_SQL = (
     "(CASE WHEN r.measured_scale_arcsec > 0 AND (images.pixel_scale_arcsec IS NULL "
     f"OR images.pixel_scale_arcsec NOT BETWEEN r.measured_scale_arcsec / {SCALE_MISMATCH_FACTOR} "
     f"AND r.measured_scale_arcsec * {SCALE_MISMATCH_FACTOR}) "
-    "THEN r.measured_scale_arcsec ELSE images.pixel_scale_arcsec END)"
+    "THEN r.measured_scale_arcsec "
+    "WHEN images.pixel_scale_arcsec > 0 AND images.pixel_scale_arcsec < 3600 THEN images.pixel_scale_arcsec END)"
 )
 
 

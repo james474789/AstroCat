@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { formatExposure, formatBytes, formatDate, formatFrameTypeBadge, API_BASE_URL } from '../../api/client';
 import RatingStars from './RatingStars';
 import './ImageCard.css';
+import QualityValue from '../quality/QualityValue';
 
 // Subtype badge colors
 const subtypeBadges = {
@@ -12,7 +13,7 @@ const subtypeBadges = {
     'PLANETARY': { label: 'Planetary', className: 'badge-planetary' },
 };
 
-export default function ImageCard({ image, onContextMenu }) {
+export default function ImageCard({ image, onContextMenu, showQuality = false }) {
     const [imageLoaded, setImageLoaded] = useState(false);
     const [imageError, setImageError] = useState(false);
 
@@ -101,6 +102,13 @@ export default function ImageCard({ image, onContextMenu }) {
                         <span className="meta-icon">📷</span>
                         {image.camera?.split(' ')[0] || 'Unknown'}
                     </span>
+                    {showQuality && image.star_metrics_status === 'OK' && image.fwhm_px != null && (
+                        <span className="meta-item" title={`FWHM${image.eccentricity != null ? ` · eccentricity ${image.eccentricity.toFixed(2)}` : ''}${image.star_count != null ? ` · ${image.star_count} stars` : ''}`}>
+                            <span className="meta-icon">✦</span>
+                            <QualityValue px={image.fwhm_px}
+                                arcsec={image.pixel_scale_arcsec > 0 ? image.fwhm_px * image.pixel_scale_arcsec : null} />
+                        </span>
+                    )}
                 </div>
 
                 {image.catalog_matches && image.catalog_matches.length > 0 && (
