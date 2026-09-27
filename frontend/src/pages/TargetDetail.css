@@ -102,6 +102,12 @@
     margin-top: auto;
 }
 
+.target-hero-actions .btn.active {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    background: rgba(91, 141, 238, 0.12);
+}
+
 /* Sections */
 .target-section {
     background: var(--color-surface);

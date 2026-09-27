@@ -59,7 +59,9 @@ async function handleResponse(response) {
             window.dispatchEvent(new CustomEvent('api-unauthorized'));
         }
 
-        throw new Error(error.detail || 'Unauthorized');
+        const authErr = new Error(error.detail || 'Unauthorized');
+        authErr.status = 401;
+        throw authErr;
     }
 
     if (!response.ok) {
@@ -73,7 +75,9 @@ async function handleResponse(response) {
             message = JSON.stringify(message);
         }
 
-        throw new Error(message);
+        const err = new Error(message);
+        err.status = response.status;
+        throw err;
     }
 
     // Handle 204 No Content
@@ -1006,4 +1010,34 @@ export async function fetchTargetRecommendation(key, { date, siteId, rig } = {})
 
 export async function fetchLatestReplay() {
     return handleResponse(await fetch(`${API_BASE_URL}/recommendations/replay/latest`, { credentials: 'include' }));
+}
+
+// R2a
+// Binding contract: docs/design/R2a-feedback-dashboard.md §5-§6. The backend (feat/r2a-feedback-backend)
+// is built in parallel on a separate branch; these calls are written strictly against that spec.
+
+export async function postRecommendationFeedback({ targetKey, action, nights, reason, note, context } = {}) {
+    const body = {
+        target_key: targetKey,
+        action,
+        nights: nights ?? undefined,
+        reason: reason ?? undefined,
+        note: note ?? undefined,
+        context: context ?? undefined,
+    };
+    return handleResponse(await fetch(`${API_BASE_URL}/recommendations/feedback`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+        credentials: 'include',
+    }));
+}
+
+export async function fetchRecommendationFeedback() {
+    return handleResponse(await fetch(`${API_BASE_URL}/recommendations/feedback`, { credentials: 'include' }));
+}
+
+export async function fetchRecommendationOutcomes({ days } = {}) {
+    const queryString = buildQueryString({ days: days || undefined });
+    return handleResponse(await fetch(`${API_BASE_URL}/recommendations/outcomes?${queryString}`, { credentials: 'include' }));
 }
