@@ -1,20 +1,40 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea,
 } from 'recharts';
+import { Pin, PinOff, Clock, EyeOff, Camera, ChevronDown, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
     fetchEquipment, fetchTargets,
     fetchRecommendations, fetchTargetRecommendation, fetchLatestReplay,
+    postRecommendationFeedback, fetchRecommendationFeedback, fetchRecommendationOutcomes,
     formatDateTime,
 } from '../api/client';
 import './Tonight.css';
 
-// Binding contract: docs/design/R1-recommendation-engine.md §7 (API) and §8 (this page). The
-// backend for these endpoints is built in parallel on feat/r1-engine-backend and does not exist
-// on this branch, so this page is written strictly against the spec's response shapes.
+// Binding contract: docs/design/R1-recommendation-engine.md §7 (API) and §8 (this page), and
+// docs/design/R2a-feedback-dashboard.md §5-§7 (feedback, outcomes and this page's action row,
+// pinned lane, hidden manager and outcomes panel). The backend for these endpoints is built in
+// parallel on feat/r1-engine-backend / feat/r2a-feedback-backend and does not exist on this
+// branch, so this page is written strictly against the spec's response shapes.
+
+const SNOOZE_OPTIONS = [
+    { nights: 1, label: '1 night' },
+    { nights: 7, label: '1 week' },
+    { nights: 30, label: '1 month' },
+];
+
+const DISMISS_REASONS = [
+    { reason: 'DONE', label: 'Done with it' },
+    { reason: 'NOT_MY_TYPE', label: 'Not my kind of target' },
+    { reason: 'TOO_HARD', label: 'Too hard' },
+    { reason: 'OTHER', label: 'Other' },
+];
+
+const DISMISS_REASON_LABELS = Object.fromEntries(DISMISS_REASONS.map((r) => [r.reason, r.label]));
+const SNOOZE_LABELS = { 1: 'a night', 7: 'a week', 30: 'a month' };
 
 const TIER_LABELS = {
     ASTRO: 'Astronomical dark',
@@ -71,6 +91,56 @@ function darkRanges(darkFlags) {
     });
     if (start !== null) ranges.push([start, darkFlags.length - 1]);
     return ranges;
+}
+
+// ============ Feedback: optimistic recommendation cache updates ============
+// R2a §7: card actions update the cache immediately (the card leaves or moves lanes at once),
+// then the mutation is sent and the query invalidated/refetched to reconcile with the server.
+
+function findPickInData(data, targetKey) {
+    if (data?.hero?.target_key === targetKey) return data.hero;
+    for (const lane of data?.lanes || []) {
+        const found = (lane.items || []).find((p) => p.target_key === targetKey);
+        if (found) return found;
+    }
+    return null;
+}
+
+function removePickFromLanes(lanes, targetKey) {
+    return (lanes || []).map((lane) => ({
+        ...lane,
+        items: (lane.items || []).filter((p) => p.target_key !== targetKey),
+    }));
+}
+
+function applyOptimisticFeedback(data, targetKey, action) {
+    if (!data) return data;
+    const pick = findPickInData(data, targetKey);
+    let lanes = data.lanes || [];
+    let hero = data.hero;
+
+    if (action === 'PIN' && pick) {
+        lanes = removePickFromLanes(lanes, targetKey);
+        const updatedPick = { ...pick, feedback: { ...pick.feedback, pinned: true } };
+        const pinnedIdx = lanes.findIndex((l) => l.id === 'pinned');
+        if (pinnedIdx >= 0) {
+            lanes = lanes.map((l, i) => (i === pinnedIdx ? { ...l, items: [updatedPick, ...(l.items || [])] } : l));
+        } else {
+            lanes = [{ id: 'pinned', title: 'Your pins', items: [updatedPick] }, ...lanes];
+        }
+        if (hero?.target_key === targetKey) hero = updatedPick;
+    } else if (action === 'UNPIN') {
+        // Where the pick lands once unpinned depends on the recomputed ranking, so it's dropped
+        // from the pinned lane immediately and the real placement arrives on refetch.
+        lanes = removePickFromLanes(lanes, targetKey);
+        if (hero?.target_key === targetKey) hero = { ...hero, feedback: { ...hero.feedback, pinned: false } };
+    } else if (action === 'SNOOZE' || action === 'DISMISS') {
+        lanes = removePickFromLanes(lanes, targetKey);
+        if (hero?.target_key === targetKey) hero = null;
+    }
+    // UNSNOOZE / UNDISMISS / IMAGED don't change what's visible on this cached result in a way we
+    // can predict client-side, so they rely solely on the query invalidation below.
+    return { ...data, lanes, hero };
 }
 
 // ============ Small display components ============
@@ -172,11 +242,126 @@ function AltitudeSparkline({ curve, height = 70, showAxis = false }) {
     );
 }
 
+// ============ Toast (page-local; no shared toast component exists yet, matches the
+// Equipment.jsx / Admin.jsx page-local pattern, extended with an optional Undo action) ============
+
+function useTonightToast() {
+    const [toast, setToast] = useState(null);
+    const timerRef = useRef(null);
+
+    function showToast(message, { type = 'info', durationMs = 6000, onUndo } = {}) {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setToast({ message, type, onUndo });
+        if (durationMs > 0) {
+            timerRef.current = setTimeout(() => setToast(null), durationMs);
+        }
+    }
+    function dismissToast() {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setToast(null);
+    }
+    return [toast, showToast, dismissToast];
+}
+
+function Toast({ toast, onDismiss }) {
+    if (!toast) return null;
+    return (
+        <div className={`tonight-toast ${toast.type}`} role="status" aria-live="polite">
+            <span>{toast.message}</span>
+            {toast.onUndo && (
+                <button type="button" className="tonight-toast-undo" onClick={() => { toast.onUndo(); onDismiss(); }}>
+                    Undo
+                </button>
+            )}
+            <button type="button" className="tonight-toast-close" onClick={onDismiss} aria-label="Dismiss">
+                <X size={14} />
+            </button>
+        </div>
+    );
+}
+
+// ============ Feedback action row (Pin, Snooze, Not interested, Imaged) ============
+
+function ActionRow({ pinned, onAction }) {
+    const [openMenu, setOpenMenu] = useState(null); // 'snooze' | 'dismiss' | null
+    const rowRef = useRef(null);
+
+    useEffect(() => {
+        if (!openMenu) return undefined;
+        function handleOutside(e) {
+            if (rowRef.current && !rowRef.current.contains(e.target)) setOpenMenu(null);
+        }
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, [openMenu]);
+
+    function toggleMenu(name) {
+        setOpenMenu((cur) => (cur === name ? null : name));
+    }
+
+    return (
+        <div className="pick-action-row" ref={rowRef} onClick={(e) => e.stopPropagation()}>
+            <button
+                type="button"
+                className={`action-btn${pinned ? ' active' : ''}`}
+                title={pinned ? 'Unpin' : 'Pin for Tonight'}
+                onClick={() => onAction(pinned ? 'UNPIN' : 'PIN')}
+            >
+                {pinned ? <PinOff size={16} /> : <Pin size={16} />}
+            </button>
+
+            <div className="action-dropdown">
+                <button type="button" className="action-btn" title="Snooze" onClick={() => toggleMenu('snooze')}>
+                    <Clock size={16} /><ChevronDown size={12} />
+                </button>
+                {openMenu === 'snooze' && (
+                    <div className="action-menu">
+                        {SNOOZE_OPTIONS.map((opt) => (
+                            <button
+                                key={opt.nights}
+                                type="button"
+                                onClick={() => { onAction('SNOOZE', { nights: opt.nights }); setOpenMenu(null); }}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="action-dropdown">
+                <button type="button" className="action-btn" title="Not interested" onClick={() => toggleMenu('dismiss')}>
+                    <EyeOff size={16} /><ChevronDown size={12} />
+                </button>
+                {openMenu === 'dismiss' && (
+                    <div className="action-menu">
+                        {DISMISS_REASONS.map((r) => (
+                            <button
+                                key={r.reason}
+                                type="button"
+                                onClick={() => { onAction('DISMISS', { reason: r.reason }); setOpenMenu(null); }}
+                            >
+                                {r.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <button type="button" className="action-btn" title="I imaged it" onClick={() => onAction('IMAGED')}>
+                <Camera size={16} />
+            </button>
+        </div>
+    );
+}
+
 // ============ Context strip ============
 
-function ContextStrip({ context }) {
+function ContextStrip({ context, onOpenHidden }) {
     if (!context) return null;
     const tz = context.site?.timezone || 'UTC';
+    const counts = context.feedback_counts || {};
+    const hiddenCount = (counts.snoozed || 0) + (counts.dismissed || 0);
     return (
         <div className="context-strip">
             <div className="context-item">
@@ -200,13 +385,21 @@ function ContextStrip({ context }) {
                     <span>{HORIZON_LABELS[context.horizon_source] || context.horizon_source} (floor {context.floor_deg}°)</span>
                 )}
             </div>
+            {onOpenHidden && (
+                <div className="context-item">
+                    <span className="muted small">&nbsp;</span>
+                    <button type="button" className="hidden-link" onClick={onOpenHidden}>
+                        Hidden ({hiddenCount})
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
 
 // ============ Hero card ============
 
-function HeroCard({ hero, verdict }) {
+function HeroCard({ hero, verdict, onAction }) {
     if (!hero) return null;
     const reasons = (verdict?.reasons?.length ? verdict.reasons : hero.reasons) || [];
     return (
@@ -217,6 +410,12 @@ function HeroCard({ hero, verdict }) {
                     {hero.name || hero.target_key}
                 </Link>
                 <span className="muted">{hero.kind}</span>
+                {onAction && (
+                    <ActionRow
+                        pinned={!!hero.feedback?.pinned}
+                        onAction={(action, extra) => onAction(hero, 'hero', 1, action, extra)}
+                    />
+                )}
             </div>
             <div className="hero-card-meta muted small">
                 {hero.rig?.name} &middot; mode {hero.mode}
@@ -236,7 +435,7 @@ function HeroCard({ hero, verdict }) {
 
 // ============ Lane pick card ============
 
-function PickCard({ pick }) {
+function PickCard({ pick, laneId, rank, onAction }) {
     return (
         <div className="pick-card">
             <div className="pick-card-header">
@@ -246,6 +445,12 @@ function PickCard({ pick }) {
                 <span className="badge">{pick.kind}</span>
             </div>
             <div className="muted small">{pick.target_key}</div>
+            {onAction && (
+                <ActionRow
+                    pinned={!!pick.feedback?.pinned}
+                    onAction={(action, extra) => onAction(pick, laneId, rank, action, extra)}
+                />
+            )}
             <div className="pick-rig-row">
                 <span>{pick.rig?.name}</span>
                 {pick.alternatives?.length > 0 && (
@@ -267,6 +472,21 @@ function PickCard({ pick }) {
             <Link to={`/targets/${encodeURIComponent(pick.target_key)}`} className="btn btn-secondary btn-sm open-target-link">
                 Open target
             </Link>
+        </div>
+    );
+}
+
+// ============ Pinned-but-unavailable strip ============
+
+function PinnedUnavailableStrip({ items }) {
+    if (!items || items.length === 0) return null;
+    return (
+        <div className="pinned-unavailable-strip muted small">
+            Pinned but not tonight: {items.map((p, i) => (
+                <span key={p.target_key}>
+                    {i > 0 && ', '}{p.name || p.target_key} ({p.excluded_reason})
+                </span>
+            ))}
         </div>
     );
 }
@@ -424,15 +644,149 @@ function ReplayPanel() {
     );
 }
 
+// ============ Hidden-items manager ============
+
+function HiddenManagerModal({ onClose, onRestore }) {
+    const feedbackQuery = useQuery({
+        queryKey: ['recommendationFeedback'],
+        queryFn: fetchRecommendationFeedback,
+        staleTime: 0,
+    });
+
+    const items = feedbackQuery.data?.items || [];
+    const snoozed = items.filter((i) => i.snoozed_until);
+    const dismissed = items.filter((i) => i.dismissed);
+
+    return (
+        <div className="tonight-modal-overlay" onClick={onClose}>
+            <div className="tonight-modal-content" onClick={(e) => e.stopPropagation()}>
+                <header className="tonight-modal-header">
+                    <h2>Hidden targets</h2>
+                    <button type="button" className="tonight-modal-close" onClick={onClose} aria-label="Close">
+                        <X size={18} />
+                    </button>
+                </header>
+                <div className="tonight-modal-body">
+                    {feedbackQuery.isLoading && <p className="muted small">Loading…</p>}
+                    {feedbackQuery.isError && <p className="form-error">{feedbackQuery.error?.message}</p>}
+
+                    <h3 className="hidden-section-title">Snoozed ({snoozed.length})</h3>
+                    {snoozed.length === 0 && <p className="muted small">Nothing snoozed.</p>}
+                    {snoozed.map((item) => (
+                        <div key={item.target_key} className="hidden-item-row">
+                            <span className="hidden-item-name">{item.name || item.target_key}</span>
+                            <span className="muted small">until {item.snoozed_until}</span>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRestore(item, 'UNSNOOZE')}>
+                                Restore
+                            </button>
+                        </div>
+                    ))}
+
+                    <h3 className="hidden-section-title">Not interested ({dismissed.length})</h3>
+                    {dismissed.length === 0 && <p className="muted small">Nothing dismissed.</p>}
+                    {dismissed.map((item) => (
+                        <div key={item.target_key} className="hidden-item-row">
+                            <span className="hidden-item-name">{item.name || item.target_key}</span>
+                            <span className="muted small">{DISMISS_REASON_LABELS[item.dismiss_reason] || item.dismiss_reason}</span>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRestore(item, 'UNDISMISS')}>
+                                Restore
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ============ Outcomes panel ============
+
+function OutcomesPanel() {
+    const [open, setOpen] = useState(false);
+    const outcomesQuery = useQuery({
+        queryKey: ['recommendationOutcomes'],
+        queryFn: () => fetchRecommendationOutcomes({ days: 90 }),
+        enabled: open,
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+    });
+
+    const data = outcomesQuery.data;
+
+    return (
+        <div className="outcomes-panel">
+            <button type="button" className="replay-toggle" onClick={() => setOpen((o) => !o)}>
+                {open ? '▾' : '▸'} Advice outcomes (last 90 days)
+            </button>
+            {open && (
+                <div className="outcomes-body">
+                    {outcomesQuery.isLoading && <p className="muted small">Loading…</p>}
+                    {outcomesQuery.isError && <p className="form-error">{outcomesQuery.error?.message}</p>}
+                    {data && (
+                        data.nights_imaged < 5 ? (
+                            <p className="muted small">Collecting data: {data.nights_imaged} imaged night{data.nights_imaged === 1 ? '' : 's'} so far.</p>
+                        ) : (
+                            <>
+                                <div className="outcomes-summary">
+                                    <div className="outcomes-metric">
+                                        <span className="muted small">Hero acted-on rate</span>
+                                        <span>{data.hero ? `${Math.round(data.hero.rate * 100)}% (${data.hero.acted}/${data.hero.shown})` : '—'}</span>
+                                    </div>
+                                    <div className="outcomes-metric">
+                                        <span className="muted small">Any-pick acted-on rate</span>
+                                        <span>{data.any ? `${Math.round(data.any.rate * 100)}% (${data.any.acted}/${data.any.shown})` : '—'}</span>
+                                    </div>
+                                    <div className="outcomes-metric">
+                                        <span className="muted small">Imaged, not shown</span>
+                                        <span>{data.imaged_not_shown ?? '—'}</span>
+                                    </div>
+                                    <div className="outcomes-metric">
+                                        <span className="muted small">Self-reported vs confirmed</span>
+                                        <span>
+                                            {data.self_reported
+                                                ? `${data.self_reported.imaged_events} / ${data.self_reported.confirmed_by_library}`
+                                                : '—'}
+                                        </span>
+                                    </div>
+                                </div>
+                                {data.by_lane && (
+                                    <table className="outcomes-lane-table">
+                                        <thead>
+                                            <tr><th>Lane</th><th>Shown</th><th>Acted</th><th>Rate</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {Object.entries(data.by_lane).map(([lane, m]) => (
+                                                <tr key={lane}>
+                                                    <td>{lane}</td>
+                                                    <td>{m.shown}</td>
+                                                    <td>{m.acted}</td>
+                                                    <td>{m.rate != null ? `${Math.round(m.rate * 100)}%` : '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </>
+                        )
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ============ Main page ============
 
 export default function Tonight() {
     const { user } = useAuth();
     const isAdmin = !!user?.is_admin;
+    const queryClient = useQueryClient();
 
     const [selectedDate, setSelectedDate] = useState('');
     const [selectedSiteId, setSelectedSiteId] = useState(null);
     const [rig, setRig] = useState('mounted');
+    const [hiddenModalOpen, setHiddenModalOpen] = useState(false);
+    const [toast, showToast, dismissToast] = useTonightToast();
     const perLane = 6;
 
     const equipmentQuery = useQuery({
@@ -447,13 +801,77 @@ export default function Tonight() {
     // render rather than an effect (same pattern as Equipment.jsx's SitesTab).
     const siteId = selectedSiteId ?? sites[0]?.id ?? null;
 
+    const recQueryKey = ['recommendations', siteId, rig, selectedDate, perLane];
     const recQuery = useQuery({
-        queryKey: ['recommendations', siteId, rig, selectedDate, perLane],
+        queryKey: recQueryKey,
         queryFn: () => fetchRecommendations({ date: selectedDate || undefined, siteId, rig, perLane }),
         enabled: siteId != null,
         staleTime: 60 * 1000,
         retry: false,
     });
+
+    // R2a §7: every action is optimistic (updates the cached recommendations immediately), sent
+    // with its context, and reconciled by invalidating the recommendations/feedback/outcomes
+    // queries once the request settles. A toast offers Undo (the inverse action).
+    async function sendFeedback(targetKey, action, extra = {}) {
+        try {
+            await postRecommendationFeedback({
+                targetKey,
+                action,
+                nights: extra.nights,
+                reason: extra.reason,
+                context: extra.context,
+            });
+        } catch (err) {
+            showToast(`Failed: ${err.message}`, { type: 'error' });
+        } finally {
+            queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+            queryClient.invalidateQueries({ queryKey: ['recommendationFeedback'] });
+            queryClient.invalidateQueries({ queryKey: ['recommendationOutcomes'] });
+        }
+    }
+
+    function inverseAction(action) {
+        if (action === 'PIN') return { action: 'UNPIN' };
+        if (action === 'UNPIN') return { action: 'PIN' };
+        if (action === 'SNOOZE') return { action: 'UNSNOOZE' };
+        if (action === 'DISMISS') return { action: 'UNDISMISS' };
+        return null;
+    }
+
+    function handlePickAction(pick, laneId, rank, action, extra = {}) {
+        const name = pick.name || pick.target_key;
+        const context = {
+            night: effectiveDate || undefined,
+            lane: laneId,
+            rank,
+            score: pick.score,
+            rig_id: pick.rig?.id,
+        };
+
+        queryClient.setQueryData(recQueryKey, (old) => applyOptimisticFeedback(old, pick.target_key, action));
+
+        const inverse = inverseAction(action);
+        function undo() {
+            queryClient.setQueryData(recQueryKey, (old) => applyOptimisticFeedback(old, pick.target_key, inverse.action));
+            sendFeedback(pick.target_key, inverse.action, { context });
+        }
+
+        let message;
+        if (action === 'PIN') message = `Pinned ${name}`;
+        else if (action === 'UNPIN') message = `Unpinned ${name}`;
+        else if (action === 'SNOOZE') message = `Snoozed ${name} for ${SNOOZE_LABELS[extra.nights] || `${extra.nights} nights`}`;
+        else if (action === 'DISMISS') message = `Marked ${name} not interested (${DISMISS_REASON_LABELS[extra.reason] || extra.reason})`;
+        else if (action === 'IMAGED') message = `Marked ${name} imaged`;
+
+        showToast(message, inverse ? { onUndo: undo } : {});
+        sendFeedback(pick.target_key, action, { ...extra, context });
+    }
+
+    function handleRestore(item, action) {
+        sendFeedback(item.target_key, action, {});
+        showToast(`Restored ${item.name || item.target_key}`);
+    }
 
     if (equipmentQuery.isLoading) {
         return (
@@ -558,7 +976,7 @@ export default function Tonight() {
 
             {data && (
                 <>
-                    <ContextStrip context={context} />
+                    <ContextStrip context={context} onOpenHidden={() => setHiddenModalOpen(true)} />
 
                     {context?.rig_mode === 'ALL_FALLBACK' && (
                         <div className="all-fallback-banner">
@@ -575,18 +993,29 @@ export default function Tonight() {
                         <ExcludedCountsPanel counts={data.excluded_counts} />
                     ) : (
                         <>
-                            <HeroCard hero={data.hero} verdict={data.verdict} />
+                            <HeroCard hero={data.hero} verdict={data.verdict} onAction={handlePickAction} />
 
                             {nonEmptyLanes.map((lane) => (
                                 <section key={lane.id} className="lane-section">
                                     <h2 className="section-title">{lane.title}</h2>
                                     <div className="lane-grid">
-                                        {lane.items.map((pick) => (
-                                            <PickCard key={`${pick.target_key}-${pick.rig?.id}`} pick={pick} />
+                                        {lane.items.map((pick, idx) => (
+                                            <PickCard
+                                                key={`${pick.target_key}-${pick.rig?.id}`}
+                                                pick={pick}
+                                                laneId={lane.id}
+                                                rank={idx + 1}
+                                                onAction={handlePickAction}
+                                            />
                                         ))}
                                     </div>
+                                    {lane.id === 'pinned' && <PinnedUnavailableStrip items={data.pinned_unavailable} />}
                                 </section>
                             ))}
+
+                            {!nonEmptyLanes.some((l) => l.id === 'pinned') && (
+                                <PinnedUnavailableStrip items={data.pinned_unavailable} />
+                            )}
                         </>
                     )}
 
@@ -600,7 +1029,18 @@ export default function Tonight() {
 
             <WhyNotPanel date={selectedDate || undefined} siteId={siteId} rig={rig} />
 
+            <OutcomesPanel />
+
             {isAdmin && <ReplayPanel />}
+
+            <Toast toast={toast} onDismiss={dismissToast} />
+
+            {hiddenModalOpen && (
+                <HiddenManagerModal
+                    onClose={() => setHiddenModalOpen(false)}
+                    onRestore={handleRestore}
+                />
+            )}
         </div>
     );
 }
