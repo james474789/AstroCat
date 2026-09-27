@@ -196,6 +196,76 @@ async def trigger_data_migrations(payload: dict = None):
     return {"message": "Data migrations started", "task_id": task.id}
 
 
+# Star quality metrics (Q1, docs/design/Q1-star-quality.md §5.5, §7.8)
+REMEASURE_SCOPES = ("failed", "no_stars", "all")
+
+
+@router.get("/star-metrics")
+async def get_star_metrics_status():
+    """Measurement progress over eligible images (Light subs + masters) and the quality queue."""
+    from sqlalchemy import func, select
+    from app.database import AsyncSessionLocal
+    from app.models.image import FrameType, Image
+    from app.services.quality_settings import quality_settings
+    from app.services.star_metrics import ALGO_VERSION
+    from app.tasks.quality import ELIGIBLE_SUBTYPES, QUEUE
+
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(Image.star_metrics_status, func.count())
+            .where(Image.frame_type == FrameType.LIGHT, Image.subtype.in_(ELIGIBLE_SUBTYPES))
+            .group_by(Image.star_metrics_status)
+        )).all()
+    counts = {(status or "NEVER").lower(): n for status, n in rows}
+    eligible = sum(counts.values())
+    done = eligible - counts.get("never", 0) - counts.get("pending", 0)
+    queue_depth = None
+    try:
+        import redis
+        queue_depth = int(redis.from_url(settings.redis_url).llen(QUEUE))
+    except Exception:
+        pass
+    return {
+        "eligible": eligible,
+        "done": done,
+        "counts": {k: counts.get(k, 0) for k in ("ok", "no_stars", "skipped", "hint", "failed", "pending", "never")},
+        "queue_depth": queue_depth,
+        "algo_version": ALGO_VERSION,
+        "settings": quality_settings(),
+        "sweep_batch": settings.star_metrics_sweep_batch,
+    }
+
+
+@router.post("/star-metrics/remeasure")
+async def remeasure_star_metrics(payload: dict = None):
+    """
+    Re-measure a set of images; the sweeper picks them up (newest first).
+    payload: {"scope": "failed" | "no_stars" | "all"}. "all" keeps current
+    values visible until each image is re-measured.
+    """
+    from fastapi import HTTPException
+    from sqlalchemy import update
+    from app.database import AsyncSessionLocal
+    from app.models.image import FrameType, Image
+    from app.tasks.quality import ELIGIBLE_SUBTYPES
+
+    scope = (payload or {}).get("scope")
+    if scope not in REMEASURE_SCOPES:
+        raise HTTPException(status_code=400, detail=f"scope must be one of {', '.join(REMEASURE_SCOPES)}")
+    stmt = update(Image).where(Image.frame_type == FrameType.LIGHT, Image.subtype.in_(ELIGIBLE_SUBTYPES))
+    if scope == "failed":
+        stmt = stmt.where(Image.star_metrics_status == "FAILED").values(star_metrics_status=None)
+    elif scope == "no_stars":
+        stmt = stmt.where(Image.star_metrics_status == "NO_STARS").values(star_metrics_status=None)
+    else:
+        stmt = stmt.where(Image.star_metrics_status.isnot(None), Image.star_metrics_status != "PENDING")                    .values(star_metrics_version=0)
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(stmt.execution_options(synchronize_session=False))
+        await db.commit()
+    logger.info(f"Star metrics re-measure requested (scope={scope}, rows={result.rowcount})")
+    return {"scope": scope, "queued_for_remeasure": result.rowcount}
+
+
 
 @router.get("/status")
 async def get_indexer_status():
