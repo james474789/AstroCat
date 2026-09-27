@@ -42,7 +42,7 @@ CURVE_STRIDE = 3  # 15-minute samples on the 5-minute grid
 
 __all__ = [
     "EngineInputs", "Params", "Result", "PreparedNight", "recommend", "prepare_night", "explain_target",
-    "result_to_dict", "pick_to_dict", "Weights", "RigSpec", "SiteSpec", "HorizonSpec", "Candidate",
+    "result_to_dict", "result_payload", "render_payload", "pick_to_dict", "Weights", "RigSpec", "SiteSpec", "HorizonSpec", "Candidate",
     "CandidatePool", "MOON_RULES",
 ]
 
@@ -116,6 +116,7 @@ class Result:
     params: Params
     prepared: PreparedNight = field(repr=False, default=None)
     evals: List[RigEval] = field(repr=False, default_factory=list)
+    excluded_names: Dict[str, str] = field(repr=False, default_factory=dict)   # R2a: names for `excluded` keys
 
 
 def _moon_key(rules: Mapping[str, Tuple[float, float]], hard_fraction: float = MOON_HARD_FRACTION) -> tuple:
@@ -239,6 +240,7 @@ def recommend(inputs: EngineInputs, params: Optional[Params] = None,
             if reason:
                 counts[reason] += 1
                 excluded[pool.candidates[i].key] = reason
+    excluded_names = {} if params.light else {k: pool.get(k).name for k in excluded}
 
     lanes: List[Dict[str, Any]] = []
     hero = ranked[0] if ranked else None
@@ -257,7 +259,7 @@ def recommend(inputs: EngineInputs, params: Optional[Params] = None,
         v = verdict(hero, ctx.tier)
     return Result(context=ctx, hero=hero, verdict=v, lanes=lanes, excluded_counts=counts, ranked=ranked,
                   excluded=excluded, rigs=list(inputs.rigs), skipped_rigs=list(inputs.skipped_rigs),
-                  params=params, prepared=prep, evals=evals)
+                  params=params, prepared=prep, evals=evals, excluded_names=excluded_names)
 
 
 # ---------------------------------------------------------------------------
@@ -341,20 +343,41 @@ def _r(v: Optional[float], nd: int = 2) -> Optional[float]:
     return round(float(v), nd)
 
 
-def curve_for(prep: PreparedNight, i: int) -> Dict[str, list]:
+def _curve_steps(prep: PreparedNight) -> np.ndarray:
     eph = prep.ctx.eph
     night_idx = np.flatnonzero(eph.sun_alt < 0.0)
     if night_idx.size:
-        steps = np.arange(night_idx[0], night_idx[-1] + 1, CURVE_STRIDE)
-    else:
-        steps = np.arange(0, len(eph.times), CURVE_STRIDE)
+        return np.arange(night_idx[0], night_idx[-1] + 1, CURVE_STRIDE)
+    return np.arange(0, len(eph.times), CURVE_STRIDE)
+
+
+def _curve_common(prep: PreparedNight) -> Dict[str, list]:
+    """The parts of a pick curve every target shares (times, Moon, darkness)."""
+    eph = prep.ctx.eph
+    steps = _curve_steps(prep)
     return {
         "t_utc": [iso_utc(eph.times[s]) for s in steps],
-        "alt": [round(float(prep.sky.alt[i, s]), 1) for s in steps],
         "moon_alt": [round(float(eph.moon_alt[s]), 1) for s in steps],
-        "limit": [round(float(prep.feats.limit[i, s]), 1) for s in steps],
         "dark": [bool(prep.ctx.dark_mask[s]) for s in steps],
     }
+
+
+def _curve_own(prep: PreparedNight, i: int, steps: Optional[np.ndarray] = None) -> Dict[str, list]:
+    """The per-target parts of a pick curve (altitude and horizon limit)."""
+    steps = _curve_steps(prep) if steps is None else steps
+    return {
+        "alt": [round(float(prep.sky.alt[i, s]), 1) for s in steps],
+        "limit": [round(float(prep.feats.limit[i, s]), 1) for s in steps],
+    }
+
+
+def _merge_curve(common: Mapping[str, list], own: Mapping[str, list]) -> Dict[str, list]:
+    return {"t_utc": common["t_utc"], "alt": own["alt"], "moon_alt": common["moon_alt"], "limit": own["limit"],
+            "dark": common["dark"]}
+
+
+def curve_for(prep: PreparedNight, i: int) -> Dict[str, list]:
+    return _merge_curve(_curve_common(prep), _curve_own(prep, i))
 
 
 def pick_to_dict(p: Pick, prep: Optional[PreparedNight] = None) -> Dict[str, Any]:
@@ -382,34 +405,154 @@ def pick_to_dict(p: Pick, prep: Optional[PreparedNight] = None) -> Dict[str, Any
     }
 
 
-def result_to_dict(result: Result, generated_at: Optional[datetime] = None, cached: bool = False) -> Dict[str, Any]:
+def _context_dict(result: Result) -> Dict[str, Any]:
+    ctx = result.context
+    return {
+        "night": ctx.night.isoformat(),
+        "site": {"id": ctx.site.id, "name": ctx.site.name, "timezone": ctx.site.timezone},
+        "tier": ctx.tier, "tier_note": ctx.tier_note,
+        "dark_start_utc": iso_utc(ctx.dark_start_utc), "dark_end_utc": iso_utc(ctx.dark_end_utc),
+        "moon": {"illumination": round(ctx.moon_illum, 3), "age_days": round(ctx.moon_age_days, 1),
+                 "up_fraction": round(ctx.moon_up_dark_frac, 2)},
+        "horizon_source": ctx.horizon_source, "floor_deg": round(ctx.floor_deg, 1),
+        "rig_mode": result.params.rig_mode,
+        "rigs": [{"id": r.id, "name": r.name, "classes": [c for c in CLASSES if c in r.classes]}
+                 for r in result.rigs],
+        "weights": result.params.weights.as_dict(),
+        # Additive: tier thresholds, dark hours and the Moon rules in force.
+        "tier_thresholds": {"ASTRO": -18.0, "NAUTICAL": -12.0, "BRIGHT": -9.0},
+        "dark_hours": round(ctx.dark_hours, 2),
+        "moon_rules": {k: {"D": v[0], "W": v[1]} for k, v in result.params.moon_rules.items()},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Cacheable engine payload (R2a §4) and rendering with per-user feedback
+# ---------------------------------------------------------------------------
+#
+# The Redis result cache holds a user-independent *payload*: every feasible pick
+# (not just the lane-sized lists), the exclusions, and the exact values the lane
+# rebuild needs. Each request renders it with that user's FeedbackState, so
+# feedback never invalidates or fragments the cache.
+
+PAYLOAD_FORMAT = 2
+
+
+def result_payload(result: Result, generated_at: Optional[datetime] = None) -> Dict[str, Any]:
+    """The user-independent, JSON-serialisable form of a Result (see render_payload)."""
     ctx = result.context
     prep = result.prepared
-    level, reasons = result.verdict
+    has_curves = prep is not None and prep.sky is not None and prep.feats.limit is not None
+    steps = _curve_steps(prep) if has_curves else None
+    ranked = []
+    for p in result.ranked:
+        if not p.reasons:
+            p.reasons = pick_reasons(p, ctx.tier)
+        d = pick_to_dict(p, None)
+        d["curve"] = _curve_own(prep, p.idx, steps) if has_curves and p.idx >= 0 else None
+        # Exact values for the rebuild (the display values are rounded).
+        d["_raw"] = {"score": float(p.score), "available_hours": float(p.available_hours), "lane": p.lane}
+        ranked.append(d)
     return {
+        "format": PAYLOAD_FORMAT,
         "generated_at": iso_utc(generated_at or datetime.utcnow()),
-        "cached": cached,
-        "context": {
-            "night": ctx.night.isoformat(),
-            "site": {"id": ctx.site.id, "name": ctx.site.name, "timezone": ctx.site.timezone},
-            "tier": ctx.tier, "tier_note": ctx.tier_note,
-            "dark_start_utc": iso_utc(ctx.dark_start_utc), "dark_end_utc": iso_utc(ctx.dark_end_utc),
-            "moon": {"illumination": round(ctx.moon_illum, 3), "age_days": round(ctx.moon_age_days, 1),
-                     "up_fraction": round(ctx.moon_up_dark_frac, 2)},
-            "horizon_source": ctx.horizon_source, "floor_deg": round(ctx.floor_deg, 1),
-            "rig_mode": result.params.rig_mode,
-            "rigs": [{"id": r.id, "name": r.name, "classes": [c for c in CLASSES if c in r.classes]}
-                     for r in result.rigs],
-            "weights": result.params.weights.as_dict(),
-            # Additive: tier thresholds, dark hours and the Moon rules in force.
-            "tier_thresholds": {"ASTRO": -18.0, "NAUTICAL": -12.0, "BRIGHT": -9.0},
-            "dark_hours": round(ctx.dark_hours, 2),
-            "moon_rules": {k: {"D": v[0], "W": v[1]} for k, v in result.params.moon_rules.items()},
-        },
-        "hero": pick_to_dict(result.hero, prep) if result.hero is not None else None,
-        "verdict": {"level": level, "reasons": reasons},
-        "lanes": [{"id": lane["id"], "title": lane["title"], "items": [pick_to_dict(p, prep) for p in lane["items"]]}
-                  for lane in result.lanes],
+        "context": _context_dict(result),
+        "moon_up_dark_frac": float(ctx.moon_up_dark_frac),
+        "moon_illum": float(ctx.moon_illum),
+        "no_rigs": not result.rigs,
+        "verdict": {"level": result.verdict[0], "reasons": result.verdict[1]},
         "excluded_counts": dict(result.excluded_counts),
         "skipped_rigs": list(result.skipped_rigs),
+        "curve_common": _curve_common(prep) if has_curves else None,
+        "ranked": ranked,
+        "excluded": {k: [v, result.excluded_names.get(k, k)] for k, v in result.excluded.items()},
     }
+
+
+@dataclass
+class CachedPick:
+    """A payload pick, duck-typed for apply_feedback / build_lanes / verdict."""
+    candidate: Candidate
+    score: float
+    available_hours: float
+    mode: Optional[str]
+    lane: Optional[str]
+    data: Dict[str, Any] = field(repr=False, default_factory=dict)
+
+    @property
+    def key(self) -> str:
+        return self.candidate.key
+
+    @property
+    def name(self) -> str:
+        return self.candidate.name
+
+
+def _cached_pick(d: Mapping[str, Any]) -> CachedPick:
+    raw = d.get("_raw") or {}
+    cand = Candidate(key=d["target_key"], name=d["name"], ra_deg=d["ra_deg"], dec_deg=d["dec_deg"],
+                     size_arcmin=d.get("size_arcmin"), kind=d.get("kind"), catalog=d.get("catalog"),
+                     magnitude=d.get("magnitude"), aliases=frozenset())
+    return CachedPick(candidate=cand, score=float(raw.get("score", d.get("score") or 0.0)),
+                      available_hours=float(raw.get("available_hours", d.get("available_hours") or 0.0)),
+                      mode=d.get("mode"), lane=raw.get("lane", d.get("lane")), data=d)
+
+
+def render_payload(payload: Mapping[str, Any], feedback=None, per_lane: int = DEFAULT_PER_LANE,
+                   cached: bool = False) -> Dict[str, Any]:
+    """
+    The §7 body (+ R2a additions) for one user: apply feedback, then rebuild
+    the lanes, hero and verdict with the R1 rules. An empty FeedbackState
+    reproduces the R1 body. `payload` is not modified.
+    """
+    from app.services.recommend.feedback import (
+        EXCL_DISMISSED, EXCL_SNOOZED, FeedbackState, apply_feedback, assemble_lanes, choose_hero,
+    )
+
+    feedback = feedback or FeedbackState.empty()
+    ctx = payload["context"]
+    night = date.fromisoformat(ctx["night"])
+    picks = [_cached_pick(d) for d in payload["ranked"]]
+    excluded = {k: v[0] for k, v in payload["excluded"].items()}
+    names = {k: v[1] for k, v in payload["excluded"].items()}
+    kept, hidden, unavailable = apply_feedback(picks, excluded, feedback, night, names,
+                                               bool(payload.get("no_rigs")))
+    lanes = assemble_lanes(kept, feedback.pinned, payload["moon_up_dark_frac"], payload["moon_illum"], per_lane,
+                           preassigned=True)
+    hero = choose_hero(kept, feedback.pinned)
+    if payload.get("no_rigs"):
+        v = (payload["verdict"]["level"], payload["verdict"]["reasons"])
+    else:
+        v = verdict(hero, ctx["tier"])
+    common = payload.get("curve_common")
+
+    def out(p: CachedPick) -> Dict[str, Any]:
+        d = dict(p.data)
+        d.pop("_raw", None)
+        d["lane"] = p.lane
+        own = d.get("curve")
+        d["curve"] = _merge_curve(common, own) if own and common else None
+        d["feedback"] = feedback.pick_feedback(p.key)
+        return d
+
+    counts = dict(payload["excluded_counts"])
+    counts[EXCL_SNOOZED] = hidden[EXCL_SNOOZED]
+    counts[EXCL_DISMISSED] = hidden[EXCL_DISMISSED]
+    return {
+        "generated_at": payload["generated_at"],
+        "cached": cached,
+        "context": {**ctx, "feedback_counts": feedback.counts(night)},
+        "hero": out(hero) if hero is not None else None,
+        "verdict": {"level": v[0], "reasons": v[1]},
+        "lanes": [{"id": lane["id"], "title": lane["title"], "items": [out(p) for p in lane["items"]]}
+                  for lane in lanes],
+        "excluded_counts": counts,
+        "skipped_rigs": list(payload["skipped_rigs"]),
+        "pinned_unavailable": unavailable,
+    }
+
+
+def result_to_dict(result: Result, generated_at: Optional[datetime] = None, cached: bool = False,
+                   feedback=None) -> Dict[str, Any]:
+    """The §7 body for a Result, through the same payload path the API uses (feedback optional)."""
+    return render_payload(result_payload(result, generated_at), feedback, result.params.per_lane, cached)

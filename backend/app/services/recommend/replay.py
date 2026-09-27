@@ -38,6 +38,7 @@ import numpy as np
 from app.services.recommend import (
     RIG_MODE_ALL, RIG_MODE_SINGLE, EngineInputs, Params, PreparedNight, Result, pair_details, recommend,
 )
+from app.services.recommend.feedback import FeedbackState, apply_feedback
 from app.services.recommend.history import HistoryRow, build_history, infer_goals
 from app.services.recommend.scoring import CLASS_BB, CLASS_OSC, MOON_RULES, Weights
 
@@ -505,13 +506,17 @@ def run_replay(nights: Sequence[ReplayNight], inputs_fn: InputsFn, params: Optio
                progress: Optional[Callable[[int, int], None]] = None,
                keep: Optional[Dict[date, Tuple[EngineInputs, str, bool, PreparedNight]]] = None,
                pair_info: Optional[Mapping[Tuple[str, date], Tuple[str, str]]] = None,
-               with_details: bool = True) -> List[NightOutcome]:
+               with_details: bool = True, feedback: Optional[FeedbackState] = None) -> List[NightOutcome]:
     """
     Run the engine for each night and collect outcomes. With `keep` (a dict),
     the per-night inputs and slimmed prepared state are stored for re-scoring
     (grid search).
+
+    `feedback` (R2a) is applied to each night's ranking like the live API does;
+    replay passes an empty FeedbackState (the default), which changes nothing.
     """
     params = replace(params or Params(), light=True)
+    feedback = feedback or FeedbackState.empty()
     outcomes = []
     for n, nr in enumerate(nights, start=1):
         cached = keep.get(nr.night) if keep is not None else None
@@ -521,6 +526,8 @@ def run_replay(nights: Sequence[ReplayNight], inputs_fn: InputsFn, params: Optio
             inputs, mode, known = inputs_fn(nr)
             prep = None
         result = recommend(inputs, replace(params, rig_mode=mode), prepared=prep)
+        if not feedback.is_empty:
+            result.ranked = apply_feedback(result.ranked, result.excluded, feedback, nr.night)[0]
         outcomes.append(outcome_from_result(nr, inputs, result, known, pair_info, with_details))
         if keep is not None and cached is None:
             keep[nr.night] = (inputs, mode, known, _slim(result.prepared))
