@@ -1,17 +1,34 @@
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+# Python caches (at any depth)
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
 .venv
 venv
 env
+
+# Secrets and local environment files - never bake these into a public image
 .env
+.env.*
+*.env
+celery_env.txt
+
+# VCS
 .git
 .gitignore
+
+# Local runtime state and scratch files (gitignored, but still present in the build context)
+celerybeat-schedule
+performance_report*.txt
+/test_*.py
+scripts/backfill_wcs_headers.py
+*.log
+
+# Host mounts
 library/logs
 library/temp
 library/thumbnails
 # data skipped here because backend/data contains catalog seed files
 # Large data usually goes in library/ or via volumes
 # data
-
