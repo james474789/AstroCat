@@ -30,8 +30,9 @@ Backups: `library/backups/pre_p0_20260926.dump`, `library/backups/pre_r0_2026092
 | Research + prototypes | Survey, live-data analysis, local and Telescopius-hybrid prototypes | ✅ done | — |
 | **P0** | Canonical target keys + Sh2 cross-IDs + `NONE` sentinel, capture-time provenance, site persistence | ✅ **deployed & verified** | actual: ~250k agent + ~150k orchestration |
 | **R0** | Equipment & Sites: spec §4 | ✅ **deployed & owner-checked** (§2a) | actual: ~340k B1 + ~260k B2 + ~120k orchestration |
-| **R1** | Local recommendation engine + replay test + Tonight page. Spec: [R1-recommendation-engine.md](R1-recommendation-engine.md) | ⏭ **next** (spec written, awaiting owner sign-off) | 0.8–1.15M |
-| R2 | Affinity/novelty/revisit lanes, inferred goals, feedback, Dashboard tile, optional Telescopius enrichment | not started | 0.5–0.7M |
+| **R1** | Local recommendation engine + replay test + Tonight page. Spec: [R1-recommendation-engine.md](R1-recommendation-engine.md), results: [R1-replay-results.md](R1-replay-results.md) | ✅ **deployed** (`20260927.01`). The owner kept default weights; replay §11.2 is knowingly not met (diagnostic only) | actual: ~1.3M |
+| **R2a** | Feedback actions, impressions and outcomes, Dashboard tile. Spec: [R2a-feedback-dashboard.md](R2a-feedback-dashboard.md) | ⏭ **next** (spec written) | 0.35–0.5M |
+| R2b | Affinity/novelty/revisit lanes, inferred goals, palette completeness, tuned on R2a feedback | not started | 0.4–0.6M |
 | R3 | Season planner, opt-in weather, `.hrz`/Target Scheduler export | not started | 0.6–0.9M |
 | R4 | Optional LLM nightly briefing | not started | 0.2–0.4M |
 | F7 / F16 | Sessions / mosaics (older design docs) | not started | F7 should build on R0's `sites` table |
