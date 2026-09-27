@@ -14,16 +14,43 @@ from app.utils.optics import SAMPLING_MAX_RATIO, SAMPLING_MIN_RATIO
 MEASURED = "OK"   # the only status whose values are AstroCat-measured
 
 
+# An image scale further than this factor from its rig's measured scale is
+# treated as bad data (some header solves store e.g. 72"/px for a 2.3"/px
+# rig). Loose enough to allow 2x2 binning.
+SCALE_MISMATCH_FACTOR = 2.5
+
+
+def _valid_scale(value) -> Optional[float]:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return v if 0 < v < 3600 else None
+
+
 def resolve_scale(image_scale: Optional[float], rig_scale: Optional[float]):
-    """(arcsec/px, source) with source IMAGE | RIG | None."""
-    for value, source in ((image_scale, "IMAGE"), (rig_scale, "RIG")):
-        try:
-            v = float(value)
-        except (TypeError, ValueError):
-            continue
-        if 0 < v < 3600:
-            return v, source
+    """
+    (arcsec/px, source): the image's plate scale (IMAGE), else its rig's
+    measured scale (RIG), or the rig's when the image's disagrees with it by
+    more than SCALE_MISMATCH_FACTOR (RIG_OVERRIDE). (None, None) when unknown.
+    """
+    img, rig = _valid_scale(image_scale), _valid_scale(rig_scale)
+    if img and rig and not (1 / SCALE_MISMATCH_FACTOR <= img / rig <= SCALE_MISMATCH_FACTOR):
+        return rig, "RIG_OVERRIDE"
+    if img:
+        return img, "IMAGE"
+    if rig:
+        return rig, "RIG"
     return None, None
+
+
+# SQL mirror of resolve_scale; needs `LEFT JOIN rigs r ON r.id = images.rig_id`.
+SCALE_SQL = (
+    "(CASE WHEN r.measured_scale_arcsec > 0 AND (images.pixel_scale_arcsec IS NULL "
+    f"OR images.pixel_scale_arcsec NOT BETWEEN r.measured_scale_arcsec / {SCALE_MISMATCH_FACTOR} "
+    f"AND r.measured_scale_arcsec * {SCALE_MISMATCH_FACTOR}) "
+    "THEN r.measured_scale_arcsec ELSE images.pixel_scale_arcsec END)"
+)
 
 
 def to_arcsec(px: Optional[float], scale: Optional[float]) -> Optional[float]:
@@ -107,4 +134,55 @@ def quality_summary(image, rig_scale: Optional[float] = None,
         "measured_at": image.star_metrics_at.isoformat() if getattr(image, "star_metrics_at", None) else None,
         "algo_version": getattr(image, "star_metrics_version", None),
         "night": context,
+    }
+
+
+# --------------------------------------------------------------------------
+# Aggregates over many subs (Q1b: Targets "By Filter & Rig")
+# --------------------------------------------------------------------------
+
+# One sample per measured sub, as built by SAMPLE_SQL-style json arrays:
+# [fwhm_px, hfr_px, eccentricity, star_count, scale_arcsec_or_null]
+SAMPLE_FIELDS = ("fwhm_px", "hfr_px", "eccentricity", "star_count", "scale")
+
+
+def _percentile(values, pct: float) -> Optional[float]:
+    """Linear-interpolated percentile (same definition as Postgres percentile_cont)."""
+    vals = sorted(float(v) for v in values if v is not None)
+    if not vals:
+        return None
+    if len(vals) == 1:
+        return round(vals[0], 3)
+    pos = (len(vals) - 1) * pct
+    lo = int(pos)
+    hi = min(lo + 1, len(vals) - 1)
+    return round(vals[lo] + (vals[hi] - vals[lo]) * (pos - lo), 3)
+
+
+def summarize_samples(samples) -> Optional[Dict[str, Any]]:
+    """
+    Median / best (p10) / worst (p90) star quality over a set of measured
+    subs, in px and, for subs with a known scale, arcsec. None when empty.
+    Arcsec statistics come from each sub's own scale, so mixed scales are fine.
+    """
+    rows = [s for s in (samples or []) if s and s[0] is not None]
+    if not rows:
+        return None
+    fwhm_px = [r[0] for r in rows]
+    hfr_px = [r[1] for r in rows]
+    fwhm_as = [r[0] * r[4] for r in rows if r[4]]
+    hfr_as = [r[1] * r[4] for r in rows if r[4] and r[1] is not None]
+    return {
+        "measured": len(rows),
+        "median_fwhm_px": _percentile(fwhm_px, 0.5),
+        "best_fwhm_px": _percentile(fwhm_px, 0.1),
+        "p90_fwhm_px": _percentile(fwhm_px, 0.9),
+        "median_hfr_px": _percentile(hfr_px, 0.5),
+        "median_fwhm_arcsec": _percentile(fwhm_as, 0.5),
+        "best_fwhm_arcsec": _percentile(fwhm_as, 0.1),
+        "p90_fwhm_arcsec": _percentile(fwhm_as, 0.9),
+        "median_hfr_arcsec": _percentile(hfr_as, 0.5),
+        "with_scale": len(fwhm_as),
+        "median_ecc": _percentile([r[2] for r in rows], 0.5),
+        "median_stars": _percentile([r[3] for r in rows], 0.5),
     }

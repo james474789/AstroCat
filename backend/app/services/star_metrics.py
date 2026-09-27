@@ -28,7 +28,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-ALGO_VERSION = 1
+ALGO_VERSION = 2   # 2: fit candidates by flux, sharp-artefact rejection (Q1b)
 
 DETECT_SIGMA = 5.0          # detection threshold, x global background rms
 MIN_STARS = 10              # fewer usable stars than this -> NO_STARS
@@ -40,6 +40,8 @@ SATURATION_FRACTION = 0.9   # pixels above this x saturation count as saturated
 MAX_MEASURE_PIXELS = 80_000_000  # larger frames are centre-cropped to this area
 DETECT_BIN = 2              # detection binning for large frames
 DETECT_BIN_ABOVE_PIXELS = 8_000_000
+SHARP_OUTLIER_FRACTION = 0.5   # HFR below this x the median -> not a star
+FIT_MIN_FWHM_PER_HFR = 0.8     # reject fits narrower than this x the star's own HFR
 GRID = 3                    # 3x3 region grid of median HFR (tilt/curvature)
 GRID_MIN_STARS = 5
 
@@ -415,6 +417,19 @@ def measure_array(data: np.ndarray, cfa_factor: int = 1,
     if len(idx) < MIN_STARS:
         return finish("NO_STARS", star_count=int(len(idx)))
 
+    # Drop objects far sharper than the frame's typical star: warm/hot-pixel
+    # clusters and cosmic rays that survived detection (common on uncalibrated,
+    # oversampled narrowband subs, where they out-peak the soft real stars).
+    # The reference size comes from the highest-flux objects (skipping the top
+    # 5%), which are real stars even when warm pixels outnumber them.
+    by_flux = np.argsort(flux[idx])[::-1]
+    ref = by_flux[int(len(by_flux) * 0.05):][:MAX_FIT_STARS]
+    ref_hfr = float(np.median(hfr[ref])) if len(ref) else float(np.median(hfr))
+    sharp = hfr < SHARP_OUTLIER_FRACTION * ref_hfr
+    details["sharp_rejected"] = int(np.count_nonzero(sharp))
+    if np.count_nonzero(~sharp) >= MIN_STARS:
+        idx, hfr = idx[~sharp], hfr[~sharp]
+
     hfr_med = float(np.median(hfr))
     details["n_hfr"] = int(len(idx))
     details["hfr_p10"] = _r(np.percentile(hfr, 10) * cfa_factor)
@@ -434,13 +449,21 @@ def measure_array(data: np.ndarray, cfa_factor: int = 1,
 
     # FWHM / eccentricity: Moffat fits on up to MAX_FIT_STARS bright,
     # unsaturated stars, skipping the brightest 5% (closest to saturation).
+    # Ranked by total flux, not peak: a warm pixel has a high peak but little
+    # flux, and ranking by peak let them crowd out soft, oversampled stars.
     snr = flux[idx] / (np.sqrt(np.maximum(npix[idx], 1)) * rms)
-    order = np.argsort(objs["peak"][idx])[::-1]
+    order = np.argsort(flux[idx])[::-1]
     order = order[int(len(order) * 0.05):]
     order = order[snr[order] > FIT_MIN_SNR][:MAX_FIT_STARS]
     half = int(min(max(math.ceil(3.0 * hfr_med) + 2, 5), 25))
     alpha0 = max(2.0 * hfr_med / _MOFFAT_FWHM_PER_ALPHA, 0.3)
-    fits_ = [f for f in (_fit_star(data, float(x[idx[i]]), float(y[idx[i]]), half, alpha0) for i in order) if f]
+    fits_ = []
+    for i in order:
+        f = _fit_star(data, float(x[idx[i]]), float(y[idx[i]]), half, alpha0)
+        # A real star's FWHM is at least ~1.1x its HFR (1.7x for a Moffat,
+        # 2x for a Gaussian); a fit far below that locked onto a sharp artefact.
+        if f and math.sqrt(f[0] * f[1]) >= FIT_MIN_FWHM_PER_HFR * hfr[i]:
+            fits_.append(f)
     details["n_fwhm"] = len(fits_)
 
     if len(fits_) >= MIN_FITS:
