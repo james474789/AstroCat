@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { fetchImage, remeasureStarMetrics } from '../../api/client';
+import { fetchImage, fetchNightTimeline, remeasureStarMetrics } from '../../api/client';
 import { useQualityUnits } from '../../context/QualityUnitsContext';
 import {
     STATUS_LABELS, SKIP_REASONS, SAMPLING_LABELS,
     formatSize, formatSecondary, formatDelta, deltaTone,
 } from '../../utils/quality';
 import QualityUnitsToggle from './QualityUnitsToggle';
+import SessionQualityChart from './SessionQualityChart';
 import './Quality.css';
 
 // Q1 "Star Quality" section for Image Detail (docs/design/Q1-star-quality.md §8.3).
@@ -86,6 +88,22 @@ export default function StarQualityCard({ image, onImageUpdated }) {
     const status = q.status ?? image.star_metrics_status ?? null;
 
     useEffect(() => () => clearTimeout(pollRef.current), []);
+
+    // Q1c: this sub in the context of its night (same rig and target).
+    const nightKey = q.night?.night;
+    const sparkKey = nightKey ? `${nightKey}|${image.target_key}|${image.rig_id}` : null;
+    const [spark, setSpark] = useState({ key: null, data: null });
+    useEffect(() => {
+        if (!nightKey) return undefined;
+        let cancelled = false;
+        const key = `${nightKey}|${image.target_key}|${image.rig_id}`;
+        const params = { target_key: image.target_key || undefined, rig_id: image.rig_id ?? undefined };
+        fetchNightTimeline(nightKey, params)
+            .then((data) => { if (!cancelled) setSpark({ key, data }); })
+            .catch(() => { if (!cancelled) setSpark({ key, data: null }); });
+        return () => { cancelled = true; };
+    }, [nightKey, image.target_key, image.rig_id]);
+    const nightTimeline = spark.key === sparkKey ? spark.data : null;
 
     async function handleRemeasure() {
         setBusy(true);
@@ -188,6 +206,18 @@ export default function StarQualityCard({ image, onImageUpdated }) {
                     Arcseconds use the rig’s measured scale ({q.scale_arcsec?.toFixed(2)}″/px): this image’s stored plate
                     scale ({image.pixel_scale_arcsec?.toFixed(2)}″/px) disagrees with it too much to be right.
                 </p>
+            )}
+
+            {nightTimeline && nightTimeline.points.length > 1 && (
+                <div className="quality-night-spark">
+                    <div className="quality-grid-caption" style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <strong>FWHM through the night</strong>
+                        <Link to={`/nights/${nightKey}${image.target_key ? `?target=${encodeURIComponent(image.target_key)}` : ''}${image.rig_id != null ? `${image.target_key ? '&' : '?'}rig=${image.rig_id}` : ''}`}>
+                            View night →
+                        </Link>
+                    </div>
+                    <SessionQualityChart timeline={nightTimeline} compact highlightId={image.id} />
+                </div>
             )}
 
             {status === 'OK' && q.grid_hfr_px && <RegionGrid gridPx={q.grid_hfr_px} gridArcsec={q.grid_hfr_arcsec} units={units} />}

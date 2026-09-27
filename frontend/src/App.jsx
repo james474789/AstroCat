@@ -14,6 +14,7 @@ import Stats from './pages/Stats';
 import FitsStats from './pages/FitsStats';
 import Admin from './pages/Admin';
 import Equipment from './pages/Equipment';
+import NightReport from './pages/NightReport';
 import { AuthProvider } from './context/AuthContext';
 import { QualityUnitsProvider } from './context/QualityUnitsContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -110,6 +111,9 @@ const AppRoutes = () => {
                   <Route path="/tonight" element={<ErrorBoundary><Tonight /></ErrorBoundary>} />
                   <Route path="/targets" element={<Targets />} />
                   <Route path="/targets/:targetKey" element={<TargetDetail />} />
+                  {/* Q1c: star quality through a night */}
+                  <Route path="/nights" element={<ErrorBoundary><NightReport /></ErrorBoundary>} />
+                  <Route path="/nights/:night" element={<ErrorBoundary><NightReport /></ErrorBoundary>} />
                   {/* R0: inserted after Targets per docs/design/README.md §4 */}
                   <Route path="/equipment" element={<ErrorBoundary><Equipment /></ErrorBoundary>} />
                   <Route path="/stats" element={<Stats />} />
