@@ -1,7 +1,7 @@
 """R2a §4 and §9: per-user feedback applied after scoring (pure; no database)."""
 
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 
