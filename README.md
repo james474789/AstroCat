@@ -9,8 +9,14 @@
 
 - **Image Indexing**: Automatically extract metadata from FITS, XISF, RAW (CR2/CR3/NEF/ARW/DNG), and standard image formats
 - **Blind Solve**: Automatically attempt blind plate solving if initial solve fails
-- **Catalog Matching**: Match images to Messier, NGC, and Named Star catalogs by coordinates
-- **Advanced Search**: Search by object name, filename, coordinates, exposure time, and more
+- **Catalog Matching**: Match images to Messier, NGC, Caldwell, Sharpless (Sh2), and Named Star catalogs by coordinates
+- **Frame Types**: Classifies every image as Light/Dark/Flat/Bias/Dark-Flat from header/filename/path data, with a dashboard tile, Search filter, and admin reclassify tool
+- **Targets**: Groups images by resolved target (canonicalized catalog key), with per-target goal tracking and a Targets/Target Detail page
+- **Equipment & Sites**: Tracks cameras, optics, filters, and up to 5 concurrently mounted rigs per site, with auto-detection from headers, Telescopius import, and pixel-scale/focal-length display in By Filter & Rig
+- **Imaging Sessions & Night Report**: Groups images into observing nights with a per-session timeline view
+- **Target Recommendations ("Tonight")**: Local recommendation engine that scores targets for tonight's session per rig, with feedback/outcomes tracking and a dashboard tile
+- **Star Quality Metrics**: Measures HFR/FWHM/eccentricity for every Light frame, surfaced as a Star Quality card (with arcsec/px toggle) on Targets, session timeline, search, equipment, stats, and the dashboard
+- **Advanced Search**: Search by object name, filename, coordinates, exposure time, frame type, and more
 - **Keyboard Navigation**: Use arrow keys to navigate between images in detail view
 - **Thumbnail Generation**: On-demand thumbnail generation with adjustable size slider
 - **Modern UI**: Responsive React frontend with dark theme
@@ -261,6 +267,11 @@ Detailed documentation is available in the `docs/` directory:
 - [**Database Schema**](docs/core/DATABASE_SCHEMA.md): Detailed table definitions and spatial query logic.
 - [**Development Guide**](docs/development/DEVELOPMENT_GUIDE.md): Setup instructions and common development workflows.
 - [**Backup & Restore**](docs/infrastructure/BACKUP_RESTORE.md): Database backup and recovery procedures.
+- [**Frame Types**](docs/features/FRAME_TYPES.md): Light/Dark/Flat/Bias/Dark-Flat classification.
+- [**Targets**](docs/features/TARGETS.md): Target resolution, canonicalisation, and goals.
+- [**Equipment & Sites**](docs/features/EQUIPMENT.md): Cameras, optics, filters, rigs, and sites.
+- [**Recommendations**](docs/features/RECOMMENDATIONS.md): The Tonight page recommendation engine, feedback, and outcomes.
+- [**Star Quality**](docs/design/Q1-star-quality.md): HFR/FWHM/eccentricity measurement and the Star Quality UI.
 
 ## 🗄️ Database Schema
 
@@ -274,6 +285,8 @@ Detailed documentation is available in the `docs/` directory:
 ### Catalogs
 - **Messier**: 110 deep-sky objects
 - **NGC**: 7,840+ objects (New General Catalogue)
+- **Caldwell**: 109 deep-sky objects
+- **Sharpless (Sh2)**: Sharpless catalog of HII regions
 - **Named Stars**: Common star names and positions
 - Spatial indexing for coordinate matching
 
@@ -296,6 +309,21 @@ Detailed documentation is available in the `docs/` directory:
 | `GET /api/admin/stats` | Admin statistics dashboard |
 | `GET /api/filesystem/list` | Browse filesystem directories |
 | `GET /api/settings` | Application settings |
+| `GET /api/targets` | List targets grouped by resolved key |
+| `GET /api/targets/{target_key}` | Get target detail and images |
+| `PUT /api/targets/{target_key}/goals` | Set a target's imaging goal |
+| `GET /api/equipment` | List cameras, optics, filters, and rigs |
+| `POST /api/equipment/rigs/{rig_id}/mount` | Mount a rig at a site (up to 5 concurrent) |
+| `GET /api/equipment/detect` | Detect equipment setups from image headers |
+| `POST /api/equipment/import/telescopius` | Import equipment from Telescopius |
+| `GET /api/sites` | List observing sites |
+| `GET /api/recommendations` | Get tonight's target recommendations |
+| `GET /api/recommendations/replay/latest` | Latest recommendation replay/tuning run |
+| `POST /api/recommendations/feedback` | Record feedback on a recommendation |
+| `GET /api/recommendations/outcomes` | Get recommendation outcome stats |
+| `GET /api/quality/nights` | Per-night star quality summary |
+| `GET /api/quality/timeline` | Session timeline with quality metrics |
+| `GET /api/quality/stats` | Aggregate HFR/FWHM/eccentricity stats |
 
 ## 📊 Supported File Formats
 
