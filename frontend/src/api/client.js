@@ -545,6 +545,18 @@ export async function fetchStarMetricsStatus() {
     return handleResponse(await fetch(`${API_BASE_URL}/indexer/star-metrics`, { credentials: 'include' }));
 }
 
+// Q1c: observing nights with Light subs (newest first), optionally for one target/rig.
+export async function fetchQualityNights(params = {}) {
+    const qs = buildQueryString(params);
+    return handleResponse(await fetch(`${API_BASE_URL}/quality/nights${qs ? `?${qs}` : ''}`, { credentials: 'include' }));
+}
+
+// Q1c: one night's subs with star quality, altitude, events, flags and summaries.
+export async function fetchNightTimeline(night, params = {}) {
+    const qs = buildQueryString({ night, ...params });
+    return handleResponse(await fetch(`${API_BASE_URL}/quality/timeline?${qs}`, { credentials: 'include' }));
+}
+
 // scope: 'failed' | 'no_stars' | 'all'
 export async function requestStarMetricsRemeasure(scope) {
     return handleResponse(await fetch(`${API_BASE_URL}/indexer/star-metrics/remeasure`, {

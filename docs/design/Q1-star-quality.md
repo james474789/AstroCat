@@ -550,6 +550,44 @@ These are the places where the implementation differs from the text above. Where
   Those subs now measure 7.5–8.1 px, consistent with the rest of the night, and control frames are unchanged within about 5%. Rows measured by version 1 are re-measured automatically.
 - **Plate-scale guard.** 466 of 6,417 header-solved images store a plate scale more than 2.5× off their rig's measured scale (e.g. 72″/px on registered `_r.fit` subs of a 2.27″/px rig). `resolve_scale` / `SCALE_SQL` use the rig scale in that case (`scale_source: RIG_OVERRIDE`), and Image Detail explains why. The root cause is a separate task.
 
+## 11c. As built — Q1c (2026-09-27)
+
+**API** (`api/quality.py`)
+- `GET /api/quality/nights` returns nights newest first, with a per-rig breakdown.
+- `GET /api/quality/timeline?night=&target_key=&rig_id=&site_id=` returns one night.
+- The pure logic lives in `services/session_quality.py`.
+
+**Altitude and airmass**
+- Uses `utils/horizon.alt_az` at mid-exposure. Unsolved subs borrow their target's median pointing for that night.
+- Airmass uses Kasten–Young.
+- The site comes from the assigned site, else the image's header site, else the default site.
+
+**Events**
+- Autofocus: any `FOCPOS` change. N.I.N.A. filename tokens `Focus-122312` and `FTemp--2.37C` are now parsed too.
+- Filter change and target change.
+- Gaps longer than max(10 min, 3 × exposure).
+- **Meridian flips** come from a `PIERSIDE` change, or from a *sustained* rotation change: at most ¼ of the 4 subs before on one side and at least ¾ of the 4 after on the other.
+  - Real R7 headers alternate −87.6°/92.0° sub to sub, which fired 8 false flips with a naive 180° jump test.
+
+**Flags**
+- Computed per rig+filter against the night's median: SOFT (FWHM > 1.3×), CLOUD (stars < 0.5×), TRAILED (ecc > max(0.6, median + 0.15)).
+- The TRAILED threshold is relative so that lenses whose stars are always elongated aren't flagged wholesale.
+- Groups with fewer than 5 subs aren't flagged.
+
+**Summary**
+- Median, best and worst FWHM per rig+filter.
+- Drift is the Theil–Sen slope per hour, only for runs of at least 45 minutes.
+- The dark window is the full astronomical-darkness interval of that night.
+
+**UI**
+- `SessionQualityChart` is one shared time axis with small synced panels: the metric, altitude, stars and eccentricity. Each panel has one y-axis (no dual axes).
+- Filters use colour **and** marker shape. Lines break across pauses longer than 20 minutes. The running median uses measured subs only.
+- It appears in three places:
+  - the new **Nights** page (`/nights/:night`), which has a picker, rig selector, summary cards and a sortable, flag-filterable table of subs
+  - Target Detail: click a night
+  - Image Detail: a compact chart with the current sub highlighted
+- The Target Detail Nights chart from Q1b had FWHM on a second y-axis. It now has its own synced chart.
+
 ## 12. Decisions (owner, 2026-09-27)
 
 1. **Header/filename hints: use them when present.** The capture software only sometimes writes HFR. The hint parser (§4.7) ships in Q1a.
