@@ -73,7 +73,7 @@ celery_app.conf.beat_schedule = {
     },
     "star-metrics-sweeper": {  # Q1: backfill/retry star quality measurements
         "task": "app.tasks.quality.sweep",
-        "schedule": 600.0,
+        "schedule": 60.0,  # checks the queue often so it stays topped off; cheap no-op when queue is long
     },
 }
 

@@ -71,7 +71,9 @@ export default function StarQualityAdmin({ systemSettings, onSettingsChange }) {
         || (systemSettings.star_metrics_backfill !== false && !status.settings.star_metrics_backfill && status.settings.star_metrics_enabled));
     const pct = status && status.eligible ? Math.round((status.done / status.eligible) * 1000) / 10 : 0;
     const remaining = status ? status.counts.never + status.counts.pending : 0;
-    const perDay = status ? status.sweep_batch * 6 * 24 : 0;
+    // Prefer the actual measured-per-hour rate; fall back to a rough estimate
+    // from the sweep batch size until enough recent history exists.
+    const perDay = status ? (status.measured_per_hour ? status.measured_per_hour * 24 : status.sweep_batch * 6 * 24) : 0;
     const days = status && perDay ? remaining / perDay : null;
 
     return (
@@ -91,7 +93,7 @@ export default function StarQualityAdmin({ systemSettings, onSettingsChange }) {
                         onChange={(v) => save({ star_metrics_enabled: v })} />
                 </SettingRow>
                 <SettingRow title="Measure existing library"
-                    description={`Work through images indexed before measuring existed, newest first, ${status ? status.sweep_batch : 200} every 10 minutes while the queue is short. Each image is read in full from storage.`}>
+                    description={`Work through images indexed before measuring existed, newest first, in batches of ${status ? status.sweep_batch : 200} that top the queue back up as soon as it runs short. Each image is read in full from storage.`}>
                     <Toggle label="Measure existing library" checked={systemSettings.star_metrics_backfill !== false} disabled={saving || systemSettings.star_metrics_enabled === false}
                         onChange={(v) => save({ star_metrics_backfill: v })} />
                 </SettingRow>

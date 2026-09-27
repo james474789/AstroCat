@@ -200,9 +200,13 @@ async def trigger_data_migrations(payload: dict = None):
 REMEASURE_SCOPES = ("failed", "no_stars", "all")
 
 
+STAR_METRICS_RATE_WINDOW_MINUTES = 30
+
+
 @router.get("/star-metrics")
 async def get_star_metrics_status():
     """Measurement progress over eligible images (Light subs + masters) and the quality queue."""
+    from datetime import datetime, timedelta
     from sqlalchemy import func, select
     from app.database import AsyncSessionLocal
     from app.models.image import FrameType, Image
@@ -210,12 +214,23 @@ async def get_star_metrics_status():
     from app.services.star_metrics import ALGO_VERSION
     from app.tasks.quality import ELIGIBLE_SUBTYPES, QUEUE
 
+    window = timedelta(minutes=STAR_METRICS_RATE_WINDOW_MINUTES)
+    since = datetime.utcnow() - window
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(
             select(Image.star_metrics_status, func.count())
             .where(Image.frame_type == FrameType.LIGHT, Image.subtype.in_(ELIGIBLE_SUBTYPES))
             .group_by(Image.star_metrics_status)
         )).all()
+        # Actual completion rate, not the queueing rate: how many finished measuring
+        # in the trailing window, regardless of how the sweeper's schedule is tuned.
+        recent_done = (await db.execute(
+            select(func.count()).where(
+                Image.frame_type == FrameType.LIGHT, Image.subtype.in_(ELIGIBLE_SUBTYPES),
+                Image.star_metrics_status.isnot(None), Image.star_metrics_status != "PENDING",
+                Image.star_metrics_at >= since,
+            )
+        )).scalar_one()
     counts = {(status or "NEVER").lower(): n for status, n in rows}
     eligible = sum(counts.values())
     done = eligible - counts.get("never", 0) - counts.get("pending", 0)
@@ -233,6 +248,7 @@ async def get_star_metrics_status():
         "algo_version": ALGO_VERSION,
         "settings": quality_settings(),
         "sweep_batch": settings.star_metrics_sweep_batch,
+        "measured_per_hour": round(recent_done / (window.total_seconds() / 3600), 1) if recent_done else None,
     }
 
 
