@@ -3,10 +3,12 @@ Star quality tasks (Q1, docs/design/Q1-star-quality.md §5).
 
 - measure_star_metrics(image_id): measure one image (queue "quality"). Queued
   by the indexer right after an eligible image is saved, and by the sweeper.
-- sweep(): beat task, every 10 minutes. Backfills the library newest-first in
-  batches while the quality queue is short, retries FAILED rows, re-queues
-  rows measured by an older ALGO_VERSION and rescues PENDING rows whose task
-  was lost. Self-healing, so no data migration is needed.
+- sweep(): beat task, every minute. Tops the quality queue back up to
+  star_metrics_sweep_batch whenever it drains to star_metrics_queue_max or
+  below, so a fast worker never sits idle waiting on a slow beat tick.
+  Backfills the library newest-first, retries FAILED rows, re-queues rows
+  measured by an older ALGO_VERSION and rescues PENDING rows whose task was
+  lost. Self-healing, so no data migration is needed.
 """
 
 import logging
