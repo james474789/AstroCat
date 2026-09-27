@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { fetchStatsOverview, fetchImages, fetchStatsByMonth, fetchTopObjects, fetchRecommendations } from '../api/client';
 import ImageCard from '../components/images/ImageCard';
+import LastNightTile from '../components/quality/LastNightTile';
 import './Dashboard.css';
 
 // Binding contract for the Tonight tile: docs/design/R2a-feedback-dashboard.md §7. The backend
@@ -193,6 +194,7 @@ export default function Dashboard() {
             <div className="dashboard-grid">
                 {/* Tonight (R2a) */}
                 <TonightTile />
+                <LastNightTile />
 
                 {/* Monthly Activity Chart */}
                 <div className="dashboard-card chart-card">

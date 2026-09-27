@@ -22,6 +22,7 @@ import {
     formatDateTime,
 } from '../api/client';
 import './Equipment.css';
+import QualityValue from '../components/quality/QualityValue';
 
 const FILTER_BANDS = ['L', 'R', 'G', 'B', 'Ha', 'OIII', 'SII', 'Hb', 'Duo', 'None', 'Other'];
 const OPTIC_KINDS = ['TELESCOPE', 'LENS'];
@@ -173,8 +174,12 @@ function RigCard({ rig, isAdmin, mountLimit, onEdit, onDelete, onMountToggle, on
                 )}
                 <div className="badge-row">
                     {rig.sampling && (
-                        <span className={`badge ${samplingClass(rig.sampling.verdict)}`}>
+                        <span className={`badge ${samplingClass(rig.sampling.verdict)}`}
+                            title={rig.sampling_seeing_source === 'MEASURED'
+                                ? `${rig.sampling.ratio} px per FWHM, using this rig's measured delivered FWHM (${rig.sampling.seeing_arcsec}″)`
+                                : `${rig.sampling.ratio} px per FWHM, using the site's typical seeing (${rig.sampling.seeing_arcsec}″)`}>
                             {samplingLabel(rig.sampling.verdict)}
+                            {rig.sampling_seeing_source === 'MEASURED' ? ' (measured)' : ''}
                         </span>
                     )}
                     {scaleCheckMsg && (
@@ -183,6 +188,14 @@ function RigCard({ rig, isAdmin, mountLimit, onEdit, onDelete, onMountToggle, on
                         </span>
                     )}
                 </div>
+                {rig.delivered_fwhm && (
+                    <div className="rig-line small"
+                        title={`Median FWHM over this rig's last ${rig.delivered_fwhm.window_days} days of use (${rig.delivered_fwhm.n} measured subs). Includes seeing, optics, focus and guiding.`}>
+                        Delivered FWHM <QualityValue px={rig.delivered_fwhm.median_px} arcsec={rig.delivered_fwhm.median_arcsec} />
+                        {' · best '}<QualityValue px={rig.delivered_fwhm.best_px} arcsec={rig.delivered_fwhm.best_arcsec} />
+                        <span className="muted"> · {rig.delivered_fwhm.n} subs</span>
+                    </div>
+                )}
                 <div className="rig-line muted small">
                     {rig.image_count} subs · last used {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
                 </div>
@@ -874,6 +887,18 @@ function DetectReviewPanel({ detect, existingOptics, telescopiusAvailable, onClo
 
 function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchSites }) {
     const [selectedSiteId, setSelectedSiteId] = useState(null);
+
+    // Q1d: adopt the measured delivered FWHM as the site's typical seeing (feeds rig sampling checks).
+    async function handleUseMeasuredSeeing(site) {
+        const value = Math.round(site.measured_seeing.fwhm_arcsec * 100) / 100;
+        try {
+            await updateSite(site.id, { typical_seeing_arcsec: value });
+            showToast(`${site.name}: typical seeing set to ${value}″`);
+            refetchSites();
+        } catch (err) {
+            showToast(`Failed to update site: ${err.message}`, 'error');
+        }
+    }
     // Fall back to the first site until the viewer picks one explicitly (derived in render,
     // not an effect, so switching sites away and back doesn't fight a stale selection).
     const effectiveSiteId = selectedSiteId ?? sites[0]?.id ?? null;
@@ -952,6 +977,19 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
                             <span className="rig-name">{s.name}{s.is_default && <span className="badge badge-primary" style={{ marginLeft: '0.5rem' }}>Default</span>}</span>
                         </div>
                         <div className="rig-line muted small">{s.timezone} · Bortle {s.bortle ?? '—'} · seeing {s.typical_seeing_arcsec}″ · {s.image_count} subs</div>
+                        {s.measured_seeing && (
+                            <div className="rig-line small site-measured"
+                                title={`Median delivered FWHM of the sharpest rig that can resolve seeing (${s.measured_seeing.rig_name}, ${s.measured_seeing.n} subs, its last ${s.measured_seeing.window_days} days). Includes optics and guiding, so the true seeing is this or better.`}>
+                                Measured {s.measured_seeing.fwhm_arcsec.toFixed(2)}″
+                                <span className="muted"> ({s.measured_seeing.rig_name})</span>
+                                {Math.abs(s.measured_seeing.fwhm_arcsec - s.typical_seeing_arcsec) >= 0.1 && (
+                                    <button className="btn btn-ghost btn-sm" disabled={!isAdmin}
+                                        onClick={(e) => { e.stopPropagation(); handleUseMeasuredSeeing(s); }}>
+                                        Use as typical seeing
+                                    </button>
+                                )}
+                            </div>
+                        )}
                         <div className="equip-card-actions">
                             <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onEdit(s); }} disabled={!isAdmin}><Pencil size={14} /> Edit</button>
                             <button className="btn btn-ghost btn-sm danger" onClick={(e) => { e.stopPropagation(); onDelete(s); }} disabled={!isAdmin}><Trash2 size={14} /> Delete</button>
@@ -1288,7 +1326,10 @@ export default function Equipment() {
                     onDelete={handleDeleteSite}
                     onAdd={() => setSiteModal({ site: null })}
                     showToast={showToast}
-                    refetchSites={() => queryClient.invalidateQueries({ queryKey: ['sites'] })}
+                    refetchSites={() => {
+                        queryClient.invalidateQueries({ queryKey: ['sites'] });
+                        queryClient.invalidateQueries({ queryKey: ['equipment'] });
+                    }}
                 />
             )}
 

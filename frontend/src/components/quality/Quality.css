@@ -394,3 +394,87 @@
 .quality-night-spark {
     margin-top: var(--spacing-md, 0.75rem);
 }
+
+/* FITS Analytics star quality section (Q1d) */
+.quality-stats {
+    margin-top: 2rem;
+}
+
+.quality-stats-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.quality-stats-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.quality-stats-controls .select {
+    max-width: 100%;
+}
+
+.site-measured {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+/* Dashboard "Last night" tile (Q1d) */
+.last-night-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0 var(--spacing-lg, 1rem) var(--spacing-lg, 1rem);
+}
+
+.last-night-stats {
+    display: flex;
+    gap: 1.25rem;
+}
+
+.last-night-stats div {
+    display: flex;
+    flex-direction: column;
+}
+
+.last-night-stats strong {
+    font-size: 1.4rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-primary);
+}
+
+.last-night-stats span {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+
+.last-night-stats .warn strong {
+    color: var(--color-warning);
+}
+
+.last-night-rig {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.last-night-rig .text-muted {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.last-night-warn {
+    color: var(--color-warning);
+    margin: 0;
+}
