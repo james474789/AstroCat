@@ -524,7 +524,13 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
         assign_equipment_sync(session, image)
 
         session.commit()
-    
+
+        # 6. Star quality (Q1): queue a measurement on the "quality" queue for
+        # eligible Lights that are new, changed on disk, or measured by an older
+        # algorithm. Never raises.
+        from app.tasks.quality import queue_if_needed
+        queue_if_needed(session, image)
+
     return {"status": "completed", "file": file_path, "matches": matches_count}
 
 
