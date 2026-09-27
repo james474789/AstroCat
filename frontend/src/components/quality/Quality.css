@@ -243,3 +243,154 @@
     color: var(--color-text-secondary);
     padding: 0.3rem 0.2rem 0;
 }
+
+/* Session timeline (Q1c) */
+.session-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.session-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.session-metric {
+    display: inline-flex;
+    flex-wrap: wrap;
+    max-width: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.session-metric button {
+    border: 0;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    padding: 0.3rem 0.65rem;
+    cursor: pointer;
+}
+
+.session-metric button + button {
+    border-left: 1px solid var(--color-border);
+}
+
+.session-metric button.active {
+    background: var(--color-primary);
+    color: #fff;
+}
+
+.session-normalize {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+}
+
+.session-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.session-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+    cursor: pointer;
+}
+
+.session-chip.off {
+    opacity: 0.4;
+    text-decoration: line-through;
+}
+
+.session-panel-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin: 0.35rem 0 0 0.25rem;
+}
+
+.session-footnote {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin: 0.4rem 0 0;
+}
+
+.session-tooltip {
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.78rem;
+    color: var(--color-text-secondary);
+    max-width: 260px;
+}
+
+.session-tooltip-value {
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.session-tooltip-value span {
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+}
+
+.session-tooltip-muted {
+    color: var(--color-text-muted);
+}
+
+.session-tooltip-flag {
+    color: var(--color-warning);
+}
+
+.session-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 0.6rem;
+    margin-top: 0.75rem;
+}
+
+.session-summary-card {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    background: var(--color-surface);
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+}
+
+.session-summary-card strong {
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.session-summary-title {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    margin-bottom: 0.2rem;
+}
+
+.quality-night-spark {
+    margin-top: var(--spacing-md, 0.75rem);
+}

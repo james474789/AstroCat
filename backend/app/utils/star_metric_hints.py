@@ -67,6 +67,13 @@ def _from_name(stem: str, token: str) -> Optional[float]:
     return None
 
 
+# N.I.N.A. focuser tokens: "_Focus-122312_" (position, up to 7 digits) and
+# "_FTemp--2.37C_" (temperature, may be negative). Empty tokens ("Focus-_",
+# "FTemp-C") mean the value wasn't available and don't match.
+_FOCUS_POS_RE = re.compile(r"(?:^|(?<=[_\-\s.]))(?:FOCUS|FOCPOS)[_\-=]?(\d{1,7})(?=$|[_\s.])", re.IGNORECASE)
+_FOCUS_TEMP_RE = re.compile(r"(?:^|(?<=[_\-\s.]))(?:FTEMP|FOCTEMP)[_\-=]?(-?\d{1,3}(?:[.,]\d{1,3})?)C?(?=$|[_\s.])", re.IGNORECASE)
+
+
 def extract_hints(raw_header: Optional[dict], file_name: Optional[str]) -> Dict[str, Any]:
     """{hint: value} for every hint found; header values win over filename tokens."""
     hints: Dict[str, Any] = {}
@@ -74,6 +81,10 @@ def extract_hints(raw_header: Optional[dict], file_name: Optional[str]) -> Dict[
 
     if file_name:
         stem = PurePath(file_name).stem
+        for hint, pattern in (("FOCPOS", _FOCUS_POS_RE), ("FOCTEMP", _FOCUS_TEMP_RE)):
+            match = pattern.search(stem)
+            if match:
+                hints[hint] = _num(match.group(1))
         for hint, tokens in _NAME_TOKENS.items():
             for token in tokens:
                 value = _from_name(stem, token)
