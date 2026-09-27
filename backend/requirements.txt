@@ -31,9 +31,11 @@ astropy==6.0.0
 pillow==11.0.0
 ExifRead==3.0.0
 rawpy==0.19.1
-numpy==1.26.3
+numpy==1.26.4
 xisf==0.9.5
 tifffile==2023.12.9
+sep==1.4.1        # star detection / HFR (Q1 star quality metrics)
+scipy==1.13.1     # PSF fitting (Q1); supports numpy 1.26 / Python 3.12
 tzdata==2025.2  # zoneinfo database for site timezones (R0); the slim image has none
 
 # -------------------------------------------
