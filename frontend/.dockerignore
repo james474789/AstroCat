@@ -1,7 +1,11 @@
 node_modules
 dist
 .git
-.env
 .gitignore
 .vscode
 *.log
+
+# Secrets and local environment files - never bake these into a public image
+.env
+.env.*
+*.env
