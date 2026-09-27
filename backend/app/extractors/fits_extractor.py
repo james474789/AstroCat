@@ -11,6 +11,7 @@ bad card can never abort the extraction of the remaining metadata.
 
 import logging
 import math
+import re
 import warnings
 from typing import Dict, Any
 from datetime import datetime
@@ -21,6 +22,7 @@ from astropy.utils.exceptions import AstropyWarning
 
 from app.extractors.base import BaseExtractor
 from app.utils.header_values import parse_sexagesimal
+from app.utils.plate_scale import header_pixel_scale, wcs_frame, wcs_matrix_scale
 
 logger = logging.getLogger(__name__)
 
@@ -241,44 +243,32 @@ class FITSExtractor(BaseExtractor):
         
         # Initialize defaults
         ra_center, dec_center = None, None
-        pixel_scale = None
         rotation = 0.0
         radius_degrees = 1.0
         wcs_type = "NONE"
 
+        # Plate scale is derived from keywords alone (not the astropy WCS
+        # object) so a WCS that fails to parse can't push us onto a bogus
+        # fallback, and every source is cross-checked against the optics.
+        pixel_scale, _ = header_pixel_scale(header)
+
         # 1. Try Standard WCS logic
         if "CRVAL1" in header and "CRVAL2" in header:
             try:
-                w = WCS(header)
-                # Check if scale is actually defined or just default 1.0
-                # By default, Astropy WCS assumes identity if no CD/CDELT is found
-                # Scale matrix will be Identity Matrix [[1, 0], [0, 1]] if missing.
-                actual_scale = 0
-                cdelt1 = self._parse_float(self._safe_get(header, "CDELT1"))
-                if cdelt1 is not None:
-                    actual_scale = abs(cdelt1) * 3600
-                else:
-                    cd11 = self._parse_float(self._safe_get(header, "CD1_1"))
-                    if cd11 is not None:
-                        cd12 = self._parse_float(self._safe_get(header, "CD1_2", default=0)) or 0.0
-                        actual_scale = math.sqrt(cd11**2 + cd12**2) * 3600
-                
-                # Center point calculation
-                n1 = self._parse_int(self._safe_get(header, "NAXIS1", default=0)) or 0
-                n2 = self._parse_int(self._safe_get(header, "NAXIS2", default=0)) or 0
-                
-                # IMPORTANT: Only use WCS transformation if we found an explicit scale keyword.
-                # If actual_scale is 0, WCS transformation will use default 1.0 deg/pixel 
-                # causing massive offsets in RA/Dec (e.g. 1.5 degrees at 45deg Lat for 1px offset).
-                if actual_scale > 0 and n1 and n2:
-                    # Using 0-based coordinate for pixel_to_world. 
-                    # Note: n1/2 is slightly off from (n1-1)/2 center but consistent with existing logic.
-                    center = w.pixel_to_world(n1/2, n2/2)
+                # Only use the WCS transformation if the header defines a scale.
+                # Without CD/CDELT astropy assumes 1 deg/pixel, causing massive
+                # offsets in RA/Dec (e.g. 1.5 degrees at 45deg Lat for 1px offset).
+                # The WCS may refer to a downsampled solve grid (ASIAIR IMAGEW x
+                # IMAGEH), so the center and corner are taken on that grid.
+                fw, fh = wcs_frame(header)
+                if wcs_matrix_scale(header) and fw and fh:
+                    w = WCS(self._wcs_header(header))
+                    # Note: n/2 is slightly off from (n-1)/2 center but consistent with existing logic.
+                    center = w.pixel_to_world(fw / 2, fh / 2)
                     ra_center = center.ra.degree
                     dec_center = center.dec.degree
                     wcs_type = "HEADER_WCS"
                     
-                    pixel_scale = actual_scale
                     # diagonal radius
                     corner = w.pixel_to_world(0, 0)
                     radius_degrees = center.separation(corner).degree
@@ -297,8 +287,9 @@ class FITSExtractor(BaseExtractor):
                     dec_center = self._parse_float(self._safe_get(header, "CRVAL2"))
                     if ra_center is not None and dec_center is not None:
                         wcs_type = "HEADER_CRVAL"
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"FITS extractor: unusable header WCS in {self.file_path}: {e}")
+                ra_center, dec_center, rotation, radius_degrees = None, None, 0.0, 1.0
 
         # 2. Fallback for coordinates if standard WCS failed or was incomplete
         if ra_center is None:
@@ -318,21 +309,8 @@ class FITSExtractor(BaseExtractor):
             if ra_center is not None and dec_center is not None:
                 if wcs_type == "NONE": wcs_type = "HEADER_FALLBACK"
 
-        # 3. Fallback for Pixel Scale / Rotation if missing from standard WCS
+        # 3. Fallback for Rotation / radius if missing from standard WCS
         if ra_center is not None and dec_center is not None:
-            if pixel_scale is None:
-                ps = self._safe_get(header, "PIXSCALE", "SCALE", "RESOLUTN")
-                if ps:
-                    pixel_scale = self._parse_float(ps)
-                else:
-                    # Calculate from focal/pixsize
-                    focal = self._safe_get(header, "FOCALLEN")
-                    pix_size = self._safe_get(header, "XPIXSZ", "PIXSIZE1")
-                    if focal and pix_size:
-                        try:
-                            pixel_scale = (float(pix_size) / float(focal)) * 206.265
-                        except: pass
-            
             if rotation == 0:
                 rot = self._safe_get(header, "ROTATION", "POSANGLE", "ANGLE", "POSANG", "ROTATANG", "ROTATOR")
                 if rot:
@@ -345,7 +323,7 @@ class FITSExtractor(BaseExtractor):
                 n2 = self._parse_int(self._safe_get(header, "NAXIS2", default=0)) or 0
                 if n1 and n2:
                     diagonal = math.sqrt(n1**2 + n2**2)
-                    radius_degrees = (diagonal / 2.0) * (pixel_scale or 0) / 3600.0
+                    radius_degrees = (diagonal / 2.0) * pixel_scale / 3600.0
                 elif radius_degrees > 20.0:
                     radius_degrees = 1.0 # Safe fallback
 
@@ -353,12 +331,37 @@ class FITSExtractor(BaseExtractor):
                 "ra_center": float(ra_center),
                 "dec_center": float(dec_center),
                 "radius_degrees": float(radius_degrees),
-                "pixel_scale": float(pixel_scale or 0),
+                "pixel_scale": float(pixel_scale) if pixel_scale else None,
                 "rotation": float(rotation),
                 "wcs_type": wcs_type
             }
 
         return None
+
+    _WCS_KEY = re.compile(
+        r"^(NAXIS[12]?|WCSAXES|CTYPE[12]|CRVAL[12]|CRPIX[12]|CDELT[12]|CUNIT[12]|CROTA[12]"
+        r"|CD[12]_[12]|PC[12]_[12]|LONPOLE|LATPOLE|EQUINOX|EPOCH|RADESYS|RADECSYS"
+        r"|(A|B|AP|BP)_ORDER|(A|B|AP|BP)_\d+_\d+)$"
+    )
+
+    def _wcs_header(self, header) -> fits.Header:
+        """
+        A clean astropy Header holding only the WCS cards, for WCS(). Works for
+        both an astropy Header and a raw_header dict (XISF keywords, stored
+        rows), whose COMMENT/HISTORY lists and odd values WCS() can't take.
+        """
+        clean = fits.Header()
+        for key in list(header.keys()):
+            if not isinstance(key, str) or not self._WCS_KEY.match(key):
+                continue
+            value = self._safe_get(header, key)
+            if isinstance(value, str):
+                num = self._parse_float(value)
+                if num is not None and not key.startswith(("CTYPE", "CUNIT", "RADESYS", "RADECSYS")):
+                    value = num
+            if isinstance(value, (int, float, str)) and not isinstance(value, bool):
+                clean[key] = value
+        return clean
 
     def _parse_coord_or_hms(self, val, is_ra: bool = True) -> float:
         """Parse a coordinate that might be float degrees or HMS/DMS string."""

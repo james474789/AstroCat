@@ -174,7 +174,7 @@ def test_0008_runs_full_assignment_and_is_repeatable():
     import json
     from app.services.data_migrations import REGISTRY, get_spec
 
-    assert REGISTRY[-1].id == "0008_fill_utc_default_site"
+    assert "0008_fill_utc_default_site" in [spec.id for spec in REGISTRY]
     calls = []
     fake = {"status": "completed", "utc_filled": 5, "utc_by_basis": {"DEFAULT_SITE_TZ": 5},
             "rig_changed": 0, "site_changed": 0, "clock_modes": {}}

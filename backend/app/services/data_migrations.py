@@ -107,6 +107,11 @@ def _fill_utc_default_site():
     }
 
 
+def _repair_pixel_scale():
+    from app.scripts.repair_pixel_scale import repair_pixel_scale
+    return repair_pixel_scale(dry_run=False)
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -147,6 +152,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0008_fill_utc_default_site",
         "Derive UTC capture times for local-clock frames without a site (camera UTC clock, else the default site's timezone) and record how each UTC time was derived.",
         _fill_utc_default_site,
+    ),
+    DataMigrationSpec(
+        "0009_repair_pixel_scale",
+        "Re-derive plate scales misread from headers (PixInsight RESOLUTN=72 print DPI, ZWO ASIAIR downsampled-solve WCS, placeholder scales) and from astrometry.net solves of downsampled uploads, then re-match fields and re-assign rigs.",
+        _repair_pixel_scale,
     ),
 ]
 

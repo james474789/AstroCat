@@ -9,6 +9,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 from app.extractors.base import BaseExtractor
 from app.extractors.fits_extractor import FITSExtractor
+from app.utils.plate_scale import with_image_size
 from app.utils.header_values import parse_sexagesimal
 
 logger = logging.getLogger(__name__)
@@ -66,7 +67,10 @@ class XISFExtractor(BaseExtractor):
             metadata["site_name"] = header_dict.get("SITENAME") or header_dict.get("OBSERVAT")
             
             # WCS Extraction
-            wcs_info = fits_ext._extract_wcs(header_dict)
+            # XISF keeps the image size in its geometry, not NAXIS cards; the
+            # WCS center/radius need it.
+            wcs_info = fits_ext._extract_wcs(with_image_size(
+                header_dict, metadata.get("width_pixels"), metadata.get("height_pixels")))
             if wcs_info:
                 metadata["wcs"] = wcs_info
                 metadata["is_plate_solved"] = True
