@@ -1,15 +1,17 @@
 """
-Response models for /api/recommendations (R1 spec §7).
+Response models for /api/recommendations (R1 spec §7, R2a spec §5-§6).
 
 The contract is binding (the Tonight page is built against it). Nullable
 fields are null, never omitted. Extra (additive) fields are allowed.
 """
 
+from datetime import date
 from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-ExcludedReason = Literal["BELOW_HORIZON", "TOO_SMALL", "TOO_BIG", "MOON", "TIER"]
+# SNOOZED / DISMISSED (R2a): hidden by the user's feedback, never infeasible.
+ExcludedReason = Literal["BELOW_HORIZON", "TOO_SMALL", "TOO_BIG", "MOON", "TIER", "SNOOZED", "DISMISSED"]
 
 
 class _Model(BaseModel):
@@ -49,6 +51,11 @@ class Curve(_Model):
     dark: List[bool]
 
 
+class PickFeedback(_Model):
+    pinned: bool
+    snoozed_until: Optional[str]
+
+
 class Pick(_Model):
     target_key: str
     name: str
@@ -75,6 +82,7 @@ class Pick(_Model):
     goal_source: Literal["SET", "INFERRED", "DEFAULT"]
     reasons: List[Reason]
     curve: Optional[Curve]
+    feedback: Optional[PickFeedback] = None      # R2a
 
 
 class SiteRef(_Model):
@@ -108,6 +116,7 @@ class Context(_Model):
     rig_mode: Literal["MOUNTED", "ALL", "ALL_FALLBACK", "SINGLE"]
     rigs: List[ContextRig]
     weights: Dict[str, float]
+    feedback_counts: Optional[Dict[str, int]] = None   # R2a: {"pinned", "snoozed", "dismissed"}
 
 
 class Verdict(_Model):
@@ -116,7 +125,7 @@ class Verdict(_Model):
 
 
 class Lane(_Model):
-    id: Literal["active", "continue", "last_chance", "moon_proof", "other"]
+    id: Literal["pinned", "active", "continue", "last_chance", "moon_proof", "other"]
     title: str
     items: List[Pick]
 
@@ -125,6 +134,12 @@ class SkippedRig(_Model):
     id: int
     name: str
     reason: Optional[str]
+
+
+class PinnedUnavailable(_Model):
+    target_key: str
+    name: str
+    excluded_reason: str        # an ExcludedReason, or NOT_IN_POOL / NO_RIGS
 
 
 class RecommendationsResponse(_Model):
@@ -136,6 +151,7 @@ class RecommendationsResponse(_Model):
     lanes: List[Lane]
     excluded_counts: Dict[ExcludedReason, int]
     skipped_rigs: List[SkippedRig]
+    pinned_unavailable: List[PinnedUnavailable] = []     # R2a
 
 
 class TargetRigResult(_Model):
@@ -146,11 +162,19 @@ class TargetRigResult(_Model):
     details: Dict
 
 
+class TargetFeedback(_Model):
+    pinned: bool
+    snoozed_until: Optional[str]
+    dismissed: bool
+    dismiss_reason: Optional[str]
+
+
 class TargetExplanation(_Model):
     target_key: str
     name: str
     night: str
     results: List[TargetRigResult]
+    feedback: Optional[TargetFeedback] = None     # R2a
 
 
 class ReplayReport(_Model):
@@ -161,3 +185,72 @@ class ReplayReport(_Model):
     baselines: Dict[str, Dict[str, float]]
     breakdown: Dict
     misses: List
+
+
+# ---------------------------------------------------------------------------
+# R2a: feedback and outcomes (docs/design/R2a-feedback-dashboard.md §5-§6)
+# ---------------------------------------------------------------------------
+
+class FeedbackContext(BaseModel):
+    """Where the action was taken (all optional; stored on the event)."""
+    night: Optional[date] = None
+    lane: Optional[str] = None
+    rank: Optional[int] = None
+    score: Optional[float] = None
+    rig_id: Optional[int] = None
+
+
+class FeedbackRequest(BaseModel):
+    """
+    POST /api/recommendations/feedback. `action`, `nights`, `reason` and `note`
+    are validated by the endpoint (400, not 422): PIN | UNPIN | SNOOZE (nights
+    1/7/30) | UNSNOOZE | DISMISS (optional reason) | UNDISMISS | IMAGED.
+    """
+    target_key: str
+    action: str
+    nights: Optional[int] = None
+    reason: Optional[str] = None
+    note: Optional[str] = None
+    context: Optional[FeedbackContext] = None
+
+
+class FeedbackItem(_Model):
+    target_key: str
+    name: str
+    pinned: bool
+    snoozed_until: Optional[str]
+    dismissed: bool
+    dismiss_reason: Optional[str]
+    note: Optional[str]
+    updated_at: Optional[str]
+
+
+class FeedbackList(_Model):
+    items: List[FeedbackItem]
+
+
+class Rate(_Model):
+    shown: int
+    acted: int
+    rate: float
+
+
+class AnyRate(Rate):
+    nights_with_any_acted: int
+
+
+class SelfReported(_Model):
+    imaged_events: int
+    confirmed_by_library: int
+
+
+class OutcomesResponse(_Model):
+    since: str
+    nights_with_impressions: int
+    nights_imaged: int
+    hero: Rate
+    any: AnyRate
+    by_lane: Dict[str, Rate]
+    imaged_not_shown: int
+    self_reported: SelfReported
+    pending_nights: int

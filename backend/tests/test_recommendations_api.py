@@ -20,7 +20,9 @@ except ImportError:  # pragma: no cover
     sys.modules["jwt"] = _stub
 
 from app.api import recommendations as api  # noqa: E402
-from app.schemas.recommendations import RecommendationsResponse, ReplayReport, TargetExplanation  # noqa: E402
+from app.schemas.recommendations import (  # noqa: E402
+    OutcomesResponse, RecommendationsResponse, ReplayReport, TargetExplanation,
+)
 from app.services.recommend import Params, recommend, result_to_dict  # noqa: E402
 from app.services.recommend import loader  # noqa: E402
 
@@ -65,8 +67,13 @@ def test_response_shape_matches_contract():
             "skipped_rigs"} <= set(body)
     assert CONTEXT_KEYS <= set(body["context"])
     assert set(body["context"]["moon"]) >= {"illumination", "age_days", "up_fraction"}
-    assert set(body["excluded_counts"]) == {"BELOW_HORIZON", "TOO_SMALL", "TOO_BIG", "MOON", "TIER"}
+    assert set(body["excluded_counts"]) == {"BELOW_HORIZON", "TOO_SMALL", "TOO_BIG", "MOON", "TIER",
+                                            "SNOOZED", "DISMISSED"}     # R2a: additive
+    assert body["excluded_counts"]["SNOOZED"] == 0 and body["excluded_counts"]["DISMISSED"] == 0
+    assert body["pinned_unavailable"] == []
+    assert body["context"]["feedback_counts"] == {"pinned": 0, "snoozed": 0, "dismissed": 0}
     hero = body["hero"]
+    assert hero["feedback"] == {"pinned": False, "snoozed_until": None}
     assert PICK_KEYS <= set(hero)
     assert hero["target_key"] == "NGC7000" and hero["rig"] == {"id": NB_RIG.id, "name": NB_RIG.name}
     assert set(hero["curve"]) == {"t_utc", "alt", "moon_alt", "limit", "dark"}
@@ -129,7 +136,8 @@ def test_cache_hit_sets_cached_true(fake_loader):
     redis, calls = fake_loader
     first = loader.get_recommendations(date(2026, 9, 26), None, "mounted", 6, session=object())
     assert first["cached"] is False and calls["build"] == 1
-    assert any(k.startswith("recs:result:1:mounted:2026-09-26:6:v1") for k in redis.data)
+    # R2a: the cached payload is per_lane-independent (lanes are rebuilt per request).
+    assert any(k.startswith("recs:result:v2:1:mounted:2026-09-26:v1") for k in redis.data)
     second = loader.get_recommendations(date(2026, 9, 26), None, "mounted", 6, session=object())
     assert second["cached"] is True and calls["build"] == 1
     assert second["hero"]["target_key"] == first["hero"]["target_key"]
@@ -214,3 +222,237 @@ def test_default_night():
     assert loader.default_night(datetime(2026, 9, 26, 9, 0), -3.0) == date(2026, 9, 26)    # morning: tonight
     assert loader.default_night(datetime(2026, 9, 26, 14, 0), -3.0) == date(2026, 9, 26)
     assert loader.default_night(datetime(2026, 9, 27, 2, 0), -3.0) == date(2026, 9, 26)    # mid-session
+
+
+# --- R2a: feedback, impressions and outcomes (SQLite stands in for PostgreSQL) -------
+
+from contextlib import nullcontext  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+from _recommend_helpers import FULL_MOON_NIGHT, standard_pool  # noqa: E402
+
+
+class _User:
+    def __init__(self, uid):
+        self.id = uid
+        self.is_admin = False
+
+
+@pytest.fixture
+def r2a(fake_loader, monkeypatch):
+    """A minimal app with the router, a SQLite DB for the R2a tables, and a switchable current user."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    import app.services.targets as targets
+    from app.api.dependencies import get_current_user
+    from app.database import Base
+    from app.models.recommendation import RecommendationEvent, RecommendationImpression, RecommendationTargetState
+    from app.models.user import User
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine, tables=[User.__table__, RecommendationTargetState.__table__,
+                                             RecommendationEvent.__table__, RecommendationImpression.__table__])
+    Session = sessionmaker(bind=engine, expire_on_commit=False)
+    with Session() as s:
+        s.add_all([User(id=1, email="a@example.test", hashed_password="x"),
+                   User(id=2, email="b@example.test", hashed_password="x")])
+        s.commit()
+
+    monkeypatch.setattr(loader, "_session_scope", lambda session: nullcontext(session) if session else Session())
+    monkeypatch.setattr(loader, "default_night", lambda now, lon: FULL_MOON_NIGHT)
+    monkeypatch.setattr(loader, "_pool_for_keys",
+                        lambda s, r=None: SimpleNamespace(pool=standard_pool(), key_map={"OBJ:M81LUM": "M81"}))
+    aliases = {"NGC3031": "M81", "BODESGALAXY": "M81"}
+    monkeypatch.setattr(targets, "get_alias_index_sync",
+                        lambda s: SimpleNamespace(resolve=lambda t: aliases.get((t or "").upper().replace(" ", ""))))
+
+    current = {"user": _User(1)}
+    app = FastAPI()
+    app.include_router(api.router, prefix="/api/recommendations")
+    app.dependency_overrides[get_current_user] = lambda: current["user"]
+    client = TestClient(app)
+
+    def as_user(uid):
+        current["user"] = _User(uid)
+
+    def rows(model):
+        with Session() as s:
+            return s.query(model).all()
+
+    ns = SimpleNamespace(client=client, as_user=as_user, rows=rows, Session=Session, redis=fake_loader[0],
+                         calls=fake_loader[1], State=RecommendationTargetState, Event=RecommendationEvent,
+                         Impression=RecommendationImpression)
+    yield ns
+    client.close()
+
+
+def _post(ns, key, action, **kw):
+    return ns.client.post("/api/recommendations/feedback", json={"target_key": key, "action": action, **kw})
+
+
+def test_feedback_every_action_and_inverse_one_event_per_change(r2a):
+    ctx = {"night": "2026-09-26", "lane": "other", "rank": 4, "score": 0.51, "rig_id": 1}
+    steps = [("PIN", {}), ("PIN", {}), ("UNPIN", {}), ("SNOOZE", {"nights": 7}), ("UNSNOOZE", {}),
+             ("DISMISS", {"reason": "NOT_MY_TYPE", "note": "meh"}), ("UNDISMISS", {}), ("IMAGED", {})]
+    for action, kw in steps:
+        res = _post(r2a, "M81", action, context=ctx, **kw)
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert set(body) == {"target_key", "name", "pinned", "snoozed_until", "dismissed", "dismiss_reason", "note",
+                             "updated_at"}
+        assert body["target_key"] == "M81" and body["name"] == "Bode's Galaxy"
+        if action == "PIN":
+            assert body["pinned"] is True
+        if action == "SNOOZE":
+            assert body["snoozed_until"] == "2026-10-03"
+        if action == "DISMISS":
+            assert body["dismissed"] is True and body["dismiss_reason"] == "NOT_MY_TYPE" and body["note"] == "meh"
+    events = r2a.rows(r2a.Event)
+    # The second PIN changed nothing, so no event; IMAGED always logs one.
+    assert [e.action for e in events] == ["PIN", "UNPIN", "SNOOZE", "UNSNOOZE", "DISMISS", "UNDISMISS", "IMAGED"]
+    assert all(e.user_id == 1 and e.target_key == "M81" and e.night == FULL_MOON_NIGHT and e.lane == "other"
+               and e.rank == 4 and e.rig_id == 1 for e in events)
+    assert events[2].payload == {"nights": 7} and events[4].payload == {"reason": "NOT_MY_TYPE", "note": "meh"}
+    (state,) = r2a.rows(r2a.State)
+    assert not state.pinned and state.snoozed_until is None and not state.dismissed
+
+
+def test_feedback_resolves_aliases_to_the_canonical_key(r2a):
+    assert _post(r2a, "NGC3031", "PIN").json()["target_key"] == "M81"
+    assert _post(r2a, "Bodes Galaxy", "UNPIN").json()["target_key"] == "M81"
+    assert _post(r2a, "OBJ:M81LUM", "PIN").json()["target_key"] == "M81"       # R1 §14.1 stray-key fold
+    assert {s.target_key for s in r2a.rows(r2a.State)} == {"M81"}
+    assert {e.target_key for e in r2a.rows(r2a.Event)} == {"M81"}
+
+
+def test_feedback_errors(r2a):
+    assert _post(r2a, "NOPE123", "PIN").status_code == 404
+    assert _post(r2a, "M81", "BOOST").status_code == 400
+    assert _post(r2a, "M81", "SNOOZE").status_code == 400
+    assert _post(r2a, "M81", "SNOOZE", nights=3).status_code == 400
+    assert _post(r2a, "M81", "DISMISS", reason="BORING").status_code == 400
+    assert _post(r2a, "NOPE123", "BOOST").status_code == 400        # the action is checked first
+    assert r2a.rows(r2a.Event) == [] and r2a.rows(r2a.State) == []
+
+
+def test_snooze_without_context_uses_tonight(r2a):
+    assert _post(r2a, "M45", "SNOOZE", nights=1).json()["snoozed_until"] == "2026-09-27"
+
+
+def test_feedback_list_and_explain(r2a):
+    _post(r2a, "M81", "PIN")
+    _post(r2a, "IC1805", "SNOOZE", nights=30, context={"night": "2026-09-26"})
+    _post(r2a, "M45", "DISMISS", reason="DONE")
+    _post(r2a, "M31", "PIN")
+    _post(r2a, "M31", "UNPIN")                                   # no active state: not listed
+    items = r2a.client.get("/api/recommendations/feedback").json()["items"]
+    by_key = {i["target_key"]: i for i in items}
+    assert set(by_key) == {"M81", "IC1805", "M45"}
+    assert by_key["IC1805"]["snoozed_until"] == "2026-10-26" and by_key["IC1805"]["name"] == "Heart Nebula"
+    assert by_key["M45"]["dismiss_reason"] == "DONE"
+
+    body = r2a.client.get("/api/recommendations/target/IC1805", params={"date": "2026-09-26"}).json()
+    TargetExplanation.model_validate(body)
+    assert body["feedback"] == {"pinned": False, "snoozed_until": "2026-10-26", "dismissed": False,
+                                "dismiss_reason": None}
+    assert all(r["excluded_reason"] == "SNOOZED" and r["pick"] is None and r["details"]["until"] == "2026-10-26"
+               for r in body["results"])
+    body = r2a.client.get("/api/recommendations/target/M45", params={"date": "2026-09-26"}).json()
+    assert all(r["excluded_reason"] == "DISMISSED" and r["details"]["reason"] == "DONE" for r in body["results"])
+    body = r2a.client.get("/api/recommendations/target/NGC3031", params={"date": "2026-09-26"}).json()
+    assert body["target_key"] == "M81" and body["feedback"]["pinned"] is True
+    assert any(r["pick"] is not None for r in body["results"])
+
+
+def test_feedback_is_per_user_and_applied_to_a_cached_result(r2a):
+    first = r2a.client.get("/api/recommendations").json()
+    assert first["cached"] is False and r2a.calls["build"] == 1
+    _post(r2a, "M81", "PIN")
+    _post(r2a, "IC1805", "DISMISS")
+    body = r2a.client.get("/api/recommendations").json()
+    RecommendationsResponse.model_validate(body)
+    assert body["cached"] is True and r2a.calls["build"] == 1          # feedback writes invalidate nothing
+    assert body["lanes"][0]["id"] == "pinned" and [p["target_key"] for p in body["lanes"][0]["items"]] == ["M81"]
+    assert "IC1805" not in [p["target_key"] for lane in body["lanes"] for p in lane["items"]]
+    assert body["excluded_counts"]["DISMISSED"] == 1
+    assert body["context"]["feedback_counts"] == {"pinned": 1, "snoozed": 0, "dismissed": 1}
+
+    r2a.as_user(2)
+    other = r2a.client.get("/api/recommendations").json()
+    assert other["cached"] is True
+    assert other["lanes"][0]["id"] != "pinned" and other["excluded_counts"]["DISMISSED"] == 0
+    assert _lane_ids(other) == _lane_ids(first)
+    assert r2a.client.get("/api/recommendations/feedback").json() == {"items": []}
+
+
+def _lane_ids(body):
+    return [(lane["id"], [p["target_key"] for p in lane["items"]]) for lane in body["lanes"]]
+
+
+def test_impressions_only_for_tonight_and_never_duplicated(r2a):
+    body = r2a.client.get("/api/recommendations", params={"per_lane": 2}).json()
+    first = r2a.rows(r2a.Impression)
+    assert first and first[0].is_hero and first[0].rank == 1 and first[0].target_key == body["hero"]["target_key"]
+    assert all(i.user_id == 1 and i.night == FULL_MOON_NIGHT and i.site_id == 1 and i.rig_mode == "ALL_FALLBACK"
+               for i in first)
+    shown = {p["target_key"] for lane in body["lanes"] for p in lane["items"][:2]} | {body["hero"]["target_key"]}
+    assert {i.target_key for i in first} == shown
+    stamp = {i.target_key: (i.lane, i.rank, i.first_shown_at) for i in first}
+
+    # Same night again, with a pin that changes lanes: the first showing wins, nothing is added twice.
+    _post(r2a, "M81", "PIN")
+    r2a.client.get("/api/recommendations", params={"per_lane": 2})
+    again = r2a.rows(r2a.Impression)
+    assert {i.target_key: (i.lane, i.rank, i.first_shown_at) for i in again if i.target_key in stamp} == stamp
+    keys = [(i.night, i.target_key) for i in again]
+    assert len(keys) == len(set(keys))
+
+    # Browsing another date writes nothing.
+    n = len(again)
+    r2a.client.get("/api/recommendations", params={"date": "2026-10-10"})
+    assert len(r2a.rows(r2a.Impression)) == n
+
+    # Another user gets their own rows.
+    r2a.as_user(2)
+    r2a.client.get("/api/recommendations")
+    assert {i.user_id for i in r2a.rows(r2a.Impression)} == {1, 2}
+
+
+def test_outcomes_endpoint(r2a, monkeypatch):
+    from sqlalchemy import text as sql_text
+
+    # The PostgreSQL night expression can't run on SQLite: stand in for the library query.
+    monkeypatch.setattr(loader, "IMAGED_SQL", sql_text(
+        "SELECT 'OBJ:M81LUM' AS key, '2026-09-26' AS night WHERE :since_ts IS NOT NULL"))
+    empty = r2a.client.get("/api/recommendations/outcomes").json()
+    assert empty["nights_with_impressions"] == 0 and empty["hero"] == {"shown": 0, "acted": 0, "rate": 0.0}
+
+    with r2a.Session() as s:
+        s.add_all([r2a.Impression(user_id=1, night=FULL_MOON_NIGHT, target_key="M81", lane="pinned", rank=1,
+                                  score=0.5, is_hero=True, rig_mode="MOUNTED"),
+                   r2a.Impression(user_id=1, night=FULL_MOON_NIGHT, target_key="M31", lane="other", rank=2,
+                                  score=0.4, is_hero=False, rig_mode="MOUNTED"),
+                   r2a.Impression(user_id=2, night=FULL_MOON_NIGHT, target_key="M31", lane="other", rank=1,
+                                  score=0.4, is_hero=True, rig_mode="MOUNTED")])
+        s.commit()
+    _post(r2a, "M81", "IMAGED", context={"night": "2026-09-26"})
+    monkeypatch.setattr(loader, "get_outcomes", _with_today(loader.get_outcomes, date(2026, 9, 28)))
+    out = r2a.client.get("/api/recommendations/outcomes", params={"days": 30}).json()
+    OutcomesResponse.model_validate(out)
+    assert out["nights_with_impressions"] == 1 and out["nights_imaged"] == 1
+    assert out["hero"] == {"shown": 1, "acted": 1, "rate": 1.0}           # OBJ:M81LUM folds into M81
+    assert out["any"]["shown"] == 2 and out["any"]["acted"] == 1
+    assert out["by_lane"] == {"other": {"shown": 1, "acted": 0, "rate": 0.0},
+                              "pinned": {"shown": 1, "acted": 1, "rate": 1.0}}
+    assert out["self_reported"] == {"imaged_events": 1, "confirmed_by_library": 1}
+    assert r2a.client.get("/api/recommendations/outcomes", params={"days": 0}).status_code == 422
+
+
+def _with_today(fn, today):
+    def wrapped(user_id, days=90, session=None):
+        return fn(user_id, days, session, today=today)
+    return wrapped

@@ -57,11 +57,49 @@ for a colour camera, else the classes seen on its images, else broadband.
 - `GET /api/recommendations/replay/latest` (admin) returns `<log_dir>/replay_latest.json`,
   404 if no replay has been saved.
 
+### Feedback, impressions and outcomes (R2a, any logged-in user, own data)
+
+Design: `docs/design/R2a-feedback-dashboard.md`.
+
+- `POST /api/recommendations/feedback` with `{target_key, action, nights?, reason?, note?,
+  context?: {night, lane, rank, score, rig_id}}`. Actions: `PIN`/`UNPIN`, `SNOOZE` (`nights`
+  1, 7 or 30: hidden for nights < viewed night + nights)/`UNSNOOZE`, `DISMISS` (optional
+  `reason` `DONE`/`NOT_MY_TYPE`/`TOO_HARD`/`OTHER`, no expiry)/`UNDISMISS`, and `IMAGED`
+  (logged only). The key may be a name or alias and is stored canonically. Returns the key's
+  state; 400 for a bad action/nights/reason/note (> 200 chars), 404 for an unknown key. Each
+  state change writes one `recommendation_events` row; a repeated action is a no-op.
+- `GET /api/recommendations/feedback` lists keys with an active state (pinned, dismissed, or
+  snoozed until today or later) for the Hidden-items manager.
+- `GET /api/recommendations` applies the user's feedback: snoozed/dismissed targets leave the
+  lanes (counted as `SNOOZED`/`DISMISSED` in `excluded_counts`), feasible pins form the
+  `pinned` ("Your pins") lane first (every pin, by score, no diversity reordering), and pins
+  not shown are in `pinned_unavailable` with the reason (an exclusion code, `SNOOZED`,
+  `DISMISSED`, `NOT_IN_POOL` or `NO_RIGS`). The hero is the top score; a pin within 0.02 wins
+  the tie. Picks carry `feedback: {pinned, snoozed_until}` and `context.feedback_counts` has
+  the user's counts. The target endpoint adds a top-level `feedback` object and reports
+  `SNOOZED`/`DISMISSED` (with `details.until` / `details.reason`, and
+  `details.engine_excluded_reason`) for every rig of a hidden target.
+- Impressions: when the night requested is tonight's default night, the hero plus the first
+  `per_lane` items of each lane are written to `recommendation_impressions` after the
+  response (BackgroundTasks, `ON CONFLICT DO NOTHING`). Other dates write nothing.
+- `GET /api/recommendations/outcomes?days=90` (1-730): an impression is acted on when a light
+  sub of that key (after the stray-key folding) has that observing night (`NIGHT_SQL`). Only
+  nights up to yesterday count (later ones are `pending_nights`), and the rates use only
+  nights with impressions **and** imaging (`nights_imaged`); a rate is 0.0 when nothing was
+  shown. `imaged_not_shown` counts those nights on which something was imaged that the page
+  never showed. Self-reported `IMAGED` events (one per key and night) are confirmed when the
+  library has the key on the event night or the night before.
+
 ## Caching and pre-compute
 
-- Redis `recs:result:<site>:<rig>:<night>:<per_lane>:<hist_version>` (6 h) holds full
-  responses (`cached: true` on a hit); `recs:inputs:v<hist_version>` (1 h) holds the history
-  inputs. `hist_version` changes with any light-sub update or goal change.
+- Redis `recs:result:v2:<site>:<rig>:<night>:<hist_version>` (6 h) holds the
+  user-independent engine payload: every feasible pick (with its lane, reasons and exact
+  score/hours), the exclusions, and the shared curve parts. Each request renders it with
+  that user's feedback (one query) and `per_lane`, rebuilding lanes, hero and verdict with
+  the same rules, so feedback writes invalidate nothing and every `per_lane` (the Dashboard
+  tile uses 1) shares the pre-computed entry (`cached: true` on a hit).
+  `recs:inputs:v<hist_version>` (1 h) holds the history inputs. `hist_version` changes with
+  any light-sub update or goal change.
 - `recs:*` is dropped on any equipment, site, mount or horizon change and after every
   equipment assignment run.
 - Celery beat runs `app.tasks.recommend.precompute_tonight` daily at 12:00 UTC (default site,
