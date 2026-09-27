@@ -10,6 +10,7 @@ from app.worker import celery_app
 from app.database import AsyncSessionLocal
 from app.models.image import Image
 from app.services.astrometry_service import AstrometryService
+from app.utils.plate_scale import solved_pixel_scale
 from app.config import settings
 import redis
 import json
@@ -133,11 +134,14 @@ async def _rescan_logic(task, image_id: int):
             hints["radius"] = image.field_radius_degrees or 5.0
             logger.info(f"[ASTROMETRY] Using position hints for image {image_id}: {hints}")
         
-        if image.pixel_scale_arcsec is not None:
-            hints["scale_units"] = "arcsecperpix"
-            hints["scale_lower"] = image.pixel_scale_arcsec * 0.9
-            hints["scale_upper"] = image.pixel_scale_arcsec * 1.1
-            logger.info(f"[ASTROMETRY] Using scale hints for image {image_id}: {image.pixel_scale_arcsec} arcsec/pix")
+        if image.pixel_scale_arcsec and image.width_pixels:
+            # The upload is a downsampled JPEG, so an arcsec/px hint would be
+            # off by the resize factor; the field width in degrees is not.
+            width_deg = image.pixel_scale_arcsec * image.width_pixels / 3600.0
+            hints["scale_units"] = "degwidth"
+            hints["scale_lower"] = width_deg * 0.9
+            hints["scale_upper"] = width_deg * 1.1
+            logger.info(f"[ASTROMETRY] Using scale hints for image {image_id}: {width_deg:.3f} deg wide")
     
     try:
         logger.info(f"[ASTROMETRY] Uploading image {image_id} to {provider} ({base_url})...")
@@ -250,7 +254,9 @@ async def _monitor_logic(submission_id: str | int, image_id: int):
             image.ra_center_degrees = cal.get("ra")
             image.dec_center_degrees = cal.get("dec")
             image.field_radius_degrees = cal.get("radius")
-            image.pixel_scale_arcsec = cal.get("pixscale")
+            # cal["pixscale"] is per pixel of the downsampled upload; convert to
+            # the original image's pixels.
+            image.pixel_scale_arcsec = solved_pixel_scale(cal, image.width_pixels, image.height_pixels)
             image.rotation_degrees = cal.get("orientation")
             
             if image.raw_header is None:
