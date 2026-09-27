@@ -77,6 +77,20 @@
     text-decoration: underline;
 }
 
+.hidden-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--color-primary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    text-align: left;
+}
+
+.hidden-link:hover {
+    text-decoration: underline;
+}
+
 .all-fallback-banner {
     display: flex;
     align-items: center;
@@ -141,6 +155,239 @@
     gap: 1.5rem;
     color: var(--color-text-primary);
     font-size: 0.9rem;
+}
+
+/* ============ Feedback action row ============ */
+
+.pick-action-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: auto;
+}
+
+.hero-card-top .pick-action-row {
+    margin-left: auto;
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-light);
+    border-radius: 6px;
+    color: var(--color-text-secondary);
+    padding: 0.3rem 0.4rem;
+    cursor: pointer;
+    line-height: 0;
+}
+
+.action-btn:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-primary);
+}
+
+.action-btn.active {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    background: rgba(91, 141, 238, 0.12);
+}
+
+.action-dropdown {
+    position: relative;
+}
+
+.action-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 170px;
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+}
+
+.action-menu button {
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.action-menu button:hover {
+    background: var(--color-surface);
+}
+
+.pinned-unavailable-strip {
+    padding: 0.4rem 0.2rem;
+}
+
+/* ============ Toast ============ */
+
+.tonight-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+}
+
+.tonight-toast.error {
+    border-color: var(--color-error);
+}
+
+.tonight-toast-undo {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+}
+
+.tonight-toast-close {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    display: flex;
+    padding: 0;
+}
+
+/* ============ Hidden-items modal ============ */
+
+.tonight-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.tonight-modal-content {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    width: 90%;
+    max-width: 560px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-md);
+}
+
+.tonight-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.tonight-modal-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--color-text-primary);
+}
+
+.tonight-modal-close {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    display: flex;
+}
+
+.tonight-modal-body {
+    padding: 1rem 1.25rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.hidden-section-title {
+    margin: 0.75rem 0 0.25rem;
+    font-size: 0.9rem;
+    color: var(--color-text-primary);
+}
+
+.hidden-item-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0;
+    border-top: 1px solid var(--color-border);
+}
+
+.hidden-item-name {
+    flex: 1;
+    color: var(--color-text-primary);
+    font-weight: 500;
+}
+
+/* ============ Outcomes panel ============ */
+
+.outcomes-panel {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    background: var(--color-surface);
+    padding: 0.6rem 1rem;
+}
+
+.outcomes-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+}
+
+.outcomes-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+}
+
+.outcomes-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+}
+
+.outcomes-lane-table {
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 480px;
+    font-size: 0.85rem;
+}
+
+.outcomes-lane-table th, .outcomes-lane-table td {
+    text-align: left;
+    padding: 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-primary);
 }
 
 /* ============ Lanes ============ */
