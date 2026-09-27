@@ -11,6 +11,9 @@ from app.models.system_stats import SystemStats
 from app.models.target import TargetGoal
 from app.models.data_migration import DataMigration
 from app.models.equipment import Camera, Optic, Filter, Rig, Site, rig_filters
+from app.models.recommendation import (
+    RecommendationEvent, RecommendationImpression, RecommendationTargetState,
+)
 
 __all__ = [
     "Image",
@@ -31,5 +34,8 @@ __all__ = [
     "Rig",
     "Site",
     "rig_filters",
+    "RecommendationTargetState",
+    "RecommendationEvent",
+    "RecommendationImpression",
 ]
 

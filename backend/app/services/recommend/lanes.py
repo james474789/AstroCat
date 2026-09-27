@@ -7,6 +7,9 @@ Each target lands in exactly one lane, checked in priority order:
   last_chance  urgency >= 0.5
   moon_proof   Moon up > 50% of dark and illum > 0.5, mode narrowband
   other        the rest
+
+R2a (docs/design/R2a-feedback-dashboard.md §4) adds `pinned` ("Your pins"),
+built by feedback.assemble_lanes ahead of these and never diversified.
 """
 
 import math
@@ -23,6 +26,8 @@ LANE_CONTINUE = "continue"
 LANE_LAST_CHANCE = "last_chance"
 LANE_MOON_PROOF = "moon_proof"
 LANE_OTHER = "other"
+LANE_PINNED = "pinned"          # R2a: the user's pins, always first (see feedback.py)
+LANE_PINNED_TITLE = "Your pins"
 LANES = (
     (LANE_ACTIVE, "Active projects"),
     (LANE_CONTINUE, "Continue a project"),
@@ -129,11 +134,17 @@ def diversify(picks: Sequence[Pick], radius_deg: float = DIVERSITY_RADIUS_DEG,
 
 
 def build_lanes(ranked: Sequence[Pick], moon_up_dark_frac: float, moon_illum: float,
-                per_lane: int = DEFAULT_PER_LANE, other_size: int = OTHER_LANE_SIZE) -> List[Dict[str, Any]]:
-    """[{"id", "title", "items": [Pick]}] for non-empty lanes, in lane order. Sets pick.lane."""
+                per_lane: int = DEFAULT_PER_LANE, other_size: int = OTHER_LANE_SIZE,
+                preassigned: bool = False) -> List[Dict[str, Any]]:
+    """
+    [{"id", "title", "items": [Pick]}] for non-empty lanes, in lane order. Sets pick.lane.
+    With `preassigned`, a pick whose `lane` is already one of LANES keeps it
+    (picks rebuilt from the result cache carry the lane computed on the exact values).
+    """
     buckets: Dict[str, List[Pick]] = {lane: [] for lane, _ in LANES}
     for p in ranked:
-        p.lane = lane_for(p, moon_up_dark_frac, moon_illum)
+        if not (preassigned and p.lane in buckets):
+            p.lane = lane_for(p, moon_up_dark_frac, moon_illum)
         buckets[p.lane].append(p)
     lanes = []
     for lane, title in LANES:

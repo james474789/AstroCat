@@ -98,6 +98,17 @@ Partial unique indexes: `uq_rigs_mounted ON rigs (is_mounted) WHERE is_mounted` 
 default site; the API also clears the others in the same transaction). All tables carry
 `created_at` / `updated_at`.
 
+### 8. Recommendation feedback (R2a)
+See `docs/features/RECOMMENDATIONS.md` and `backend/app/models/recommendation.py` (Alembic
+`a0c2e6b73010`). Every table has `user_id` -> users `ON DELETE CASCADE`; target keys are
+canonical candidate keys (an alias such as `NGC3031` is stored as `M81`).
+
+| Table | Key columns |
+|-------|-------------|
+| `recommendation_target_state` | PK (`user_id`, `target_key`); `pinned`, `snoozed_until` (Date; hidden for nights < it), `dismissed`, `dismiss_reason` (`DONE`/`NOT_MY_TYPE`/`TOO_HARD`/`OTHER`), `note` (200), `updated_at` (indexed). The current state the engine reads. |
+| `recommendation_events` | append-only: `target_key` (indexed), `action` (`PIN`/`UNPIN`/`SNOOZE`/`UNSNOOZE`/`DISMISS`/`UNDISMISS`/`IMAGED`), `night` (the night viewed), `lane`, `rank`, `score`, `rig_id`, `payload` (JSONB, e.g. `{"nights": 7}`), `created_at` (indexed); index (`user_id`, `action`). One event per state change, same transaction; `IMAGED` writes only an event. |
+| `recommendation_impressions` | `night`, `target_key`, `site_id`, `rig_mode`, `rig_id`, `lane`, `rank` (1-based display order), `score`, `is_hero`, `first_shown_at`; unique (`user_id`, `night`, `target_key`), written with `ON CONFLICT DO NOTHING` so the first showing wins. Only tonight's default night is logged. |
+
 ## Recent Schema Additions
 
 The following columns were added to the `images` table for photography metadata:
