@@ -203,6 +203,15 @@ class TestHints:
                 "_FTemp-C_Focus-_HFR-1.85_Rot-359.80_FWHM-60.77.fits")
         assert extract_hints(None, name) == {"HFR": 1.85, "FWHM": 60.77, "GUIDE_RMS": 3.13}
 
+    @pytest.mark.parametrize("name,pos,temp", [
+        ("NGC2392_LIGHT_Ha_0004_Guide-0.65_FTemp--2.37C_Focus-122312_HFR-3.57_Rot-115.25.fits", 122312.0, -2.37),
+        ("X_0000_Guide-3.13_FTemp-C_Focus-_HFR-1.85_Rot-359.80.fits", None, None),
+        ("X_FTemp-7.5C_Focus-4410_0001.fits", 4410.0, 7.5),
+    ])
+    def test_nina_focuser_tokens(self, name, pos, temp):
+        hints = extract_hints(None, name)
+        assert hints.get("FOCPOS") == pos and hints.get("FOCTEMP") == temp
+
     def test_star_count_from_filename(self):
         assert extract_hints(None, "M31_HFR_2.31_STARS_845.fits")["STARS"] == 845
 

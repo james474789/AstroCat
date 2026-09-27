@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, Crosshair, Moon } from 'lucide-react';
+import { LogOut, Crosshair, Moon, Activity } from 'lucide-react';
 import TelescopeIcon from '../icons/TelescopeIcon';
 
 import logo from '../../assets/logo.png';
@@ -75,6 +75,7 @@ const PinIcon = ({ pinned }) => (
 const TargetsIcon = () => <Crosshair size={20} strokeWidth={2} />;
 const EquipmentIcon = () => <TelescopeIcon size={20} strokeWidth={2} />;
 const TonightIcon = () => <Moon size={20} strokeWidth={2} />;
+const NightsIcon = () => <Activity size={20} strokeWidth={2} />;
 
 const navItems = [
     { path: '/', label: 'Dashboard', icon: DashboardIcon, end: true },
@@ -85,6 +86,8 @@ const navItems = [
     { path: '/tonight', label: 'Tonight', icon: TonightIcon },
     // F2: inserted after Catalogs per docs/design/README.md §4 (Targets, Sessions, Mosaics order)
     { path: '/targets', label: 'Targets', icon: TargetsIcon },
+    // Q1c: star quality through each observing night
+    { path: '/nights', label: 'Nights', icon: NightsIcon },
     // R0: Equipment goes after Targets (docs/design/P0-R0-equipment-sites.md §4.9)
     { path: '/equipment', label: 'Equipment', icon: EquipmentIcon },
     { path: '/stats', label: 'Statistics', icon: StatsIcon, end: true },

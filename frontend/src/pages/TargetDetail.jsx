@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
     ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -6,10 +6,14 @@ import {
 import { Pin, PinOff } from 'lucide-react';
 import {
     fetchTarget, updateTargetGoals, formatHours, API_BASE_URL,
-    fetchTargetRecommendation, postRecommendationFeedback,
+    fetchTargetRecommendation, postRecommendationFeedback, fetchNightTimeline,
 } from '../api/client';
 import ImageCard from '../components/images/ImageCard';
 import QualityValue from '../components/quality/QualityValue';
+import { filterColor } from '../utils/filterColors';
+import SessionQualityChart from '../components/quality/SessionQualityChart';
+import SessionSummary from '../components/quality/SessionSummary';
+import './NightReport.css';
 import { useQualityUnits } from '../context/QualityUnitsContext';
 import './TargetDetail.css';
 
@@ -18,17 +22,6 @@ import './TargetDetail.css';
 // Initial state comes from GET /api/recommendations/target/{key} (`feedback.pinned`); a 404 (the
 // key isn't in the candidate pool) hides the toggle quietly rather than showing an error.
 
-const FILTER_COLORS = {
-    L: '#d0d4dc', R: '#e05050', G: '#50c070', B: '#5080e0',
-    Ha: '#c8283c', OIII: '#2f80ed', SII: '#a83246', Hb: '#3cc8ff',
-    Duo: '#b060c0', None: '#a0a0a0', Other: '#707070',
-};
-
-function filterColor(name) {
-    if (FILTER_COLORS[name]) return FILTER_COLORS[name];
-    if (name && name.startsWith('Other:')) return FILTER_COLORS.Other;
-    return FILTER_COLORS.Other;
-}
 
 export default function TargetDetail() {
     const { targetKey } = useParams();
@@ -42,6 +35,20 @@ export default function TargetDetail() {
     const [pinned, setPinned] = useState(false);
     const [pinBusy, setPinBusy] = useState(false);
     const { units } = useQualityUnits();
+    const [selectedNight, setSelectedNight] = useState(null);
+    const [nightTimeline, setNightTimeline] = useState({ data: null, loading: false, error: null });
+    const nightPanelRef = useRef(null);
+
+    useEffect(() => {
+        if (!selectedNight) return undefined;
+        let cancelled = false;
+        setNightTimeline((prev) => ({ ...prev, loading: true, error: null }));
+        fetchNightTimeline(selectedNight, { target_key: targetKey })
+            .then((data) => { if (!cancelled) setNightTimeline({ data, loading: false, error: null }); })
+            .catch((e) => { if (!cancelled) setNightTimeline({ data: null, loading: false, error: e.message || 'Could not load the night' }); });
+        const t = setTimeout(() => nightPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+        return () => { cancelled = true; clearTimeout(t); };
+    }, [selectedNight, targetKey]);
 
     useEffect(() => {
         load();
@@ -368,34 +375,73 @@ export default function TargetDetail() {
                 </section>
             )}
 
-            {/* Nights chart */}
+            {/* Nights chart: integration per night; median FWHM in its own synced chart (one y-axis each) */}
             {nightsChartData.length > 0 && (
                 <section className="target-section">
                     <h3 className="section-title">Nights</h3>
-                    <ResponsiveContainer width="100%" height={280}>
-                        <ComposedChart data={nightsChartData}>
+                    <p className="text-muted text-sm" style={{ margin: '0 0 0.5rem' }}>Click a night to see how star quality changed through it.</p>
+                    <ResponsiveContainer width="100%" height={240}>
+                        <ComposedChart data={nightsChartData} syncId="target-nights" style={{ cursor: 'pointer' }}
+                            onClick={(state) => {
+                                const night = state?.activeLabel ?? nightsChartData[state?.activeIndex]?.night;
+                                if (night) setSelectedNight(night);
+                            }}>
                             <XAxis dataKey="night" stroke="var(--color-text-secondary)" fontSize={11} />
-                            <YAxis yAxisId="hours" stroke="var(--color-text-secondary)" fontSize={11} tickFormatter={(v) => `${(v / 3600).toFixed(0)}h`} />
-                            {hasNightQuality && (
-                                <YAxis yAxisId="fwhm" orientation="right" stroke="var(--color-text-secondary)" fontSize={11}
-                                    tickFormatter={(v) => `${Number(v).toFixed(1)}${fwhmUnit.trim()}`} domain={['auto', 'auto']} />
-                            )}
+                            <YAxis width={48} stroke="var(--color-text-secondary)" fontSize={11} tickFormatter={(v) => `${(v / 3600).toFixed(0)}h`} />
                             <Tooltip
-                                formatter={(value, name) => (name === 'Median FWHM'
-                                    ? `${Number(value).toFixed(2)}${fwhmUnit}`
-                                    : formatHours(value))}
+                                formatter={(value) => formatHours(value)}
                                 contentStyle={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
                             />
                             <Legend />
                             {filterKeysForChart.map((f) => (
-                                <Bar key={f} yAxisId="hours" dataKey={f} stackId="a" fill={filterColor(f)} name={f} />
+                                <Bar key={f} dataKey={f} stackId="a" fill={filterColor(f)} name={f} />
                             ))}
-                            {hasNightQuality && (
-                                <Line yAxisId="fwhm" type="monotone" dataKey="fwhm" name="Median FWHM" connectNulls
-                                    stroke="var(--color-accent)" strokeWidth={2} dot={{ r: 3 }} />
-                            )}
                         </ComposedChart>
                     </ResponsiveContainer>
+                    {hasNightQuality && (
+                        <>
+                            <div className="session-panel-label">Median FWHM per night ({fwhmUnit.trim()})</div>
+                            <ResponsiveContainer width="100%" height={110}>
+                                <ComposedChart data={nightsChartData} syncId="target-nights" style={{ cursor: 'pointer' }}
+                                    onClick={(state) => {
+                                        const night = state?.activeLabel ?? nightsChartData[state?.activeIndex]?.night;
+                                        if (night) setSelectedNight(night);
+                                    }}>
+                                    <XAxis dataKey="night" hide />
+                                    <YAxis width={48} domain={['auto', 'auto']} stroke="var(--color-text-secondary)" fontSize={11}
+                                        tickFormatter={(v) => Number(v).toFixed(1)} />
+                                    <Tooltip
+                                        formatter={(value) => (value == null ? 'not measured' : `${Number(value).toFixed(2)}${fwhmUnit}`)}
+                                        contentStyle={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
+                                    />
+                                    <Line type="monotone" dataKey="fwhm" name="Median FWHM" connectNulls
+                                        stroke="var(--color-text-secondary)" strokeWidth={2} dot={{ r: 4 }} isAnimationActive={false} />
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </>
+                    )}
+                </section>
+            )}
+
+            {/* Q1c: the selected night's timeline for this target */}
+            {selectedNight && (
+                <section className="target-section" ref={nightPanelRef}>
+                    <div className="night-table-head">
+                        <h3 className="section-title">Night of {selectedNight}</h3>
+                        <span style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <Link className="btn btn-secondary btn-sm" to={`/nights/${selectedNight}?target=${encodeURIComponent(targetKey)}`}>Night report</Link>
+                            <Link className="btn btn-secondary btn-sm" to={`/nights/${selectedNight}`}>Whole night</Link>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedNight(null)}>Close</button>
+                        </span>
+                    </div>
+                    {nightTimeline.loading && !nightTimeline.data && <div className="loading-state"><div className="spinner" /></div>}
+                    {nightTimeline.error && <p className="text-muted">{nightTimeline.error}</p>}
+                    {nightTimeline.data && (
+                        <div style={{ opacity: nightTimeline.loading ? 0.5 : 1 }}>
+                            <SessionQualityChart timeline={nightTimeline.data} rigId="ALL" height={240} />
+                            <SessionSummary summary={nightTimeline.data.summary} rigId="ALL" />
+                        </div>
+                    )}
                 </section>
             )}
 
