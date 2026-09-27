@@ -8,8 +8,8 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, DateTime, 
-    Enum, Text, BigInteger, Index, ForeignKey
+    Column, Integer, String, Float, Boolean, DateTime,
+    Enum, Text, BigInteger, Index, ForeignKey, SmallInteger
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -184,6 +184,20 @@ class Image(Base):
 
     # How capture_date_utc of a FITS_LOCAL / EXIF_LOCAL row was derived (R1 §3.2).
     capture_utc_basis = Column(String(20), nullable=True)            # SITE_TZ | DEFAULT_SITE_TZ | CAMERA_UTC
+
+    # Star quality (Q1, docs/design/Q1-star-quality.md). Written by
+    # app.tasks.quality; sizes are in native (as-captured, binned) pixels, and
+    # arcsec is derived at query time from the plate scale. Only OK rows are
+    # AstroCat-measured: HINT rows carry a value read from the capture
+    # software (header/filename) and must be excluded from aggregates.
+    hfr_px = Column(Float, nullable=True)
+    fwhm_px = Column(Float, nullable=True)
+    eccentricity = Column(Float, nullable=True)
+    star_count = Column(Integer, nullable=True)
+    star_metrics_status = Column(String(12), nullable=True, index=True)  # NULL | PENDING | OK | NO_STARS | SKIPPED | HINT | FAILED
+    star_metrics_version = Column(SmallInteger, nullable=True)       # ALGO_VERSION that produced the row
+    star_metrics_at = Column(DateTime, nullable=True)                # when the status last changed
+    star_metrics = Column(JSONB, nullable=True)                      # details (method, percentiles, grid, hints, error, attempts)
 
     # Timestamps
     indexed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
