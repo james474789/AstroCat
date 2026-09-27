@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { fetchTargets, fetchUnassignedTargetsSummary, formatHours, formatDate, API_BASE_URL } from '../api/client';
 import FilterSection from '../components/layout/FilterSection';
 import FolderTree from '../components/layout/FolderTree';
+import QualityValue from '../components/quality/QualityValue';
 import './Targets.css';
 
 const FILTER_COLORS = {
@@ -188,11 +189,12 @@ export default function Targets() {
                             onChange={(e) => setSearch(e.target.value)}
                         />
 
-                        <select className="input select" value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}>
+                        <select className="input select" value={sort} onChange={(e) => { setSort(e.target.value); if (e.target.value === 'fwhm') setOrder('asc'); setPage(1); }}>
                             <option value="integration">Sort: Integration</option>
                             <option value="name">Sort: Name</option>
                             <option value="last">Sort: Last Captured</option>
                             <option value="subs">Sort: Sub Count</option>
+                            <option value="fwhm">Sort: Sharpest (FWHM)</option>
                         </select>
 
                         <button
@@ -277,6 +279,13 @@ export default function Targets() {
                                     <div className="target-stat">
                                         <span className="target-stat-value">{t.nights}</span>
                                         <span className="target-stat-label">nights</span>
+                                    </div>
+                                    <div className="target-stat">
+                                        <span className="target-stat-value">
+                                            <QualityValue px={t.quality?.median_fwhm_px} arcsec={t.quality?.median_fwhm_arcsec}
+                                                title={t.quality ? `Median FWHM over ${t.quality.measured} measured subs` : 'Not measured yet'} />
+                                        </span>
+                                        <span className="target-stat-label">FWHM</span>
                                     </div>
                                     <div className="target-stat">
                                         <span className="target-stat-value">{t.last_capture ? formatDate(t.last_capture) : '--'}</span>
