@@ -3,9 +3,18 @@ import { useParams, Link } from 'react-router-dom';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import { fetchTarget, updateTargetGoals, formatHours, API_BASE_URL } from '../api/client';
+import { Pin, PinOff } from 'lucide-react';
+import {
+    fetchTarget, updateTargetGoals, formatHours, API_BASE_URL,
+    fetchTargetRecommendation, postRecommendationFeedback,
+} from '../api/client';
 import ImageCard from '../components/images/ImageCard';
 import './TargetDetail.css';
+
+// R2a §7: "Pin for Tonight" toggle. Binding contract: docs/design/R2a-feedback-dashboard.md §6-§7.
+// The backend (feat/r2a-feedback-backend) is built in parallel and does not exist on this branch.
+// Initial state comes from GET /api/recommendations/target/{key} (`feedback.pinned`); a 404 (the
+// key isn't in the candidate pool) hides the toggle quietly rather than showing an error.
 
 const FILTER_COLORS = {
     L: '#d0d4dc', R: '#e05050', G: '#50c070', B: '#5080e0',
@@ -27,11 +36,50 @@ export default function TargetDetail() {
     const [goalDrafts, setGoalDrafts] = useState({});
     const [savingGoals, setSavingGoals] = useState(false);
     const [goalMessage, setGoalMessage] = useState('');
+    const [inPool, setInPool] = useState(false);
+    const [pinned, setPinned] = useState(false);
+    const [pinBusy, setPinBusy] = useState(false);
 
     useEffect(() => {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [targetKey]);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function loadPinState() {
+            try {
+                const rec = await fetchTargetRecommendation(targetKey);
+                if (cancelled) return;
+                setInPool(true);
+                setPinned(!!rec?.feedback?.pinned);
+            } catch {
+                // Not in the candidate pool (404) or the request otherwise failed: hide the
+                // toggle quietly rather than surface an error on an otherwise working page.
+                if (!cancelled) setInPool(false);
+            }
+        }
+        loadPinState();
+        return () => { cancelled = true; };
+    }, [targetKey]);
+
+    async function handleTogglePin() {
+        const nextPinned = !pinned;
+        setPinned(nextPinned);
+        setPinBusy(true);
+        try {
+            await postRecommendationFeedback({
+                targetKey,
+                action: nextPinned ? 'PIN' : 'UNPIN',
+                context: {},
+            });
+        } catch (e) {
+            setPinned(!nextPinned);
+            console.error('Failed to update pin state:', e);
+        } finally {
+            setPinBusy(false);
+        }
+    }
 
     async function load() {
         setLoading(true);
@@ -157,6 +205,18 @@ export default function TargetDetail() {
                         )}
                     </div>
                     <div className="target-hero-actions">
+                        {inPool && (
+                            <button
+                                type="button"
+                                className={`btn btn-secondary${pinned ? ' active' : ''}`}
+                                onClick={handleTogglePin}
+                                disabled={pinBusy}
+                                title={pinned ? 'Unpin from Tonight' : 'Pin for Tonight'}
+                            >
+                                {pinned ? <PinOff size={16} /> : <Pin size={16} />}
+                                {pinned ? 'Pinned for Tonight' : 'Pin for Tonight'}
+                            </button>
+                        )}
                         <Link
                             to={`/search?target_key=${encodeURIComponent(targetKey)}&frame_type=LIGHT`}
                             className="btn btn-primary"

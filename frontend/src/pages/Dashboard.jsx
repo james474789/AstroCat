@@ -1,9 +1,108 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { fetchStatsOverview, fetchImages, fetchStatsByMonth, fetchTopObjects } from '../api/client';
+import { fetchStatsOverview, fetchImages, fetchStatsByMonth, fetchTopObjects, fetchRecommendations } from '../api/client';
 import ImageCard from '../components/images/ImageCard';
 import './Dashboard.css';
+
+// Binding contract for the Tonight tile: docs/design/R2a-feedback-dashboard.md §7. The backend
+// (feat/r2a-feedback-backend) is built in parallel and does not exist on this branch, so this
+// tile is written strictly against the spec's response shape (same as Tonight.jsx's R1 shape).
+
+const VERDICT_LABELS = { GO: 'GO', MARGINAL: 'MARGINAL', DONT_BOTHER: "DON'T BOTHER" };
+const VERDICT_CLASSES = { GO: 'verdict-go', MARGINAL: 'verdict-marginal', DONT_BOTHER: 'verdict-dont-bother' };
+
+function formatLocalWindow(startIso, endIso, timeZone) {
+    if (!startIso || !endIso) return '—';
+    try {
+        const fmt = new Intl.DateTimeFormat('en-US', { timeZone, hour: '2-digit', minute: '2-digit' });
+        return `${fmt.format(new Date(startIso))}–${fmt.format(new Date(endIso))}`;
+    } catch {
+        return '—';
+    }
+}
+
+function TonightTile() {
+    const recQuery = useQuery({
+        queryKey: ['dashboardTonight'],
+        queryFn: () => fetchRecommendations({ perLane: 1 }),
+        staleTime: 10 * 60 * 1000,
+        retry: false,
+    });
+
+    // Never break the Dashboard on a Tonight failure: a missing site (404) gets a one-line hint,
+    // any other error just hides the tile quietly.
+    if (recQuery.isError) {
+        if (recQuery.error?.status === 404) {
+            return (
+                <div className="dashboard-card tonight-tile">
+                    <div className="card-header">
+                        <h3>Tonight</h3>
+                    </div>
+                    <div className="tonight-tile-body">
+                        <p className="text-muted text-sm">
+                            <Link to="/equipment" className="link">Set up a site in Equipment</Link> to see tonight&apos;s picks.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    }
+
+    if (recQuery.isLoading || !recQuery.data) return null;
+
+    const data = recQuery.data;
+    const context = data.context;
+    const hero = data.hero;
+    const verdict = data.verdict;
+    const tz = context?.site?.timezone || 'UTC';
+    const moonPct = context?.moon ? Math.round(context.moon.illumination * 100) : null;
+    const reasons = (verdict?.reasons?.length ? verdict.reasons : hero?.reasons) || [];
+
+    return (
+        <div className="dashboard-card tonight-tile">
+            <div className="card-header">
+                <h3>Tonight</h3>
+                {verdict?.level && (
+                    <span className={`verdict-pill ${VERDICT_CLASSES[verdict.level] || 'verdict-unknown'}`}>
+                        {VERDICT_LABELS[verdict.level] || verdict.level}
+                    </span>
+                )}
+            </div>
+            <div className="tonight-tile-body">
+                {hero ? (
+                    <>
+                        <div className="tonight-tile-hero">
+                            <span className="tonight-tile-hero-name">{hero.name || hero.target_key}</span>
+                            <span className="text-muted text-sm">
+                                {hero.rig?.name}{hero.mode ? ` · mode ${hero.mode}` : ''}
+                            </span>
+                        </div>
+                        {reasons.length > 0 && (
+                            <div className="chip-row">
+                                {reasons.slice(0, 2).map((r, i) => (
+                                    <span key={r.code ? `${r.code}-${i}` : i} className="chip reason-chip" title={r.text}>{r.text}</span>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                ) : (
+                    <p className="text-muted text-sm">No feasible picks tonight.</p>
+                )}
+                <div className="tonight-tile-meta text-muted text-sm">
+                    <span>{formatLocalWindow(context?.dark_start_utc, context?.dark_end_utc, tz)} local</span>
+                    {moonPct != null && <span>Moon {moonPct}%</span>}
+                </div>
+                {context?.rig_mode === 'ALL_FALLBACK' && (
+                    <p className="tonight-tile-hint text-muted text-sm">No rig mounted: showing the best rig per target.</p>
+                )}
+                <Link to="/tonight" className="btn btn-secondary btn-sm">Open Tonight →</Link>
+            </div>
+        </div>
+    );
+}
 
 export default function Dashboard() {
     const [stats, setStats] = useState(null);
@@ -82,6 +181,9 @@ export default function Dashboard() {
 
             {/* Main Content Grid */}
             <div className="dashboard-grid">
+                {/* Tonight (R2a) */}
+                <TonightTile />
+
                 {/* Monthly Activity Chart */}
                 <div className="dashboard-card chart-card">
                     <div className="card-header">
