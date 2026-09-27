@@ -20,6 +20,7 @@ from app.schemas.image import ImageDetail, ImageList
 from app.schemas.common import PaginatedResponse
 from app.services.thumbnails import ThumbnailGenerator
 from app.utils.path_security import validate_path_safety, sanitize_filename
+from app.services.quality_filters import QualityFilters, fwhm_arcsec_expr
 
 import io
 from fastapi.responses import StreamingResponse
@@ -60,6 +61,7 @@ def _build_image_query(
     target_key: Optional[str] = None,
     rig_id: Optional[int] = None,
     site_id: Optional[int] = None,
+    quality: Optional[QualityFilters] = None,
 ):
     """
     Helper to build the SQLAlchemy select statement for images based on filters.
@@ -229,6 +231,10 @@ def _build_image_query(
     if site_id is not None:
         stmt = stmt.where(Image.site_id == site_id)
 
+    # Star quality (Q1d)
+    if quality is not None:
+        stmt = quality.apply(stmt)
+
     return stmt
 
 
@@ -334,6 +340,7 @@ async def list_images(
     target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
     rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
+    quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -371,7 +378,8 @@ async def list_images(
         frame_type=frame_type,
         target_key=target_key,
         rig_id=rig_id,
-        site_id=site_id
+        site_id=site_id,
+        quality=quality,
     )
 
     # Count total
@@ -380,8 +388,8 @@ async def list_images(
     total = await db.scalar(count_stmt)
     total = total or 0
     
-    # Dynamic Sorting
-    sort_col = getattr(Image, sort_by, Image.capture_date)
+    # Dynamic Sorting (Q1d: fwhm_arcsec sorts across rigs by angular size)
+    sort_col = fwhm_arcsec_expr() if sort_by == "fwhm_arcsec" else getattr(Image, sort_by, Image.capture_date)
     
     if sort_order.lower() == 'asc':
         stmt = stmt.order_by(nulls_last(sort_col.asc()))
@@ -439,6 +447,7 @@ async def export_images_csv(
     target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
     rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
+    quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -479,7 +488,8 @@ async def export_images_csv(
         frame_type=frame_type,
         target_key=target_key,
         rig_id=rig_id,
-        site_id=site_id
+        site_id=site_id,
+        quality=quality,
     )
 
     # Apply Sorting
@@ -1084,6 +1094,7 @@ async def bulk_update_image_type(
     target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
     rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
+    quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk update image type for all images matching the filters."""
@@ -1125,7 +1136,8 @@ async def bulk_update_image_type(
             frame_type=frame_type,
             target_key=target_key,
             rig_id=rig_id,
-            site_id=site_id
+            site_id=site_id,
+            quality=quality,
         )
 
         # Execute query to get all matching images (no pagination)
@@ -1222,6 +1234,7 @@ async def bulk_update_frame_type(
     frame_type: Optional[str] = None,
     rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
+    quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """Bulk set frame_type (F1) for all images matching the filters. Always marks frame_type_source='MANUAL'."""
@@ -1261,7 +1274,8 @@ async def bulk_update_frame_type(
             gain_max=gain_max,
             frame_type=frame_type,
             rig_id=rig_id,
-            site_id=site_id
+            site_id=site_id,
+            quality=quality,
         )
 
         result = await db.execute(stmt)
@@ -1347,6 +1361,7 @@ async def bulk_assign_target(
     target_key: Optional[str] = None,
     rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
+    quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -1391,7 +1406,8 @@ async def bulk_assign_target(
             gain_max=gain_max,
             target_key=target_key,
             rig_id=rig_id,
-            site_id=site_id
+            site_id=site_id,
+            quality=quality,
         )
 
         result = await db.execute(stmt)
@@ -1461,6 +1477,7 @@ async def bulk_sync_metadata(
     target_key: Optional[str] = Query(None, description="Filter by resolved target key. Use '__none__' for unassigned lights"),
     rig_id: Optional[int] = Query(None, description="Filter by assigned rig id (R0)"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
+    quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """Queue metadata re-extraction for all images matching the filters."""
@@ -1496,7 +1513,8 @@ async def bulk_sync_metadata(
             frame_type=frame_type,
             target_key=target_key,
             rig_id=rig_id,
-            site_id=site_id
+            site_id=site_id,
+            quality=quality,
         )
         stmt = stmt.with_only_columns(Image.file_path).order_by(None)
         result = await db.execute(stmt)

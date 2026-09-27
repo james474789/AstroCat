@@ -37,12 +37,22 @@ export default function FilterChips({ filters, onRemove }) {
             }
         },
         target_key: { label: 'Target', format: (v) => v === '__none__' ? 'Unassigned' : v },
+        // Q1d star quality
+        fwhm_min: { label: 'Min FWHM', format: (v) => v },
+        fwhm_max: { label: 'Max FWHM', format: (v) => v },
+        hfr_max: { label: 'Max HFR', format: (v) => v },
+        eccentricity_max: { label: 'Max Ecc.', format: (v) => v },
+        star_count_min: { label: 'Min Stars', format: (v) => v },
+        quality_flag: {
+            label: 'Suspect', format: (v) => ({ ANY: 'Any reason', SOFT: 'Soft', CLOUD: 'Few stars', TRAILED: 'Elongated' }[v] || v),
+        },
+        star_metrics_status: { label: 'Measurement', format: (v) => v.replace(/,/g, ' / ').toLowerCase().replace(/_/g, ' ') },
     };
 
     // Get active filters (frame_type is handled separately below: unlike
     // other filters, its default '' state still shows a "Lights only" chip)
     const activeFilters = Object.entries(filters)
-        .filter(([key, value]) => value && key !== 'sort_by' && key !== 'sort_order' && key !== 'frame_type')
+        .filter(([key, value]) => value && key !== 'sort_by' && key !== 'sort_order' && key !== 'frame_type' && key !== 'quality_units')
         .map(([key, value]) => ({
             key,
             label: filterLabels[key]?.label || key,

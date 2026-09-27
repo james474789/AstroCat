@@ -557,6 +557,12 @@ export async function fetchNightTimeline(night, params = {}) {
     return handleResponse(await fetch(`${API_BASE_URL}/quality/timeline?${qs}`, { credentials: 'include' }));
 }
 
+// Q1d: library-wide star quality statistics for one rig (or ALL).
+export async function fetchQualityStats(params = {}) {
+    const qs = buildQueryString(params);
+    return handleResponse(await fetch(`${API_BASE_URL}/quality/stats${qs ? `?${qs}` : ''}`, { credentials: 'include' }));
+}
+
 // scope: 'failed' | 'no_stars' | 'all'
 export async function requestStarMetricsRemeasure(scope) {
     return handleResponse(await fetch(`${API_BASE_URL}/indexer/star-metrics/remeasure`, {

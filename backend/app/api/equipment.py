@@ -42,6 +42,7 @@ from app.schemas.equipment import (
 from app.services.site_horizon import HORIZON_CACHE_KEY, HORIZON_CACHE_TTL  # shared with the recommender
 from app.utils.filter_names import normalize_filter
 from app.utils.optics import DEFAULT_SEEING_ARCSEC, pixel_scale, rig_optics_summary
+from app.utils.star_quality import SCALE_SQL
 
 logger = logging.getLogger(__name__)
 
@@ -223,8 +224,18 @@ def filter_dict(f: Filter) -> Dict[str, Any]:
     }
 
 
-def rig_dict(rig: Rig, usage: Optional[tuple] = None, seeing: float = DEFAULT_SEEING_ARCSEC) -> Dict[str, Any]:
+# Q1d: a rig's delivered FWHM replaces the site's typical seeing in the
+# sampling check once it has this many measured subs in its window.
+DELIVERED_MIN_SUBS = 50
+DELIVERED_WINDOW_DAYS = 90
+
+
+def rig_dict(rig: Rig, usage: Optional[tuple] = None, seeing: float = DEFAULT_SEEING_ARCSEC,
+             delivered: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     cam, opt = rig.camera, rig.optic
+    seeing_source = "SITE"
+    if delivered and delivered.get("n", 0) >= DELIVERED_MIN_SUBS and delivered.get("median_arcsec"):
+        seeing, seeing_source = delivered["median_arcsec"], "MEASURED"
     computed = rig_optics_summary(
         pixel_um=cam.pixel_size_um if cam else None,
         width_px=cam.sensor_width_px if cam else None,
@@ -245,13 +256,16 @@ def rig_dict(rig: Rig, usage: Optional[tuple] = None, seeing: float = DEFAULT_SE
         "filters": [{"id": f.id, "name": f.name, "band": f.band} for f in rig.filters],
         "measured_scale_arcsec": rig.measured_scale_arcsec, "measured_count": rig.measured_count or 0,
         **computed,
+        "sampling_seeing_source": seeing_source,
+        "delivered_fwhm": delivered,
         "image_count": int(count or 0), "last_used": _iso(last),
         "created_at": _iso(rig.created_at), "updated_at": _iso(rig.updated_at),
     }
 
 
-def site_dict(s: Site, image_count: int = 0) -> Dict[str, Any]:
+def site_dict(s: Site, image_count: int = 0, measured: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return {
+        "measured_seeing": measured,
         "id": s.id, "name": s.name, "latitude": s.latitude, "longitude": s.longitude,
         "elevation_m": s.elevation_m, "timezone": s.timezone, "bortle": s.bortle, "sqm": s.sqm,
         "typical_seeing_arcsec": s.typical_seeing_arcsec if s.typical_seeing_arcsec else DEFAULT_SEEING_ARCSEC,
@@ -280,6 +294,85 @@ async def _site_counts(db: AsyncSession) -> Dict[int, int]:
     return {s: c for s, c in (await db.execute(stmt)).all()}
 
 
+async def _rig_delivered(db: AsyncSession, rig_ids: Optional[Iterable[int]] = None) -> Dict[int, Dict[str, Any]]:
+    """
+    Q1d: each rig's delivered FWHM over its last DELIVERED_WINDOW_DAYS of
+    measured Light subs (relative to its own latest sub, so a rig that has
+    been idle for months still reports its recent form).
+    """
+    rows = (await db.execute(text(f"""
+        WITH m AS (
+            SELECT images.rig_id, images.fwhm_px, images.fwhm_px * {SCALE_SQL} AS arc, images.capture_date,
+                   max(images.capture_date) OVER (PARTITION BY images.rig_id) AS last
+            FROM images LEFT JOIN rigs r ON r.id = images.rig_id
+            WHERE images.frame_type = 'LIGHT' AND images.subtype = 'SUB_FRAME'
+              AND images.star_metrics_status = 'OK' AND images.rig_id IS NOT NULL
+              AND images.capture_date IS NOT NULL
+              {"AND images.rig_id = ANY(:ids)" if rig_ids is not None else ""}
+        )
+        SELECT rig_id, count(*) AS n, min(capture_date) AS since, max(capture_date) AS until,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY arc) AS median_arcsec,
+               percentile_cont(0.1) WITHIN GROUP (ORDER BY arc) AS best_arcsec,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY fwhm_px) AS median_px,
+               percentile_cont(0.1) WITHIN GROUP (ORDER BY fwhm_px) AS best_px
+        FROM m WHERE capture_date >= last - make_interval(days => :days)
+        GROUP BY rig_id
+    """), {"days": DELIVERED_WINDOW_DAYS, **({"ids": list(rig_ids)} if rig_ids is not None else {})})).all()
+    r3 = lambda v: round(float(v), 3) if v is not None else None  # noqa: E731
+    return {r.rig_id: {
+        "n": int(r.n), "window_days": DELIVERED_WINDOW_DAYS,
+        "since": _iso(r.since), "until": _iso(r.until),
+        "median_arcsec": r3(r.median_arcsec), "best_arcsec": r3(r.best_arcsec),
+        "median_px": r3(r.median_px), "best_px": r3(r.best_px),
+    } for r in rows}
+
+
+SEEING_MAX_SCALE = 3.0      # arcsec/px: coarser rigs can't resolve the seeing
+SEEING_SITE_WINDOW_DAYS = 365
+
+
+async def _site_measured(db: AsyncSession) -> Dict[int, Dict[str, Any]]:
+    """
+    Q1d: a site's measured seeing = the sharpest delivered FWHM (median over
+    each rig's own last DELIVERED_WINDOW_DAYS at that site) among rigs that
+    can resolve seeing (median scale <= SEEING_MAX_SCALE), used there within
+    the last SEEING_SITE_WINDOW_DAYS of the site's activity, >= 20 subs.
+    Delivered FWHM includes optics and guiding, so it is an upper bound on
+    the seeing; the sharpest capable rig is the closest to it. None when the
+    site has no such rig (e.g. camera lenses only).
+    """
+    rows = (await db.execute(text(f"""
+        WITH m AS (
+            SELECT images.site_id, images.rig_id, images.fwhm_px * {SCALE_SQL} AS arc, {SCALE_SQL} AS scale,
+                   images.capture_date,
+                   max(images.capture_date) OVER (PARTITION BY images.site_id, images.rig_id) AS rig_last,
+                   max(images.capture_date) OVER (PARTITION BY images.site_id) AS site_last
+            FROM images LEFT JOIN rigs r ON r.id = images.rig_id
+            WHERE images.frame_type = 'LIGHT' AND images.subtype = 'SUB_FRAME'
+              AND images.star_metrics_status = 'OK' AND images.site_id IS NOT NULL
+              AND images.rig_id IS NOT NULL AND images.capture_date IS NOT NULL
+        ), per_rig AS (
+            SELECT site_id, rig_id, count(*) AS n,
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY arc) AS median_arcsec,
+                   percentile_cont(0.5) WITHIN GROUP (ORDER BY scale) AS median_scale
+            FROM m
+            WHERE capture_date >= rig_last - make_interval(days => :days)
+              AND rig_last >= site_last - make_interval(days => :site_days)
+              AND arc IS NOT NULL
+            GROUP BY site_id, rig_id HAVING count(*) >= 20
+        )
+        SELECT DISTINCT ON (site_id) site_id, rig_id, n, median_arcsec
+        FROM per_rig WHERE median_scale <= :max_scale
+        ORDER BY site_id, median_arcsec
+    """), {"days": DELIVERED_WINDOW_DAYS, "site_days": SEEING_SITE_WINDOW_DAYS,
+           "max_scale": SEEING_MAX_SCALE})).all()
+    names = dict((await db.execute(select(Rig.id, Rig.name).where(Rig.id.in_([r.rig_id for r in rows])))).all()) if rows else {}
+    return {r.site_id: {
+        "fwhm_arcsec": round(float(r.median_arcsec), 2), "rig_id": r.rig_id, "rig_name": names.get(r.rig_id),
+        "n": int(r.n), "window_days": DELIVERED_WINDOW_DAYS,
+    } for r in rows}
+
+
 async def _default_seeing(db: AsyncSession) -> float:
     value = (await db.execute(select(Site.typical_seeing_arcsec).where(Site.is_default.is_(True)))).scalar()
     return value or DEFAULT_SEEING_ARCSEC
@@ -297,7 +390,8 @@ async def _load_rig(db: AsyncSession, rig_id: int) -> Rig:
 async def _rig_response(db: AsyncSession, rig_id: int) -> Dict[str, Any]:
     rig = await _load_rig(db, rig_id)
     usage = await _rig_usage(db, [rig_id])
-    return rig_dict(rig, usage.get(rig_id), await _default_seeing(db))
+    delivered = await _rig_delivered(db, [rig_id])
+    return rig_dict(rig, usage.get(rig_id), await _default_seeing(db), delivered.get(rig_id))
 
 
 async def _set_rig_filters(db: AsyncSession, rig_id: int, filter_ids: List[int]) -> None:
@@ -329,15 +423,17 @@ async def get_equipment(db: AsyncSession = Depends(get_db)):
     cam_counts = await _rig_counts(db, Rig.camera_id)
     opt_counts = await _rig_counts(db, Rig.optic_id)
     usage = await _rig_usage(db)
+    delivered = await _rig_delivered(db)
     site_counts = await _site_counts(db)
+    site_measured = await _site_measured(db)
     seeing = next((s.typical_seeing_arcsec for s in sites if s.is_default and s.typical_seeing_arcsec),
                   DEFAULT_SEEING_ARCSEC)
     return {
         "cameras": [camera_dict(c, cam_counts.get(c.id, 0)) for c in cameras],
         "optics": [optic_dict(o, opt_counts.get(o.id, 0)) for o in optics],
         "filters": [filter_dict(f) for f in filters],
-        "rigs": [rig_dict(r, usage.get(r.id), seeing) for r in rigs],
-        "sites": [site_dict(s, site_counts.get(s.id, 0)) for s in sites],
+        "rigs": [rig_dict(r, usage.get(r.id), seeing, delivered.get(r.id)) for r in rigs],
+        "sites": [site_dict(s, site_counts.get(s.id, 0), site_measured.get(s.id)) for s in sites],
         "telescopius_available": bool(settings.telescopius_api_key),
         "max_mounted_rigs": MAX_MOUNTED_RIGS,
     }
@@ -740,7 +836,7 @@ async def _site_response(db: AsyncSession, site: Site) -> Dict[str, Any]:
     count = (await db.execute(
         select(func.count(Image.id)).where(_light_subs(), Image.site_id == site.id)
     )).scalar()
-    return site_dict(site, count or 0)
+    return site_dict(site, count or 0, (await _site_measured(db)).get(site.id))
 
 
 @sites_router.get("")
@@ -748,7 +844,8 @@ async def _site_response(db: AsyncSession, site: Site) -> Dict[str, Any]:
 async def list_sites(db: AsyncSession = Depends(get_db)):
     sites = (await db.execute(select(Site).order_by(Site.is_default.desc(), Site.name))).scalars().all()
     counts = await _site_counts(db)
-    return [site_dict(s, counts.get(s.id, 0)) for s in sites]
+    measured = await _site_measured(db)
+    return [site_dict(s, counts.get(s.id, 0), measured.get(s.id)) for s in sites]
 
 
 @sites_router.post("", status_code=201, dependencies=[Depends(require_admin)])
