@@ -2,7 +2,8 @@
 Equipment & Sites API (R0, docs/design/P0-R0-equipment-sites.md §4.6).
 
 Two routers:
-- `router` at /api/equipment: cameras, optics, filters, rigs (+ mount),
+- `router` at /api/equipment: cameras, optics, filters, rigs (+ mount, up to
+  MAX_MOUNTED_RIGS at once),
   detection proposals, Telescopius import, assignment.
 - `sites_router` at /api/sites: sites and their horizon profiles.
 
@@ -30,7 +31,8 @@ from app.api.dependencies import require_admin
 from app.config import settings
 from app.database import get_db
 from app.models.equipment import (
-    Camera, Filter, Optic, Rig, Site, SOURCE_DETECTED, SOURCE_MANUAL, SOURCE_TELESCOPIUS, rig_filters,
+    MAX_MOUNTED_RIGS, Camera, Filter, Optic, Rig, Site, SOURCE_DETECTED, SOURCE_MANUAL, SOURCE_TELESCOPIUS,
+    rig_filters,
 )
 from app.models.image import FrameType, Image, ImageSubtype
 from app.schemas.equipment import (
@@ -337,6 +339,7 @@ async def get_equipment(db: AsyncSession = Depends(get_db)):
         "rigs": [rig_dict(r, usage.get(r.id), seeing) for r in rigs],
         "sites": [site_dict(s, site_counts.get(s.id, 0)) for s in sites],
         "telescopius_available": bool(settings.telescopius_api_key),
+        "max_mounted_rigs": MAX_MOUNTED_RIGS,
     }
 
 
@@ -524,9 +527,12 @@ async def delete_rig(rig_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/rigs/{rig_id}/mount", dependencies=[Depends(require_admin)])
 async def mount_rig(rig_id: int, db: AsyncSession = Depends(get_db)):
-    await _get_or_404(db, Rig, rig_id)
-    await db.execute(update(Rig).where(Rig.id != rig_id, Rig.is_mounted.is_(True)).values(is_mounted=False))
-    await db.flush()
+    rig = await _get_or_404(db, Rig, rig_id)
+    if not rig.is_mounted:
+        mounted = (await db.execute(select(func.count()).select_from(Rig).where(Rig.is_mounted.is_(True)))).scalar()
+        if mounted >= MAX_MOUNTED_RIGS:
+            raise HTTPException(status_code=409,
+                                detail=f"At most {MAX_MOUNTED_RIGS} rigs can be mounted at once; unmount one first")
     await db.execute(update(Rig).where(Rig.id == rig_id).values(is_mounted=True, updated_at=datetime.utcnow()))
     await db.commit()
     await _invalidate_recommendations()

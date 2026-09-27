@@ -34,6 +34,9 @@ HORIZON_SOURCES = ("LEARNED", "IMPORTED", "MANUAL")
 RIG_SOURCE_AUTO = "AUTO"
 RIG_SOURCE_MANUAL = "MANUAL"
 
+# Rigs that can be mounted at once (several mounts imaging concurrently).
+MAX_MOUNTED_RIGS = 5
+
 
 rig_filters = Table(
     "rig_filters",
@@ -123,10 +126,7 @@ class Rig(Base):
     optic = relationship("Optic", lazy="joined")
     filters = relationship("Filter", secondary=rig_filters, lazy="selectin", order_by="Filter.id")
 
-    __table_args__ = (
-        # At most one mounted rig (the API also clears others in the same transaction).
-        Index("uq_rigs_mounted", "is_mounted", unique=True, postgresql_where=text("is_mounted")),
-    )
+    # Up to MAX_MOUNTED_RIGS may be mounted at once (enforced by the API).
 
     def __repr__(self):
         return f"<Rig(id={self.id}, name='{self.name}')>"
