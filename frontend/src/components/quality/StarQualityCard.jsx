@@ -183,6 +183,12 @@ export default function StarQualityCard({ image, onImageUpdated }) {
             {showMetrics && q.scale_source === 'RIG' && units === 'ARCSEC' && (
                 <p className="quality-note">Arcseconds use the rig’s measured scale ({q.scale_arcsec?.toFixed(2)}″/px) because this image isn’t plate-solved.</p>
             )}
+            {showMetrics && q.scale_source === 'RIG_OVERRIDE' && units === 'ARCSEC' && (
+                <p className="quality-note">
+                    Arcseconds use the rig’s measured scale ({q.scale_arcsec?.toFixed(2)}″/px): this image’s stored plate
+                    scale ({image.pixel_scale_arcsec?.toFixed(2)}″/px) disagrees with it too much to be right.
+                </p>
+            )}
 
             {status === 'OK' && q.grid_hfr_px && <RegionGrid gridPx={q.grid_hfr_px} gridArcsec={q.grid_hfr_arcsec} units={units} />}
 

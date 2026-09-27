@@ -224,6 +224,18 @@ def _weighted_median(pairs: List[tuple]) -> Optional[float]:
     return pairs[-1][0]
 
 
+# Q1b: buckets may carry per-sub star quality samples under this key. Medians
+# can't be merged like sums, so both builders concatenate the samples of the
+# buckets they fold into a row; the caller summarises (and removes) them.
+QUALITY_SAMPLES_KEY = "quality_samples"
+
+
+def _with_samples(row: Dict[str, Any], members: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if any(QUALITY_SAMPLES_KEY in m for m in members):
+        row[QUALITY_SAMPLES_KEY] = [s for m in members for s in (m.get(QUALITY_SAMPLES_KEY) or [])]
+    return row
+
+
 def build_filter_rig_rows(buckets: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Collapse fine-grained buckets into one row per (filter, camera, rig).
@@ -250,14 +262,14 @@ def build_filter_rig_rows(buckets: Iterable[Dict[str, Any]]) -> List[Dict[str, A
             scale = _weighted_median([(m.get("pixel_scale"), m["subs"]) for m in members])
             pix = _weighted_median([(m.get("pixel_size_um"), m["subs"]) for m in members])
             fl = focal_length_mm(pix, scale)
-            rows.append({
+            rows.append(_with_samples({
                 "filter": filt,
                 "camera": camera,
                 "pixel_scale": round(scale, 2) if scale else None,
                 "focal_length": round(fl) if fl else None,
                 "subs": subs,
                 "seconds": seconds,
-            })
+            }, members))
     return rows
 
 
@@ -287,7 +299,7 @@ def build_filter_rig_rows_with_rigs(buckets: Iterable[Dict[str, Any]],
         if not fl:
             pix = _weighted_median([(m.get("pixel_size_um"), m["subs"]) for m in members])
             fl = focal_length_mm(pix, scale)
-        rows.append({
+        rows.append(_with_samples({
             "filter": filt,
             "camera": rig.get("camera") or members[0].get("camera"),
             "pixel_scale": round(scale, 2) if scale else None,
@@ -296,7 +308,7 @@ def build_filter_rig_rows_with_rigs(buckets: Iterable[Dict[str, Any]],
             "seconds": sum(m["seconds"] for m in members),
             "rig_id": rig_id,
             "rig_name": rig.get("name"),
-        })
+        }, members))
     for row in build_filter_rig_rows(rest):
         row["rig_id"] = None
         row["rig_name"] = None
