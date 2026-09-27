@@ -93,9 +93,10 @@ See `docs/features/EQUIPMENT.md` and `backend/app/models/equipment.py` (Alembic 
 | `rig_filters` | (`rig_id`, `filter_id`) primary key, both `ON DELETE CASCADE` |
 | `sites` | `name` (unique), `latitude`/`longitude` (east-positive), `elevation_m`, `timezone` (IANA), `bortle`, `sqm`, `typical_seeing_arcsec` (default 2.5), `is_default`, `horizon` (JSONB `[[az, alt], ...]`), `horizon_source` (`LEARNED`/`IMPORTED`/`MANUAL`) |
 
-Partial unique indexes: `uq_rigs_mounted ON rigs (is_mounted) WHERE is_mounted` and
-`uq_sites_default ON sites (is_default) WHERE is_default` (at most one mounted rig / one
-default site; the API also clears the others in the same transaction). All tables carry
+Partial unique index: `uq_sites_default ON sites (is_default) WHERE is_default` (at most
+one default site; the API also clears the others in the same transaction). Up to five rigs
+may be mounted at once (`MAX_MOUNTED_RIGS`, enforced by the API; the old
+`uq_rigs_mounted` index was dropped in `b1d3f7c84011`). All tables carry
 `created_at` / `updated_at`.
 
 ### 8. Recommendation feedback (R2a)

@@ -103,7 +103,22 @@ function findPickInData(data, targetKey) {
         const found = (lane.items || []).find((p) => p.target_key === targetKey);
         if (found) return found;
     }
+    for (const entry of data?.rig_plan || []) {
+        const found = (entry.items || []).find((p) => p.target_key === targetKey);
+        if (found) return found;
+    }
     return null;
+}
+
+function updateRigPlan(rigPlan, targetKey, fn) {
+    return (rigPlan || []).map((entry) => ({
+        ...entry,
+        items: (entry.items || []).flatMap((p) => {
+            if (p.target_key !== targetKey) return [p];
+            const next = fn(p);
+            return next ? [next] : [];
+        }),
+    }));
 }
 
 function removePickFromLanes(lanes, targetKey) {
@@ -118,6 +133,14 @@ function applyOptimisticFeedback(data, targetKey, action) {
     const pick = findPickInData(data, targetKey);
     let lanes = data.lanes || [];
     let hero = data.hero;
+    let rigPlan = data.rig_plan || [];
+
+    if (action === 'PIN' || action === 'UNPIN') {
+        const pinned = action === 'PIN';
+        rigPlan = updateRigPlan(rigPlan, targetKey, (p) => ({ ...p, feedback: { ...p.feedback, pinned } }));
+    } else if (action === 'SNOOZE' || action === 'DISMISS') {
+        rigPlan = updateRigPlan(rigPlan, targetKey, () => null);
+    }
 
     if (action === 'PIN' && pick) {
         lanes = removePickFromLanes(lanes, targetKey);
@@ -140,7 +163,7 @@ function applyOptimisticFeedback(data, targetKey, action) {
     }
     // UNSNOOZE / UNDISMISS / IMAGED don't change what's visible on this cached result in a way we
     // can predict client-side, so they rely solely on the query invalidation below.
-    return { ...data, lanes, hero };
+    return { ...data, lanes, hero, rig_plan: rigPlan };
 }
 
 // ============ Small display components ============
@@ -476,6 +499,46 @@ function PickCard({ pick, laneId, rank, onAction }) {
     );
 }
 
+// ============ Per-rig plan (several mounted rigs) ============
+
+function RigPlanSection({ plan, onAction }) {
+    if (!plan || plan.length === 0) return null;
+    return (
+        <section className="lane-section rig-plan-section">
+            <h2 className="section-title">Plan per mounted rig</h2>
+            <p className="muted small rig-plan-hint">
+                One target per rig, none shared, with backups if the primary clouds out or sets.
+            </p>
+            <div className="rig-plan-grid">
+                {plan.map((entry) => {
+                    const [primary, ...backups] = entry.items || [];
+                    return (
+                        <div key={entry.rig.id} className="rig-plan-column">
+                            <h3 className="rig-plan-rig">{entry.rig.name}</h3>
+                            {primary ? (
+                                <PickCard pick={primary} laneId="rig_plan" rank={1} onAction={onAction} />
+                            ) : (
+                                <p className="muted small">Nothing feasible for this rig tonight.</p>
+                            )}
+                            {backups.length > 0 && (
+                                <ul className="rig-plan-backups">
+                                    {backups.map((p) => (
+                                        <li key={p.target_key}>
+                                            <span className="muted small">Backup</span>{' '}
+                                            <Link to={`/targets/${encodeURIComponent(p.target_key)}`}>{p.name || p.target_key}</Link>
+                                            <span className="muted small"> · {p.mode} · {p.score?.toFixed(2)}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        </section>
+    );
+}
+
 // ============ Pinned-but-unavailable strip ============
 
 function PinnedUnavailableStrip({ items }) {
@@ -796,7 +859,7 @@ export default function Tonight() {
     });
     const sites = equipmentQuery.data?.sites || [];
     const rigs = equipmentQuery.data?.rigs || [];
-    const mountedRig = rigs.find((r) => r.is_mounted);
+    const mountedRigs = rigs.filter((r) => r.is_mounted);
     // Fall back to the default (first) site until the viewer picks one explicitly, derived in
     // render rather than an effect (same pattern as Equipment.jsx's SitesTab).
     const siteId = selectedSiteId ?? sites[0]?.id ?? null;
@@ -924,7 +987,8 @@ export default function Tonight() {
     }
 
     const nonEmptyLanes = (data?.lanes || []).filter((l) => l.items && l.items.length > 0);
-    const hasAnyPicks = !!data?.hero || nonEmptyLanes.length > 0;
+    const rigPlan = data?.rig_plan || [];
+    const hasAnyPicks = !!data?.hero || nonEmptyLanes.length > 0 || rigPlan.some((e) => e.items?.length > 0);
 
     return (
         <div className="tonight-page">
@@ -957,7 +1021,11 @@ export default function Tonight() {
                     ))}
                 </select>
                 <select className="input select" value={rig} onChange={(e) => setRig(e.target.value)}>
-                    <option value="mounted">Mounted{mountedRig ? `: ${mountedRig.name}` : ''}</option>
+                    <option value="mounted">
+                        {mountedRigs.length === 0 ? 'Mounted'
+                            : mountedRigs.length === 1 ? `Mounted: ${mountedRigs[0].name}`
+                                : `Mounted (${mountedRigs.length} rigs)`}
+                    </option>
                     <option value="all">All rigs (best per target)</option>
                     {rigs.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
                 </select>
@@ -994,6 +1062,8 @@ export default function Tonight() {
                     ) : (
                         <>
                             <HeroCard hero={data.hero} verdict={data.verdict} onAction={handlePickAction} />
+
+                            <RigPlanSection plan={rigPlan} onAction={handlePickAction} />
 
                             {nonEmptyLanes.map((lane) => (
                                 <section key={lane.id} className="lane-section">
