@@ -529,6 +529,32 @@ export async function runDataMigrations(id = null) {
     }));
 }
 
+// ============ Star quality (Q1) ============
+
+// Re-measure one image's HFR/FWHM now.
+export async function remeasureStarMetrics(id) {
+    return handleResponse(await fetch(`${API_BASE_URL}/images/${id}/star-metrics`, {
+        method: 'POST',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
+// Measurement progress over the library + the quality queue depth.
+export async function fetchStarMetricsStatus() {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/star-metrics`, { credentials: 'include' }));
+}
+
+// scope: 'failed' | 'no_stars' | 'all'
+export async function requestStarMetricsRemeasure(scope) {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/star-metrics/remeasure`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ scope }),
+        credentials: 'include'
+    }));
+}
+
 // ============ Settings API ============
 
 export async function fetchSettings() {
