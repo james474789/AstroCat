@@ -229,6 +229,10 @@ def test_select_rigs_modes():
     recs[1].is_mounted = True
     specs, mode, _ = select_rigs(recs, "mounted")
     assert mode == "MOUNTED" and [s.id for s in specs] == [2]
+    recs[0].is_mounted = True     # several rigs mounted at once
+    specs, mode, _ = select_rigs(recs, "mounted")
+    assert mode == "MOUNTED" and [s.id for s in specs] == [1, 2]
+    recs[0].is_mounted = False
     assert select_rigs(recs, "all")[1] == "ALL"
     specs, mode, _ = select_rigs(recs, "3")
     assert mode == "SINGLE" and [s.id for s in specs] == [3]

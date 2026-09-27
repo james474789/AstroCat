@@ -9,8 +9,9 @@ AstroCat knows **which rig** took each frame and **where** it was taken:
 
 - **Cameras, optics, filters and rigs.** A rig is camera + optic, plus an optional
   reducer/Barlow (`modifier_factor`: 0.8 for a 0.8x reducer, 2.0 for a 2x Barlow),
-  binning and a filter set. One rig can be marked **mounted**. The R1 recommender
-  defaults to the mounted rig.
+  binning and a filter set. Up to five rigs can be marked **mounted** at once (several
+  mounts imaging concurrently). The R1 recommender defaults to the mounted rigs and, with
+  more than one, plans a separate target for each.
 - **Sites** have coordinates, an IANA timezone, sky quality (Bortle/SQM), typical
   seeing and a horizon profile. One site can be the **default**.
 - **Images** get `rig_id` / `rig_source` (`AUTO` | `MANUAL`) and `site_id`.
@@ -172,9 +173,9 @@ See the R0 API contract in the design doc. Reads need a logged-in user; writes n
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/equipment` | cameras, optics, filters, rigs (with computed optics), sites, `telescopius_available` |
+| `GET /api/equipment` | cameras, optics, filters, rigs (with computed optics), sites, `telescopius_available`, `max_mounted_rigs` |
 | `POST/PUT/DELETE /api/equipment/{cameras,optics,filters,rigs}[/{id}]` | CRUD. Deleting a camera or optic that a rig uses returns 409. |
-| `POST/DELETE /api/equipment/rigs/{id}/mount` | Mount (exclusive) / unmount |
+| `POST/DELETE /api/equipment/rigs/{id}/mount` | Mount / unmount. Other mounted rigs stay mounted; a sixth mount returns 409. |
 | `GET /api/equipment/detect`, `POST /api/equipment/detect/apply` | Proposals / accept |
 | `POST /api/equipment/import/telescopius` | Optional import |
 | `POST /api/equipment/assign?scope=` | Queue assignment |

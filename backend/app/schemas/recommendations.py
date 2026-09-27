@@ -32,6 +32,9 @@ class Alternative(_Model):
     rig_id: int
     rig_name: str
     score: float
+    mode: Optional[str] = None               # additive (multi-mounted rig plan)
+    fill_ratio: Optional[float] = None
+    available_hours: Optional[float] = None
 
 
 class Components(_Model):
@@ -142,6 +145,15 @@ class PinnedUnavailable(_Model):
     excluded_reason: str        # an ExcludedReason, or NOT_IN_POOL / NO_RIGS
 
 
+class RigPlanPick(Pick):
+    best_rig: bool          # False: the target scores higher on another rig, but that rig has better work
+
+
+class RigPlan(_Model):
+    rig: RigRef
+    items: List[RigPlanPick]    # first = primary target, the rest backups; no target on two rigs
+
+
 class RecommendationsResponse(_Model):
     generated_at: str
     cached: bool
@@ -152,6 +164,7 @@ class RecommendationsResponse(_Model):
     excluded_counts: Dict[ExcludedReason, int]
     skipped_rigs: List[SkippedRig]
     pinned_unavailable: List[PinnedUnavailable] = []     # R2a
+    rig_plan: List[RigPlan] = []    # rig=mounted with several mounted rigs: distinct targets per rig
 
 
 class TargetRigResult(_Model):

@@ -26,7 +26,9 @@ from app.schemas.recommendations import (  # noqa: E402
 from app.services.recommend import Params, recommend, result_to_dict  # noqa: E402
 from app.services.recommend import loader  # noqa: E402
 
-from _recommend_helpers import NB_RIG, OSC_RIG, SITE, make_inputs, ngc7000_rows  # noqa: E402
+from app.services.recommend import assign_rig_plan  # noqa: E402
+
+from _recommend_helpers import BB_RIG, NB_RIG, OSC_RIG, SITE, make_inputs, ngc7000_rows  # noqa: E402
 
 PICK_KEYS = {"target_key", "name", "kind", "ra_deg", "dec_deg", "size_arcmin", "rig", "alternatives", "mode", "score",
              "components", "usable_hours", "available_hours", "best_time_utc", "max_alt_deg", "moon_sep_min_deg",
@@ -101,6 +103,52 @@ def test_tier_none_body_validates():
     RecommendationsResponse.model_validate(body)
     assert body["context"]["tier"] == "NONE" and body["hero"] is None and body["lanes"] == []
     assert body["verdict"]["level"] == "DONT_BOTHER" and body["context"]["tier_note"]
+
+
+# --- several mounted rigs: the per-rig plan -------------------------------------------
+
+def test_rig_plan_gives_each_mounted_rig_distinct_targets():
+    inputs = make_inputs(rigs=[NB_RIG, BB_RIG, OSC_RIG], night=date(2026, 10, 10))
+    body = result_to_dict(recommend(inputs, Params(rig_mode="MOUNTED")))
+    RecommendationsResponse.model_validate(body)
+    plan = body["rig_plan"]
+    assert [e["rig"]["id"] for e in plan] == [NB_RIG.id, BB_RIG.id, OSC_RIG.id]
+    keys = [p["target_key"] for e in plan for p in e["items"]]
+    assert keys and len(keys) == len(set(keys))
+    for entry in plan:
+        assert 1 <= len(entry["items"]) <= 3
+        for p in entry["items"]:
+            assert p["rig"]["id"] == entry["rig"]["id"]
+            assert all(a["rig_id"] != p["rig"]["id"] for a in p["alternatives"])
+            if not p["best_rig"]:
+                assert p["alternatives"] and p["alternatives"][0]["score"] >= p["score"]
+                framing = [r["text"] for r in p["reasons"] if r["code"] == "FRAMING"]
+                assert all(entry["rig"]["name"] in t for t in framing)
+    json.dumps(body)
+
+
+def test_rig_plan_only_for_several_mounted_rigs():
+    inputs = make_inputs(rigs=[NB_RIG, BB_RIG], night=date(2026, 10, 10))
+    assert result_to_dict(recommend(inputs, Params(rig_mode="ALL")))["rig_plan"] == []
+    one = make_inputs(rigs=[NB_RIG], night=date(2026, 10, 10))
+    assert result_to_dict(recommend(one, Params(rig_mode="MOUNTED")))["rig_plan"] == []
+
+
+class _P:
+    def __init__(self, key, rig, score, alts=()):
+        self.key, self.score = key, score
+        self.data = {"rig": {"id": rig}, "alternatives": [{"rig_id": r, "rig_name": str(r), "score": s}
+                                                           for r, s in alts]}
+
+
+def test_assign_rig_plan_primaries_first_then_backups_and_pins_first():
+    # Rig 1 is best for everything; rig 2 must still get a primary before rig 1 gets a backup.
+    picks = [_P("A", 1, 0.9, [(2, 0.5)]), _P("B", 1, 0.8, [(2, 0.7)]), _P("C", 1, 0.6, [(2, 0.2)])]
+    plan = assign_rig_plan(picks, [1, 2], per_rig=2)
+    assert [p.key for p, _ in plan[1]] == ["A", "C"]
+    assert [(p.key, alt["rig_id"]) for p, alt in plan[2]] == [("B", 2)]
+    plan = assign_rig_plan(picks, [1, 2], pinned=frozenset({"C"}), per_rig=1)
+    assert [p.key for p, _ in plan[1]] == ["C"] and [p.key for p, _ in plan[2]] == ["B"]
 
 
 # --- service with a fake DB layer ---------------------------------------------------
