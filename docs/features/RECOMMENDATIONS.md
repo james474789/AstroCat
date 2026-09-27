@@ -38,11 +38,20 @@ Default weights: observability 0.25, framing 0.20, project 0.20, momentum 0.15, 
 0.15, prior 0.10, recency_rank 0 (momentum tau 45 days). Moon rules (D deg / W days): broadband and OSC 120/14, Ha and SII 40/10,
 OIII 70/10.
 
-Rigs: `rig=mounted` (default) uses the mounted rig, or every active rig when none is
+Rigs: `rig=mounted` (default) uses the mounted rigs (up to five), or every active rig when none is
 mounted (`rig_mode = ALL_FALLBACK`); `rig=all` uses every active rig; `rig=<id>` one rig. A
 rig needs a pixel scale (declared, else measured) and a sensor size, otherwise it is listed
 in `skipped_rigs`. Filter classes come from the rig's filters; a rig with no filters is OSC
 for a colour camera, else the classes seen on its images, else broadband.
+
+Several mounted rigs image at the same time, so with `rig_mode = MOUNTED` and more than one
+rig the body also carries `rig_plan`: `[{rig, items}]`, one entry per mounted rig, where
+`items[0]` is that rig's primary target and the rest (up to 3 in all) are backups. No target
+is planned on two rigs. Every (target, rig) pair competes by that rig's score, pinned targets
+first, and each rig gets a primary before any rig gets a backup, so a rig can be handed a
+target that scores slightly higher elsewhere (`best_rig: false`; the pick is re-labelled for
+the assigned rig, its best rig moves to `alternatives`). Dismissed and snoozed targets are
+left out. `rig_plan` is `[]` in every other case. The hero and lanes are unchanged.
 
 ## API (`/api/recommendations`, any logged-in user)
 

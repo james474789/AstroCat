@@ -125,7 +125,7 @@ function useToast() {
 
 // ============ Rig card ============
 
-function RigCard({ rig, isAdmin, onEdit, onDelete, onMountToggle, onActiveToggle, onAssign }) {
+function RigCard({ rig, isAdmin, mountLimit, onEdit, onDelete, onMountToggle, onActiveToggle, onAssign }) {
     const scaleCheckMsg = scaleCheckText(rig.scale_check);
     return (
         <div className={`equip-card rig-card${rig.is_active ? '' : ' inactive'}`}>
@@ -135,8 +135,12 @@ function RigCard({ rig, isAdmin, onEdit, onDelete, onMountToggle, onActiveToggle
                     <button
                         className={`pill-toggle${rig.is_mounted ? ' active' : ''}`}
                         onClick={() => onMountToggle(rig)}
-                        disabled={!isAdmin}
-                        title={rig.is_mounted ? 'Mounted (click to unmount)' : 'Click to mount (unmounts any other rig)'}
+                        disabled={!isAdmin || (!rig.is_mounted && mountLimit != null)}
+                        title={rig.is_mounted
+                            ? 'Mounted (click to unmount)'
+                            : mountLimit != null
+                                ? `${mountLimit} rigs already mounted: unmount one first`
+                                : 'Click to mount (other mounted rigs stay mounted)'}
                     >
                         {rig.is_mounted ? `Mounted${rig.mount_name ? ` · ${rig.mount_name}` : ''}` : 'Not mounted'}
                     </button>
@@ -1145,6 +1149,8 @@ export default function Equipment() {
     const optics = data?.optics || [];
     const filters = data?.filters || [];
     const rigs = data?.rigs || [];
+    const maxMounted = data?.max_mounted_rigs ?? 5;
+    const mountedCount = rigs.filter((r) => r.is_mounted).length;
 
     return (
         <div className="equipment-page">
@@ -1196,12 +1202,17 @@ export default function Equipment() {
                         </button>
                     </div>
                 ) : (
+                    <>
+                    <p className="muted small mount-summary">
+                        {mountedCount} of {maxMounted} rigs mounted. Tonight plans a separate target for each mounted rig.
+                    </p>
                     <div className="equip-grid">
                         {rigs.map((rig) => (
                             <RigCard
                                 key={rig.id}
                                 rig={rig}
                                 isAdmin={isAdmin}
+                                mountLimit={mountedCount >= maxMounted ? maxMounted : null}
                                 onEdit={(r) => setRigModal({ rig: r })}
                                 onDelete={handleDeleteRig}
                                 onMountToggle={handleMountToggle}
@@ -1213,6 +1224,7 @@ export default function Equipment() {
                             <Plus size={16} /> Add rig
                         </button>
                     </div>
+                    </>
                 )
             )}
 

@@ -42,7 +42,7 @@ CURVE_STRIDE = 3  # 15-minute samples on the 5-minute grid
 
 __all__ = [
     "EngineInputs", "Params", "Result", "PreparedNight", "recommend", "prepare_night", "explain_target",
-    "result_to_dict", "result_payload", "render_payload", "pick_to_dict", "Weights", "RigSpec", "SiteSpec", "HorizonSpec", "Candidate",
+    "result_to_dict", "result_payload", "render_payload", "assign_rig_plan", "pick_to_dict", "Weights", "RigSpec", "SiteSpec", "HorizonSpec", "Candidate",
     "CandidatePool", "MOON_RULES",
 ]
 
@@ -232,7 +232,13 @@ def recommend(inputs: EngineInputs, params: Optional[Params] = None,
             if len(evals) > 1:
                 for e in evals:
                     if e is not ev and not np.isnan(e.score[i]):
-                        alts.append({"rig_id": e.rig.id, "rig_name": e.rig.name, "score": round(float(e.score[i]), 3)})
+                        alt_mode = int(e.mode[i])
+                        # mode / fill_ratio / available_hours are additive: the rig plan
+                        # re-labels a pick for the rig it is assigned to.
+                        alts.append({"rig_id": e.rig.id, "rig_name": e.rig.name, "score": round(float(e.score[i]), 3),
+                                     "mode": CLASSES[alt_mode] if alt_mode >= 0 else None,
+                                     "fill_ratio": None if np.isnan(e.ratio[i]) else round(float(e.ratio[i]), 2),
+                                     "available_hours": round(float(e.avail_h[i]), 1)})
                 alts.sort(key=lambda a: -a["score"])
             ranked.append(_build_pick(inputs, prep, hist, ev, int(i), alts))
         for i in np.flatnonzero(best < 0):
@@ -435,7 +441,7 @@ def _context_dict(result: Result) -> Dict[str, Any]:
 # rebuild needs. Each request renders it with that user's FeedbackState, so
 # feedback never invalidates or fragments the cache.
 
-PAYLOAD_FORMAT = 2
+PAYLOAD_FORMAT = 3     # 3: richer alternatives for the multi-mounted rig plan
 
 
 def result_payload(result: Result, generated_at: Optional[datetime] = None) -> Dict[str, Any]:
@@ -498,6 +504,60 @@ def _cached_pick(d: Mapping[str, Any]) -> CachedPick:
                       mode=d.get("mode"), lane=raw.get("lane", d.get("lane")), data=d)
 
 
+RIG_PLAN_PER_RIG = 3   # a primary target + backups for each concurrently mounted rig
+
+
+def assign_rig_plan(picks: Sequence[Any], rig_ids: Sequence[int], pinned: frozenset = frozenset(),
+                    per_rig: int = RIG_PLAN_PER_RIG) -> Dict[int, List[Tuple[Any, Optional[Dict[str, Any]]]]]:
+    """
+    Distinct targets for rigs imaging at the same time: {rig_id: [(pick, alt)]}.
+
+    Every (target, rig) pair a pick offers (its best rig, alt None, plus its
+    `alternatives`) competes by that rig's score, pinned targets first. Rounds
+    hand each rig one target per round, so every rig gets a primary before any
+    gets a backup, and no target is planned on two rigs.
+    """
+    plan: Dict[int, List[Tuple[Any, Optional[Dict[str, Any]]]]] = {rid: [] for rid in rig_ids}
+    pairs = []
+    for p in picks:
+        pin = p.key in pinned
+        pairs.append((pin, float(p.score), p, None))
+        for a in p.data.get("alternatives") or []:
+            if a.get("rig_id") in plan and a.get("score") is not None:
+                pairs.append((pin, float(a["score"]), p, a))
+    pairs.sort(key=lambda t: (not t[0], -t[1]))
+    used = set()
+    for rnd in range(per_rig):
+        for pin, score, p, alt in pairs:
+            rid = alt["rig_id"] if alt is not None else p.data["rig"]["id"]
+            if p.key in used or rid not in plan or len(plan[rid]) != rnd:
+                continue
+            plan[rid].append((p, alt))
+            used.add(p.key)
+    return plan
+
+
+def _as_rig_pick(d: Dict[str, Any], alt: Mapping[str, Any]) -> Dict[str, Any]:
+    """A rendered pick re-labelled for an alternative rig (its best rig becomes an alternative)."""
+    best = {"rig_id": d["rig"]["id"], "rig_name": d["rig"]["name"], "score": d["score"], "mode": d.get("mode"),
+            "fill_ratio": d.get("fill_ratio"), "available_hours": d.get("available_hours")}
+    d = dict(d)
+    d["rig"] = {"id": alt["rig_id"], "name": alt["rig_name"]}
+    d["score"] = alt["score"]
+    d["mode"] = alt.get("mode") or d.get("mode")
+    d["fill_ratio"] = alt.get("fill_ratio")
+    if alt.get("available_hours") is not None:
+        d["available_hours"] = alt["available_hours"]
+    others = [a for a in d.get("alternatives") or [] if a.get("rig_id") != alt["rig_id"]]
+    d["alternatives"] = sorted([best] + others, key=lambda a: -(a.get("score") or 0.0))
+    fill = d["fill_ratio"]
+    framing = (f"fills {fill * 100:.0f}% of {alt['rig_name']}" if fill is not None
+               else f"size unknown on {alt['rig_name']}")
+    d["reasons"] = [{"code": "FRAMING", "text": framing} if r.get("code") == "FRAMING" else r
+                    for r in d.get("reasons") or []]
+    return d
+
+
 def render_payload(payload: Mapping[str, Any], feedback=None, per_lane: int = DEFAULT_PER_LANE,
                    cached: bool = False) -> Dict[str, Any]:
     """
@@ -535,6 +595,19 @@ def render_payload(payload: Mapping[str, Any], feedback=None, per_lane: int = DE
         d["feedback"] = feedback.pick_feedback(p.key)
         return d
 
+    # Several mounted rigs image concurrently: give each its own targets.
+    plan = []
+    if ctx.get("rig_mode") == RIG_MODE_MOUNTED and len(ctx.get("rigs") or []) > 1:
+        assigned = assign_rig_plan(kept, [r["id"] for r in ctx["rigs"]], feedback.pinned)
+        for r in ctx["rigs"]:
+            items = []
+            for p, alt in assigned[r["id"]]:
+                d = out(p)
+                d = _as_rig_pick(d, alt) if alt is not None else d
+                d["best_rig"] = alt is None
+                items.append(d)
+            plan.append({"rig": {"id": r["id"], "name": r["name"]}, "items": items})
+
     counts = dict(payload["excluded_counts"])
     counts[EXCL_SNOOZED] = hidden[EXCL_SNOOZED]
     counts[EXCL_DISMISSED] = hidden[EXCL_DISMISSED]
@@ -549,6 +622,7 @@ def render_payload(payload: Mapping[str, Any], feedback=None, per_lane: int = DE
         "excluded_counts": counts,
         "skipped_rigs": list(payload["skipped_rigs"]),
         "pinned_unavailable": unavailable,
+        "rig_plan": plan,
     }
 
 

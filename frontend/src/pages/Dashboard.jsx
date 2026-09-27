@@ -91,6 +91,16 @@ function TonightTile() {
                 ) : (
                     <p className="text-muted text-sm">No feasible picks tonight.</p>
                 )}
+                {data.rig_plan?.length > 0 && (
+                    <ul className="tonight-tile-rig-plan text-sm">
+                        {data.rig_plan.map((entry) => (
+                            <li key={entry.rig.id}>
+                                <span className="text-muted">{entry.rig.name}:</span>{' '}
+                                {entry.items?.[0] ? (entry.items[0].name || entry.items[0].target_key) : '—'}
+                            </li>
+                        ))}
+                    </ul>
+                )}
                 <div className="tonight-tile-meta text-muted text-sm">
                     <span>{formatLocalWindow(context?.dark_start_utc, context?.dark_end_utc, tz)} local</span>
                     {moonPct != null && <span>Moon {moonPct}%</span>}
