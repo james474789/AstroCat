@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.equipment import Rig, Site
+from app.services.quality_stats import build_stats
 from app.services.session_quality import build_timeline
 from app.utils.filter_names import normalize_filter
 from app.utils.observing_night import NIGHT_JOIN_SQL, NIGHT_SQL
@@ -173,3 +174,69 @@ async def night_timeline(
     timeline["rigs"] = [{"rig_id": i, "rig_name": names.get(i)} for i in sorted({p["rig_id"] for p in timeline["points"]}, key=lambda v: (v is None, v))]
     timeline["targets"] = sorted({p["target_key"] for p in timeline["points"] if p["target_key"]})
     return timeline
+
+
+@router.get("/stats")
+async def quality_stats(
+    rig_id: Optional[str] = Query(None, description="Rig id, or ALL; default: the rig with the most measured subs"),
+    units: str = Query("ARCSEC", description="ARCSEC or PX (ARCSEC falls back to PX when most subs have no scale)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Q1d: FWHM histogram, monthly trend, FWHM vs altitude, per-filter focus offsets and HFR vs temperature."""
+    import numpy as np
+    from app.utils.horizon import alt_az, julian_date
+
+    counts = (await db.execute(text(f"""
+        SELECT images.rig_id, count(*) AS n FROM images
+        WHERE {LIGHT_SUBS_SQL} AND images.star_metrics_status = 'OK'
+        GROUP BY images.rig_id ORDER BY n DESC
+    """))).all()
+    names = await _rig_names(db, [r.rig_id for r in counts])
+    rigs = [{"rig_id": r.rig_id, "rig_name": names.get(r.rig_id), "measured": r.n} for r in counts if r.rig_id is not None]
+
+    if rig_id is None or rig_id == "":
+        chosen = rigs[0]["rig_id"] if rigs else "ALL"
+    elif rig_id.upper() == "ALL":
+        chosen = "ALL"
+    else:
+        try:
+            chosen = int(rig_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="rig_id must be an integer or ALL")
+
+    rows = (await db.execute(text(f"""
+        SELECT images.capture_date_utc, images.capture_date, images.ra_center_degrees AS ra,
+               images.dec_center_degrees AS dec, images.filter_name, images.fwhm_px, images.hfr_px,
+               images.exposure_time_seconds, images.file_name, {SCALE_SQL} AS scale,
+               coalesce(s.latitude, images.site_latitude) AS lat, coalesce(s.longitude, images.site_longitude) AS lon,
+               (SELECT jsonb_object_agg(key, value) FROM jsonb_each(images.raw_header)
+                 WHERE key = ANY(:hint_keys)) AS hdr
+        FROM images LEFT JOIN rigs r ON r.id = images.rig_id LEFT JOIN sites s ON s.id = images.site_id
+        WHERE {LIGHT_SUBS_SQL} AND images.star_metrics_status = 'OK'
+        {"" if chosen == "ALL" else "AND images.rig_id = :rig_id"}
+    """), {"hint_keys": _HEADER_KEYS, **({} if chosen == "ALL" else {"rig_id": chosen})})).all()
+
+    points = []
+    for r in rows:
+        t = r.capture_date_utc or r.capture_date
+        points.append({
+            "t": t, "utc": r.capture_date_utc is not None, "fwhm_px": r.fwhm_px, "hfr_px": r.hfr_px,
+            "scale": r.scale, "filter": normalize_filter(r.filter_name), "ra": r.ra, "dec": r.dec,
+            "lat": r.lat, "lon": r.lon, "exposure_s": r.exposure_time_seconds,
+            "foc_temp": extract_hints(r.hdr or {}, r.file_name).get("FOCTEMP"),
+            "alt_deg": None,
+        })
+
+    # Altitude at mid-exposure, vectorised per site (UTC times and solved pointing only).
+    by_site: Dict[tuple, List[Dict[str, Any]]] = {}
+    for p in points:
+        if p["utc"] and None not in (p["ra"], p["dec"], p["lat"], p["lon"], p["t"]):
+            by_site.setdefault((p["lat"], p["lon"]), []).append(p)
+    for (lat, lon), group in by_site.items():
+        jd = julian_date([p["t"] + timedelta(seconds=(p["exposure_s"] or 0) / 2) for p in group])
+        alt, _ = alt_az(np.array([p["ra"] for p in group]), np.array([p["dec"] for p in group]), jd, lat, lon)
+        for p, a in zip(group, alt):
+            p["alt_deg"] = float(a)
+
+    stats = build_stats(points, prefer_arcsec=(units or "").upper() != "PX")
+    return {"rigs": rigs, "rig_id": chosen, "rig_name": names.get(chosen) if chosen != "ALL" else None, **stats}

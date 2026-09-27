@@ -7,7 +7,14 @@ import FilterChips from '../components/layout/FilterChips';
 import RangeInput from '../components/layout/RangeInput';
 import SpatialSearchInput from '../components/layout/SpatialSearchInput';
 import FolderTree from '../components/layout/FolderTree';
+import { useQualityUnits } from '../context/QualityUnitsContext';
 import './Search.css';
+
+// Q1d: star quality filters (units for fwhm/hfr bounds travel in quality_units).
+const QUALITY_KEYS = ['fwhm_min', 'fwhm_max', 'hfr_max', 'eccentricity_max', 'star_count_min',
+    'quality_flag', 'star_metrics_status', 'quality_units'];
+const qualityFromParams = (sp) => Object.fromEntries(QUALITY_KEYS.map((k) => [k, sp.get(k) || '']));
+const QUALITY_EMPTY = Object.fromEntries(QUALITY_KEYS.map((k) => [k, '']));
 
 // Helper: Convert degrees to HH:MM
 function degreesToHMS(degrees) {
@@ -96,7 +103,9 @@ export default function Search() {
         // 'ALL' means no filter. Otherwise DARK/FLAT/BIAS/DARK_FLAT.
         frame_type: searchParams.get('frame_type') || '',
         target_key: searchParams.get('target_key') || '',
+        ...qualityFromParams(searchParams),
     });
+    const { units } = useQualityUnits();
 
     // Local state for RA input to allow HH:MM editing
     const [raInput, setRaInput] = useState('');
@@ -135,6 +144,7 @@ export default function Search() {
             path: searchParams.get('path') || '',
             frame_type: searchParams.get('frame_type') || '',
             target_key: searchParams.get('target_key') || '',
+            ...qualityFromParams(searchParams),
         });
 
         // Sync RA input display from URL param
@@ -183,6 +193,7 @@ export default function Search() {
             // "ALL" is sent through as-is (backend treats it as no filter).
             params.frame_type = searchParams.get('frame_type') || 'LIGHT';
             if (searchParams.get('target_key')) params.target_key = searchParams.get('target_key');
+            QUALITY_KEYS.forEach((k) => { if (searchParams.get(k)) params[k] = searchParams.get(k); });
 
             const data = await fetchImages(params);
             setImages(data.items);
@@ -239,6 +250,9 @@ export default function Search() {
 
         // Convert RA input (HH:MM) to degrees for URL
         const filtersToApply = { ...filters };
+        // Q1d: FWHM/HFR bounds are in the units the viewer entered them in.
+        const hasSize = filtersToApply.fwhm_min || filtersToApply.fwhm_max || filtersToApply.hfr_max;
+        filtersToApply.quality_units = hasSize ? (filtersToApply.quality_units || units) : '';
         if (raInput) {
             filtersToApply.ra = hmsToDegrees(raInput).toFixed(4);
         } else {
@@ -280,6 +294,7 @@ export default function Search() {
             // F1: "Clear filters" resets to the Lights default, not All.
             frame_type: '',
             target_key: '',
+            ...QUALITY_EMPTY,
         });
         setRaInput('');
         setSearchParams(new URLSearchParams());
@@ -668,6 +683,60 @@ export default function Search() {
                             </div>
                         </FilterSection>
 
+                        {/* Star Quality Section (Q1d) */}
+                        <FilterSection title="Star Quality" icon="✦" defaultOpen={QUALITY_KEYS.some((k) => k !== 'quality_units' && filters[k])}>
+                            <div className="filter-group">
+                                <label className="label">Suspect subs</label>
+                                <select className="input select" value={filters.quality_flag}
+                                    onChange={(e) => handleFilterChange('quality_flag', e.target.value)}>
+                                    <option value="">Any sub</option>
+                                    <option value="ANY">Suspect only (any reason)</option>
+                                    <option value="SOFT">Soft: FWHM well above the night’s median</option>
+                                    <option value="CLOUD">Few stars: cloud or haze</option>
+                                    <option value="TRAILED">Elongated stars</option>
+                                </select>
+                            </div>
+                            <div className="filter-group">
+                                <RangeInput
+                                    label={`FWHM (${(filters.quality_units || units) === 'PX' ? 'pixels' : 'arcsec'})`}
+                                    minValue={filters.fwhm_min}
+                                    maxValue={filters.fwhm_max}
+                                    onMinChange={(v) => handleFilterChange('fwhm_min', v)}
+                                    onMaxChange={(v) => handleFilterChange('fwhm_max', v)}
+                                    placeholder={{ min: '0', max: (filters.quality_units || units) === 'PX' ? '4' : '3' }}
+                                    unit={(filters.quality_units || units) === 'PX' ? 'px' : '″'}
+                                    step="0.1"
+                                />
+                            </div>
+                            <div className="filter-group">
+                                <label className="label">Max HFR ({(filters.quality_units || units) === 'PX' ? 'px' : '″'})</label>
+                                <input type="number" className="input" step="0.1" min="0" value={filters.hfr_max}
+                                    onChange={(e) => handleFilterChange('hfr_max', e.target.value)} />
+                            </div>
+                            <div className="filter-group">
+                                <label className="label">Max eccentricity (0 = round)</label>
+                                <input type="number" className="input" step="0.05" min="0" max="1" value={filters.eccentricity_max}
+                                    onChange={(e) => handleFilterChange('eccentricity_max', e.target.value)} />
+                            </div>
+                            <div className="filter-group">
+                                <label className="label">Min stars</label>
+                                <input type="number" className="input" step="10" min="0" value={filters.star_count_min}
+                                    onChange={(e) => handleFilterChange('star_count_min', e.target.value)} />
+                            </div>
+                            <div className="filter-group">
+                                <label className="label">Measurement</label>
+                                <select className="input select" value={filters.star_metrics_status}
+                                    onChange={(e) => handleFilterChange('star_metrics_status', e.target.value)}>
+                                    <option value="">Any</option>
+                                    <option value="OK">Measured</option>
+                                    <option value="NEVER,PENDING">Not measured yet</option>
+                                    <option value="NO_STARS">No stars found</option>
+                                    <option value="FAILED">Failed</option>
+                                    <option value="SKIPPED,HINT">Not measurable</option>
+                                </select>
+                            </div>
+                        </FilterSection>
+
                         {/* Observation Data Section */}
                         <FilterSection title="Observation Data" icon="🌙" defaultOpen={false}>
                             <div className="filter-group">
@@ -807,6 +876,11 @@ export default function Search() {
                                     <option value="rating">Rating</option>
                                     <option value="file_last_modified">File Modified</option>
                                     <option value="file_created">File Created</option>
+                                    <option value="fwhm_arcsec">FWHM (arcsec)</option>
+                                    <option value="fwhm_px">FWHM (pixels)</option>
+                                    <option value="hfr_px">HFR (pixels)</option>
+                                    <option value="eccentricity">Eccentricity</option>
+                                    <option value="star_count">Star count</option>
                                 </select>
                                 <select
                                     className="input select sort-select"
@@ -841,7 +915,7 @@ export default function Search() {
                     ) : (
                         <div className="image-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))` }}>
                             {images.map(image => (
-                                <ImageCard
+                                <ImageCard showQuality
                                     key={image.id}
                                     image={image}
                                     onContextMenu={handleImageContextMenu}

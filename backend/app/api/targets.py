@@ -268,7 +268,8 @@ def _scale_expr():
     img, rig = Image.pixel_scale_arcsec, RigModel.measured_scale_arcsec
     return case(
         (and_(rig > 0, or_(img.is_(None), img < rig / SCALE_MISMATCH_FACTOR, img > rig * SCALE_MISMATCH_FACTOR)), rig),
-        else_=img,
+        (and_(img > 0, img < 3600), img),
+        else_=None,
     )
 
 

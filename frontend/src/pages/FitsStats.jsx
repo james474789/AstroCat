@@ -9,6 +9,7 @@ import { fetchFitsStats } from '../api/client';
 import { MILKY_WAY_DATA } from '../data/mw_data';
 import { CONSTELLATION_LINES } from '../data/constellations_data';
 import { CONSTELLATION_LABELS } from '../data/constellations_labels';
+import QualityStatsSection from '../components/quality/QualityStatsSection';
 import './FitsStats.css';
 
 const COLORS = ['#5b8dee', '#8b5cf6', '#22c55e', '#eab308', '#ef4444', '#22d3ee'];
@@ -758,6 +759,9 @@ export default function FitsStats() {
                     </ResponsiveContainer>
                 </div>
             </div>
+
+            {/* Q1d: star quality statistics */}
+            <QualityStatsSection />
         </div >
     );
 }
