@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     thumbnail_cache_path: str = "/data/thumbnails"
     thumbnail_max_size: int = 1024
 
+    # Star quality metrics (Q1, docs/design/Q1-star-quality.md §5)
+    star_metrics_enabled: bool = True      # measure new Light frames as they are indexed
+    star_metrics_backfill: bool = True     # sweeper measures the existing library in the background
+    star_metrics_sweep_batch: int = 200    # images queued per sweep (every 10 min)
+    star_metrics_queue_max: int = 50       # skip a sweep while the quality queue is longer than this
+
     # Logging
     log_dir: str = "/var/log/astrocat"
 

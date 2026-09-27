@@ -27,6 +27,7 @@ celery_app = Celery(
         "app.tasks.maintenance",
         "app.tasks.equipment",
         "app.tasks.recommend",
+        "app.tasks.quality",
     ]
 )
 
@@ -70,6 +71,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.recommend.precompute_tonight",
         "schedule": crontab(hour=12, minute=0),
     },
+    "star-metrics-sweeper": {  # Q1: backfill/retry star quality measurements
+        "task": "app.tasks.quality.sweep",
+        "schedule": 600.0,
+    },
 }
 
 
@@ -81,6 +86,10 @@ celery_app.conf.task_routes = {
     "app.tasks.maintenance.*": {"queue": "indexer"},
     "app.tasks.equipment.*": {"queue": "celery"},  # R0: the default queue
     "app.tasks.recommend.*": {"queue": "celery"},  # R1: the default queue
+    # Q1: measurements get their own queue so a library backfill never delays
+    # indexing; the sweeper itself stays on the default queue.
+    "app.tasks.quality.sweep": {"queue": "celery"},
+    "app.tasks.quality.*": {"queue": "quality"},
 }
 
 
