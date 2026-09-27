@@ -19,6 +19,7 @@ from sqlalchemy.exc import OperationalError
 from app.config import settings
 from app.database import SessionLocal
 from app.models.image import FrameType, Image, ImageFormat, ImageSubtype
+from app.services.quality_settings import backfill_enabled, measuring_enabled
 from app.services.star_metrics import ALGO_VERSION, StarMetrics, measure
 from app.utils.star_metric_hints import extract_hints
 from app.worker import celery_app
@@ -48,7 +49,7 @@ def _mtime_key(value: Optional[datetime]) -> Optional[str]:
 
 def needs_measurement(image) -> bool:
     """Should this image be (re-)measured now? Pure: reads only the row."""
-    if not settings.star_metrics_enabled or not is_eligible(image):
+    if not measuring_enabled() or not is_eligible(image):
         return False
     status = image.star_metrics_status
     if status is None:
@@ -193,7 +194,7 @@ def _redis():
 
 
 def _sweep_impl(r=None) -> Dict[str, Any]:
-    if not (settings.star_metrics_enabled and settings.star_metrics_backfill):
+    if not backfill_enabled():
         return {"status": "disabled"}
     r = r or _redis()
     depth = int(r.llen(QUEUE) or 0)

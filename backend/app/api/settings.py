@@ -4,7 +4,7 @@ from typing import Optional
 import redis
 import json
 from app.config import settings
-from typing import Optional, Dict
+from typing import Optional, Dict, Literal
 
 router = APIRouter()
 
@@ -12,6 +12,12 @@ class SystemSettings(BaseModel):
     astrometry_provider: str # "nova" or "local"
     astrometry_max_submissions: int = 8
     mount_friendly_names: Dict[str, str] = {}
+    # Star quality (Q1): default display units for FWHM/HFR (each viewer can
+    # toggle), and runtime switches for measuring / library backfill. The env
+    # STAR_METRICS_* settings still win when they are off.
+    quality_units: Literal["ARCSEC", "PX"] = "ARCSEC"
+    star_metrics_enabled: bool = True
+    star_metrics_backfill: bool = True
 
     class Config:
         json_schema_extra = {
@@ -51,4 +57,6 @@ def update_settings(new_settings: SystemSettings):
 
     r = get_redis_client()
     r.set(SETTINGS_KEY, new_settings.model_dump_json())
+    from app.services.quality_settings import clear_cache
+    clear_cache()
     return new_settings

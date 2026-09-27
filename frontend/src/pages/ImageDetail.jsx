@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchImage, updateImage, rescanImage, fetchAnnotation, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
+import StarQualityCard from '../components/quality/StarQualityCard';
 import './ImageDetail.css';
 
 export default function ImageDetail() {
@@ -935,6 +936,11 @@ export default function ImageDetail() {
                             )}
                         </dl>
                     </section>
+
+                    {/* Star quality (Q1): Light subs and masters only */}
+                    {image.frame_type === 'LIGHT' && ['SUB_FRAME', 'INTEGRATION_MASTER'].includes(image.subtype) && (
+                        <StarQualityCard image={image} onImageUpdated={setImage} />
+                    )}
 
                     {/* Equipment */}
                     <section className="metadata-section">
