@@ -88,6 +88,13 @@ class ImageBase(BaseModel):
     target_key: Optional[str] = None
     target_source: Optional[str] = None
 
+    # Star quality (Q1): native pixels; only status OK is AstroCat-measured.
+    hfr_px: Optional[float] = None
+    fwhm_px: Optional[float] = None
+    eccentricity: Optional[float] = None
+    star_count: Optional[int] = None
+    star_metrics_status: Optional[str] = None
+
 class ImageDetail(ImageBase):
     id: int
     file_path: str
@@ -138,6 +145,9 @@ class ImageDetail(ImageBase):
     rig_name: Optional[str] = None
     rig_source: Optional[str] = None  # AUTO | MANUAL
     site_id: Optional[int] = None
+
+    # Star quality detail (Q1): both units, sampling, night comparison, grid.
+    quality: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True, extra='ignore')
 

@@ -25,6 +25,7 @@ import {
     updateUserRole,
     fetchSystemVersion
 } from '../api/client';
+import StarQualityAdmin from '../components/quality/StarQualityAdmin';
 import './Admin.css';
 import './Settings.css';
 
@@ -1023,6 +1024,9 @@ function Admin() {
                             <div className="cache-actions"><button className="btn btn-secondary" onClick={handleClearCache} disabled={cacheActionLoading}>{cacheActionLoading ? 'Processing...' : 'Clear Cache'}</button><button className="btn btn-primary" onClick={handleRegenerateThumbnails} disabled={cacheActionLoading} style={{ marginLeft: '1rem' }}>Regenerate All</button></div>
                         </div>
                     </section>
+
+                    {/* Star quality (Q1) */}
+                    <StarQualityAdmin systemSettings={systemSettings} onSettingsChange={setSystemSettings} />
 
                     {/* Data Maintenance Section (F1/F2) */}
                     <section className="settings-section">

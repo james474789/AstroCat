@@ -15,6 +15,7 @@ import FitsStats from './pages/FitsStats';
 import Admin from './pages/Admin';
 import Equipment from './pages/Equipment';
 import { AuthProvider } from './context/AuthContext';
+import { QualityUnitsProvider } from './context/QualityUnitsContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
@@ -95,6 +96,7 @@ const AppRoutes = () => {
         element={
           !setupComplete ? <Navigate to="/setup" replace /> :
             <ProtectedRoute>
+              <QualityUnitsProvider>
               <Layout>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
@@ -115,6 +117,7 @@ const AppRoutes = () => {
                   <Route path="/admin" element={<ErrorBoundary><Admin /></ErrorBoundary>} />
                 </Routes>
               </Layout>
+              </QualityUnitsProvider>
             </ProtectedRoute>
         }
       />

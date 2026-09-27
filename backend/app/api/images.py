@@ -252,6 +252,51 @@ async def _attach_equipment_names(db: AsyncSession, image: Image) -> Image:
     return image
 
 
+async def _attach_quality(db: AsyncSession, image: Image) -> Image:
+    """
+    Q1: the ImageDetail `quality` block (docs/design/Q1-star-quality.md §7.1):
+    both units, sampling, and how the sub compares with the other measured
+    subs of its night on the same rig (or camera, without a rig) and filter.
+    Call after _attach_equipment_names (the image is already detached).
+    """
+    from datetime import timedelta
+    from app.models.equipment import Rig
+    from app.utils.filter_names import normalize_filter
+    from app.utils.observing_night import NIGHT_JOIN_SQL, NIGHT_SQL
+    from app.utils.star_quality import night_context, quality_summary, resolve_scale
+
+    rig_scale = None
+    if image.rig_id is not None:
+        rig_scale = (await db.execute(select(Rig.measured_scale_arcsec).where(Rig.id == image.rig_id))).scalar()
+    scale, _ = resolve_scale(image.pixel_scale_arcsec, rig_scale)
+
+    context = None
+    if (image.star_metrics_status == "OK" and image.frame_type == FrameType.LIGHT
+            and image.subtype == ImageSubtype.SUB_FRAME and image.capture_date is not None):
+        rows = (await db.execute(text(f"""
+            WITH me AS (SELECT {NIGHT_SQL} AS night FROM images {NIGHT_JOIN_SQL} WHERE images.id = :id)
+            SELECT images.fwhm_px, images.hfr_px, images.filter_name, (SELECT night FROM me) AS night
+            FROM images {NIGHT_JOIN_SQL}
+            WHERE images.star_metrics_status = 'OK' AND images.frame_type = 'LIGHT'
+              AND images.subtype = 'SUB_FRAME'
+              AND images.capture_date BETWEEN :lo AND :hi
+              AND {NIGHT_SQL} = (SELECT night FROM me)
+              AND images.rig_id IS NOT DISTINCT FROM :rig_id
+              AND (images.rig_id IS NOT NULL OR images.camera_name IS NOT DISTINCT FROM :camera)
+        """), {
+            "id": image.id, "rig_id": image.rig_id, "camera": image.camera_name,
+            "lo": image.capture_date - timedelta(days=2), "hi": image.capture_date + timedelta(days=2),
+        })).all()
+        own_filter = normalize_filter(image.filter_name)
+        peers = [{"fwhm_px": r.fwhm_px, "hfr_px": r.hfr_px} for r in rows
+                 if normalize_filter(r.filter_name) == own_filter]
+        night = rows[0].night.isoformat() if rows and hasattr(rows[0].night, "isoformat") else None
+        context = night_context(image.fwhm_px, image.hfr_px, peers, scale, night)
+
+    image.quality = quality_summary(image, rig_scale, context)
+    return image
+
+
 @router.get("/", response_model=PaginatedResponse[ImageList])
 async def list_images(
     page: int = Query(1, ge=1),
@@ -754,7 +799,8 @@ async def get_image(image_id: int, db: AsyncSession = Depends(get_db)):
             print(f"Error calculating WCS overlays: {e}")
             # Continue without overlays rather than failing request
 
-    return await _attach_equipment_names(db, image)
+    image = await _attach_equipment_names(db, image)
+    return await _attach_quality(db, image)
 
 
 @router.put("/{image_id}", response_model=ImageDetail)
@@ -1000,7 +1046,8 @@ async def update_image(
         except Exception as e:
             print(f"Error calculating WCS overlays: {e}")
 
-    return await _attach_equipment_names(db, image)
+    image = await _attach_equipment_names(db, image)
+    return await _attach_quality(db, image)
 
 
 @router.put("/bulk/subtype", response_model=dict)
@@ -1728,6 +1775,23 @@ async def download_image(
         print(f"Download error: {e}")
         raise HTTPException(status_code=500, detail="Error generating download")
 
+
+
+@router.post("/{image_id}/star-metrics", status_code=202)
+async def remeasure_star_metrics(image_id: int, db: AsyncSession = Depends(get_db)):
+    """Q1: re-measure HFR/FWHM for one image now (queue "quality")."""
+    from app.tasks.quality import is_eligible, measure_star_metrics
+
+    image = (await db.execute(select(Image).where(Image.id == image_id))).scalar_one_or_none()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    if not is_eligible(image):
+        raise HTTPException(status_code=409, detail="Only Light sub-frames and masters are measured")
+    image.star_metrics_status = "PENDING"
+    image.star_metrics_at = datetime.utcnow()
+    await db.commit()
+    measure_star_metrics.delay(image_id, force=True)
+    return {"status": "queued", "image_id": image_id}
 
 
 @router.post("/{image_id}/rescan", status_code=202)

@@ -78,7 +78,7 @@ class TestNeedsMeasurement:
         assert needs_measurement(_image(frame_type=FrameType.DARK)) is False
 
     def test_disabled_setting(self):
-        with patch.object(quality.settings, "star_metrics_enabled", False):
+        with patch.object(quality, "measuring_enabled", return_value=False):
             assert needs_measurement(_image()) is False
 
 
@@ -146,7 +146,7 @@ class TestSweep:
         session_local.assert_not_called()
 
     def test_disabled_backfill(self):
-        with patch.object(quality.settings, "star_metrics_backfill", False):
+        with patch.object(quality, "backfill_enabled", return_value=False):
             assert quality._sweep_impl(MagicMock())["status"] == "disabled"
 
     def test_single_sweep_at_a_time(self):

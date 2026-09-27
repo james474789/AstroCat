@@ -6,6 +6,7 @@ import TelescopeIcon from '../icons/TelescopeIcon';
 
 import logo from '../../assets/logo.png';
 import './Layout.css';
+import QualityUnitsToggle from '../quality/QualityUnitsToggle';
 
 // Icons as simple SVG components
 const DashboardIcon = () => (
@@ -157,6 +158,11 @@ export default function Layout({ children }) {
 
 
                 <div className="sidebar-footer">
+                    {/* Q1: FWHM/HFR units for every page (per viewer, remembered) */}
+                    <div className="sidebar-units">
+                        <span>Star sizes</span>
+                        <QualityUnitsToggle compact />
+                    </div>
                     <div className="version-info">
                         <span>v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')}</span>
                         <span className="text-muted">AstroCat</span>
