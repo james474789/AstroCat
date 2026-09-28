@@ -235,7 +235,11 @@ def propose(buckets: Iterable[Dict[str, Any]], image_sites: Iterable[Dict[str, A
     ex_filters = existing.get("filters") or []
     ex_rigs = existing.get("rigs") or []
     ex_sites = existing.get("sites") or []
-    buckets = list(buckets)
+    # Header binning is ignored: drivers disagree on it for the same sensor
+    # mode (older ZWO drivers write XBINNING=1 for the ASI294MM 4144x2822 mode
+    # newer ones call bin 2), so folding on it splits one rig into two. Frames
+    # group by raw dims; _existing_rig relates them to other sensor modes.
+    buckets = [{**b, "binning": None} for b in buckets]
 
     cameras_out: List[dict] = []
     optics_out: Dict[str, dict] = {}

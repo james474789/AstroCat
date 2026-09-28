@@ -265,3 +265,15 @@ def test_plan_apply_uses_existing_and_optic_override():
                                        "exists": False, "existing_id": None}]},
                            [{"proposal_id": "site:1"}], "Europe/Paris")
     assert site_plan["sites"][0]["timezone"] == "Europe/Paris"
+
+
+def test_header_binning_does_not_split_a_rig():
+    # Same 4144x2822 mode, XBINNING 2 (new ZWO driver) vs 1 (old driver): one rig.
+    buckets = [
+        _b("ZWO ASI294MM Pro", 4144, 2822, 1.06, 300, "Ha", xpix=4.63, binning="2x2"),
+        _b("ZWO ASI294MM Pro", 4144, 2822, 1.06, 200, "Ha", xpix=4.63, binning="1x1"),
+    ]
+    p = propose(buckets, [], {})
+    assert len(p["cameras"]) == 1
+    assert len(p["rigs"]) == 1
+    assert p["rigs"][0]["image_count"] == 500
