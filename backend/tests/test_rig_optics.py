@@ -11,6 +11,7 @@ from app.utils.rig_optics import (
     known_pixel_size,
     binning_factor,
     focal_length_mm,
+    relative_binning,
 )
 
 
@@ -41,6 +42,22 @@ def test_known_pixel_size_and_binning():
     assert binning_factor("2x2") == 2
     assert binning_factor("3") == 3
     assert binning_factor(None) == 1
+
+
+def test_relative_binning():
+    # 4144x2822 frame vs the unlocked 8288x5644 camera -> bin 2 by dims alone.
+    assert relative_binning(4144, 2822, None, None, 8288, 5644, 2.315) == 2
+    # Same frame vs its own 4144x2822 camera -> bin 1.
+    assert relative_binning(4144, 2822, None, None, 4144, 2822, 4.63) == 1
+    # Cropped frame: dims don't fit either camera, XPIXSZ settles it.
+    assert relative_binning(4000, 2700, 4.63, None, 8288, 5644, 2.315) == 2
+    # Nothing to go on.
+    assert relative_binning(None, None, None, None, None, None, None) is None
+    assert relative_binning(4000, 2700, None, None, 8288, 5644, 2.315) is None
+    # images.binning as a last resort when dims/XPIXSZ are unknown.
+    assert relative_binning(None, None, None, "2x2", None, None, None) == 2
+    # ...but never to rescue a frame whose known dims rule the camera out.
+    assert relative_binning(4000, 2700, None, "2x2", 8288, 5644, 2.315) is None
 
 
 def test_focal_length():

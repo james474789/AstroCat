@@ -665,7 +665,12 @@ async def _existing_for_detection(db: AsyncSession) -> Dict[str, List[dict]]:
                   "measured_scale_arcsec": r.measured_scale_arcsec,
                   "declared_scale": pixel_scale(r.camera.pixel_size_um if r.camera else None,
                                                 r.optic.focal_length_mm if r.optic else None,
-                                                r.binning, r.modifier_factor)} for r in rigs],
+                                                r.binning, r.modifier_factor),
+                  "sensor_width_px": r.camera.sensor_width_px if r.camera else None,
+                  "sensor_height_px": r.camera.sensor_height_px if r.camera else None,
+                  "pixel_size_um": r.camera.pixel_size_um if r.camera else None,
+                  "camera_patterns": (r.camera.match_patterns or []) if r.camera else [],
+                  "camera_name": r.camera.name if r.camera else None} for r in rigs],
         "sites": [{"id": s.id, "latitude": s.latitude, "longitude": s.longitude} for s in sites],
     }
 

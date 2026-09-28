@@ -30,7 +30,7 @@ from app.utils.capture_time import (
 )
 from app.utils.header_values import valid_site
 from app.utils.optics import effective_focal_mm, pixel_scale
-from app.utils.rig_optics import binning_factor, dims_match, valid_pixel_scale
+from app.utils.rig_optics import binning_factor, dims_match, relative_binning, valid_pixel_scale
 
 logger = logging.getLogger(__name__)
 
@@ -113,33 +113,58 @@ def camera_matches(camera_name: Any, patterns: Sequence[str]) -> bool:
     return any(p and (p.lower() in key or p.lower() in low) for p in patterns)
 
 
-def _dims_fit(image: dict, rig: RigInfo) -> bool:
+def _dims_fit(image: dict, rig: RigInfo) -> Optional[int]:
+    """
+    The image's binning relative to rig's camera (see relative_binning), or
+    None when its known dimensions rule the rig out. A rig with no known
+    sensor dims has nothing to check against, so it fits at rig.binning.
+    """
     if not (rig.sensor_width_px and rig.sensor_height_px):
-        return True
+        return rig.binning
     w, h = image.get("width_pixels"), image.get("height_pixels")
     if not (w and h):
-        return True
-    for b in {1, binning_factor(image.get("binning")), rig.binning}:
-        if dims_match(w, h, rig.sensor_width_px / b, rig.sensor_height_px / b, tol=0.02):
-            return True
-    return False
+        return rig.binning
+    return relative_binning(w, h, image.get("xpixsz"), image.get("binning"),
+                            rig.sensor_width_px, rig.sensor_height_px, rig.pixel_size_um)
+
+
+def measured_scale_normalized(image: Dict[str, Any], rig: RigInfo) -> Optional[float]:
+    """
+    A solved light sub's pixel scale, rescaled to rig.binning via its binning
+    relative to rig's camera. Used to keep rigs.measured_scale_arcsec on one
+    basis even when its assigned frames were captured at different binnings.
+    """
+    scale = valid_pixel_scale(image.get("pixel_scale_arcsec"))
+    if scale is None:
+        return None
+    rel_bin = _dims_fit(image, rig)
+    if not rel_bin:
+        return None
+    return scale * rig.binning / rel_bin
 
 
 def assign_rig(image: Dict[str, Any], rigs: Iterable[RigInfo]) -> Tuple[Optional[int], str]:
     """
-    image: {camera_name, width_pixels, height_pixels, binning, pixel_scale_arcsec,
+    image: {camera_name, width_pixels, height_pixels, binning, pixel_scale_arcsec, xpixsz,
             focallen (FOCALLEN header), focal_length (EXIF column)}.
     """
-    candidates = [r for r in rigs if camera_matches(image.get("camera_name"), r.patterns) and _dims_fit(image, r)]
-    if not candidates:
+    fits: List[Tuple[RigInfo, int]] = []
+    for r in rigs:
+        if not camera_matches(image.get("camera_name"), r.patterns):
+            continue
+        rel_bin = _dims_fit(image, r)
+        if rel_bin is not None:
+            fits.append((r, rel_bin))
+    if not fits:
         return (None, "no_camera_match")
 
     scale = valid_pixel_scale(image.get("pixel_scale_arcsec"))
     if scale is not None:
-        img_bin = binning_factor(image.get("binning")) if image.get("binning") else None
         best = None
-        for rig in candidates:
-            ref = rig.declared_scale(img_bin) or rig.measured_scale_arcsec
+        for rig, rel_bin in fits:
+            ref = rig.declared_scale(rel_bin)
+            if not ref and rig.measured_scale_arcsec:
+                ref = rig.measured_scale_arcsec * rel_bin / rig.binning
             if not ref:
                 continue
             err = abs(ref - scale) / ref
@@ -147,6 +172,7 @@ def assign_rig(image: Dict[str, Any], rigs: Iterable[RigInfo]) -> Tuple[Optional
                 best = (err, rig)
         return (best[1].id, "scale_match") if best else (None, "scale_mismatch")
 
+    candidates = [r for r, _ in fits]
     focal = _num(image.get("focallen")) or _num(image.get("focal_length"))
     if focal:
         hits = [r for r in candidates
@@ -399,6 +425,7 @@ def image_to_dict(image) -> Dict[str, Any]:
         "height_pixels": image.height_pixels,
         "binning": image.binning,
         "pixel_scale_arcsec": image.pixel_scale_arcsec,
+        "xpixsz": raw.get("XPIXSZ"),
         "focallen": raw.get("FOCALLEN"),
         "focal_length": getattr(image, "focal_length", None),
     }
