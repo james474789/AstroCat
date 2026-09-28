@@ -12,6 +12,7 @@ import pytest
 from app.services.equipment_assignment import (
     CLOCK_LOCAL, CLOCK_UTC, RigInfo, SiteInfo, apply_equipment, assign_equipment_sync, assign_rig, assign_site,
     default_site_eligible_rigs, fill_capture_utc, infer_clock_mode, local_capture_time, local_to_utc,
+    measured_scale_normalized,
 )
 from app.utils.rig_optics import build_filter_rig_rows_with_rigs, known_pixel_size, seed_sensor
 
@@ -27,6 +28,21 @@ R7 = RigInfo(id=4, camera_id=12, patterns=["canon eos r7"], sensor_width_px=6960
 
 LONDON = SiteInfo(id=1, latitude=51.48, longitude=0.0, timezone="Europe/London", is_default=True)
 PARIS = SiteInfo(id=2, latitude=48.85, longitude=2.35, timezone="Europe/Paris")
+
+# Mirrors the live rig set: two ASI294MM Pro sensor modes sharing one match
+# pattern (locked 4.63 um 4144x2822, unlocked 2.315 um 8288x5644).
+LOCKED, UNLOCKED = 10, 11
+RIG1 = RigInfo(id=1, camera_id=LOCKED, patterns=ASI294, sensor_width_px=4144, sensor_height_px=2822,
+               pixel_size_um=4.63, focal_length_mm=2809)
+RIG5 = RigInfo(id=5, camera_id=UNLOCKED, patterns=ASI294, sensor_width_px=8288, sensor_height_px=5644,
+               pixel_size_um=2.315, focal_length_mm=194)
+RIG6 = RigInfo(id=6, camera_id=LOCKED, patterns=ASI294, sensor_width_px=4144, sensor_height_px=2822,
+               pixel_size_um=4.63, focal_length_mm=677)
+RIG7 = RigInfo(id=7, camera_id=LOCKED, patterns=ASI294, sensor_width_px=4144, sensor_height_px=2822,
+               pixel_size_um=4.63, focal_length_mm=28)
+RIG8 = RigInfo(id=8, camera_id=LOCKED, patterns=ASI294, sensor_width_px=4144, sensor_height_px=2822,
+               pixel_size_um=4.63, focal_length_mm=345, is_active=False)
+ASI294_RIGS = [RIG1, RIG5, RIG6, RIG7, RIG8]
 
 
 def _img(camera="ZWO ASI294MM Pro", w=4144, h=2822, scale=None, **kw):
@@ -70,6 +86,38 @@ def test_camera_names_are_normalised_for_matching():
 def test_measured_scale_used_when_pixel_size_unknown():
     rig = RigInfo(id=9, camera_id=1, patterns=["mystery cam"], focal_length_mm=500, measured_scale_arcsec=1.5)
     assert assign_rig(_img(camera="Mystery Cam", scale=1.52), [rig]) == (9, "scale_match")
+
+
+def test_relative_binning_not_header_picks_the_unlocked_rig():
+    # 4144x2822 at 4.78"/px is bin 2 of the unlocked (2.315 um) sensor, not
+    # bin 1 of the locked (4.63 um) one - regardless of what XBINNING says.
+    img = _img(w=4144, h=2822, scale=4.78, binning="2")
+    assert assign_rig(img, ASI294_RIGS) == (5, "scale_match")
+
+
+def test_relative_binning_ignores_stale_xbinning_for_the_native_rig():
+    # Same physical frame (4144x2822 native to rig 6's own camera): still
+    # rig 6, whatever XBINNING an older or newer driver wrote.
+    for header_binning in (None, "1", "2"):
+        img = _img(w=4144, h=2822, scale=1.41, binning=header_binning)
+        assert assign_rig(img, ASI294_RIGS) == (6, "scale_match")
+
+
+def test_unlocked_native_frames_go_to_rig5():
+    img = _img(w=8288, h=5644, scale=2.46)
+    assert assign_rig(img, ASI294_RIGS) == (5, "scale_match")
+
+
+def test_measured_scale_normalized_puts_bin1_and_bin2_on_one_basis():
+    # Rig 5 (binning=1): a bin-1 frame at 2.46 and a bin-2 frame at 4.78
+    # should normalise close together, not average out to something else.
+    bin1 = measured_scale_normalized(_img(w=8288, h=5644, scale=2.46), RIG5)
+    bin2 = measured_scale_normalized(_img(w=4144, h=2822, scale=4.78), RIG5)
+    assert bin1 == pytest.approx(2.46, abs=0.01)
+    assert bin2 == pytest.approx(2.39, abs=0.02)
+
+    import statistics
+    assert statistics.median([bin1, bin2]) == pytest.approx(2.4, abs=0.05)
 
 
 def test_manual_rig_is_untouched():

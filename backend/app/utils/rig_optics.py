@@ -160,6 +160,33 @@ def binning_factor(binning: Optional[str]) -> int:
     return max(1, int(m.group(1))) if m else 1
 
 
+def relative_binning(width: Optional[int], height: Optional[int], xpixsz: Any, image_binning: Optional[str],
+                     cam_w: Optional[int], cam_h: Optional[int],
+                     cam_pixel_um: Optional[float]) -> Optional[int]:
+    """
+    A frame's binning relative to a camera's native sensor - never XBINNING
+    directly, since older ZWO drivers write 1 for the same binned mode that
+    newer ones call 2. Dimensions first (b = round(cam / img), accepted only
+    on a dims_match), else XPIXSZ vs the camera's pixel size (within ~5% of
+    an integer), else - only when dimensions can't be compared - the
+    images.binning factor. None when nothing fits.
+    """
+    dims_known = bool(width and height and cam_w and cam_h)
+    if dims_known:
+        b = round(max(cam_w, cam_h) / max(width, height))
+        if b >= 1 and dims_match(width, height, cam_w / b, cam_h / b, tol=0.02):
+            return b
+    px = parse_pixel_size(xpixsz)
+    if px and cam_pixel_um:
+        ratio = px / cam_pixel_um
+        b = round(ratio)
+        if b >= 1 and abs(ratio - b) <= 0.05:
+            return b
+    if image_binning and not dims_known:
+        return binning_factor(image_binning)
+    return None
+
+
 def known_pixel_size(camera: Optional[str],
                      camera_lookup: Optional[Callable[[str], Optional[float]]] = None) -> Optional[float]:
     """

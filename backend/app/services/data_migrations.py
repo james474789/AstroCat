@@ -112,6 +112,11 @@ def _repair_pixel_scale():
     return repair_pixel_scale(dry_run=False)
 
 
+def _backfill_binning():
+    from app.scripts.backfill_binning import backfill_binning
+    return backfill_binning()
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -157,6 +162,12 @@ REGISTRY: List[DataMigrationSpec] = [
         "0009_repair_pixel_scale",
         "Re-derive plate scales misread from headers (PixInsight RESOLUTN=72 print DPI, ZWO ASIAIR downsampled-solve WCS, placeholder scales) and from astrometry.net solves of downsampled uploads, then re-match fields and re-assign rigs.",
         _repair_pixel_scale,
+    ),
+    DataMigrationSpec(
+        "0010_binning_aware_rigs",
+        "Backfill images.binning from raw_header XBINNING/YBINNING, then re-assign rigs so frames are matched "
+        "by their binning relative to each rig's camera (not the header's, which older ZWO drivers under-report).",
+        _backfill_binning,
     ),
 ]
 

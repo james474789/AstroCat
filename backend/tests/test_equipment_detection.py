@@ -169,6 +169,32 @@ def test_existing_rows_are_flagged():
     assert not unlocked["exists"]
 
 
+def test_existing_rig_found_across_the_camera_sensor_modes():
+    # The locked-camera cluster (4144x2822, bin 1 by header, 4.78"/px) is
+    # physically bin 2 of the unlocked camera; it should report the existing
+    # ~194 mm + unlocked rig rather than proposing a duplicate.
+    buckets = [
+        _b("ZWO ASI294MM Pro", 4144, 2822, 4.78, 200, "Ha", xpix=4.63, binning="1"),
+    ]
+    existing = {
+        "cameras": [
+            {"id": 5, "name": "ZWO ASI294MM Pro", "match_patterns": ["zwo asi294mm pro"],
+             "sensor_width_px": 4144, "sensor_height_px": 2822, "pixel_size_um": 4.63},
+            {"id": 6, "name": "ZWO ASI294MM Pro (unlocked)", "match_patterns": ["zwo asi294mm pro"],
+             "sensor_width_px": 8288, "sensor_height_px": 5644, "pixel_size_um": 2.315},
+        ],
+        "rigs": [
+            {"id": 5, "camera_id": 6, "binning": 1, "declared_scale": 2.461,
+             "sensor_width_px": 8288, "sensor_height_px": 5644, "pixel_size_um": 2.315,
+             "camera_patterns": ["zwo asi294mm pro"], "camera_name": "ZWO ASI294MM Pro (unlocked)"},
+        ],
+    }
+    p = propose(buckets, [], existing)
+    assert len(p["rigs"]) == 1
+    rig = p["rigs"][0]
+    assert rig["exists"] and rig["existing_id"] == 5
+
+
 def test_filters_proposed_with_raw_spellings():
     p = propose(library_buckets(), [], {})
     by_band = {f["band"]: f for f in p["filters"]}

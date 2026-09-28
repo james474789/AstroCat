@@ -23,7 +23,7 @@ from app.utils.capture_time import unchar
 from app.utils.filter_names import filter_sort_key, normalize_filter
 from app.utils.rig_optics import (
     ARCSEC_PER_RADIAN_OVER_1000, CLUSTER_TOLERANCE, binning_factor, cluster_by_scale, dims_match,
-    parse_pixel_size, seed_sensor, valid_pixel_scale, weighted_median,
+    parse_pixel_size, relative_binning, seed_sensor, valid_pixel_scale, weighted_median,
 )
 
 LOOKBACK_MONTHS = 36
@@ -296,7 +296,7 @@ def propose(buckets: Iterable[Dict[str, Any]], image_sites: Iterable[Dict[str, A
             cameras_out.append(cam)
             if match is not None and not cam["pixel_size_um"] and match.get("pixel_size_um"):
                 pixel_um = match["pixel_size_um"]
-            rigs_out.extend(_propose_rigs(cam, g, pixel_um, match, ex_optics, ex_rigs, optics_out))
+            rigs_out.extend(_propose_rigs(cam, g, pixel_um, match, ex_optics, ex_rigs, optics_out, key))
 
     filters_out = _propose_filters(buckets, ex_filters)
     sites_out = propose_sites(image_sites, ex_sites)
@@ -313,7 +313,8 @@ def propose(buckets: Iterable[Dict[str, Any]], image_sites: Iterable[Dict[str, A
 
 
 def _propose_rigs(cam: dict, group: dict, pixel_um: Optional[float], cam_match: Optional[dict],
-                  ex_optics: List[dict], ex_rigs: List[dict], optics_out: Dict[str, dict]) -> List[dict]:
+                  ex_optics: List[dict], ex_rigs: List[dict], optics_out: Dict[str, dict],
+                  key: Optional[str]) -> List[dict]:
     """One rig proposal per scale cluster (per binning) of a camera group."""
     per_bin: Dict[int, List[dict]] = defaultdict(list)
     for b in group["buckets"]:
@@ -355,7 +356,9 @@ def _propose_rigs(cam: dict, group: dict, pixel_um: Optional[float], cam_match: 
                 optic_eid = None
 
             bands = sorted({_band(m.get("filter_name")) for m in cluster} - {"None"}, key=filter_sort_key)
-            existing_rig = _existing_rig(cam_match, scale, binning, ex_rigs)
+            raw = cluster[0]
+            existing_rig = _existing_rig(cam_match, key, raw.get("width_pixels"), raw.get("height_pixels"),
+                                         raw.get("xpixsz"), raw.get("binning"), scale, ex_rigs)
             rigs.append({
                 "proposal_id": f"rig:{cam['proposal_id'][4:]}:{scale:.2f}" + (f":b{binning}" if binning > 1 else ""),
                 "name": f"{optic_name} + {cam['name']}"[:150],
@@ -396,14 +399,35 @@ def _proposed_optic(predicted: float, cam: dict, optics_out: Dict[str, dict]) ->
     return pid, optics_out[pid]["name"]
 
 
-def _existing_rig(cam_match: Optional[dict], scale: float, binning: int, ex_rigs: List[dict]) -> Optional[dict]:
-    if not cam_match:
-        return None
+def _rig_camera_matches_key(rig: dict, key: str) -> bool:
+    """True when rig's camera plausibly matches the grouping key, by pattern or normalised name."""
+    patterns = [str(p).lower() for p in (rig.get("camera_patterns") or []) if p]
+    name_key = normalize_camera_name(rig.get("camera_name"))
+    return any(p and p in key for p in patterns) or (name_key is not None and (name_key == key or name_key in key))
+
+
+def _existing_rig(cam_match: Optional[dict], key: Optional[str], width: Optional[int], height: Optional[int],
+                  xpixsz: Any, image_binning: Any, scale: float, ex_rigs: List[dict]) -> Optional[dict]:
+    """
+    An existing rig whose camera matches (by id, or - since a proposal's own
+    camera match is per sensor mode - by the grouping key, so the unlocked
+    ASI294MM's rigs are considered for a proposal keyed on the locked one).
+    Scales are compared on a common basis via the frame's binning relative to
+    each candidate rig's own camera, not the (unreliable) header binning.
+    """
     for rig in ex_rigs:
-        if rig.get("camera_id") != cam_match.get("id") or int(rig.get("binning") or 1) != binning:
+        same_camera = cam_match is not None and rig.get("camera_id") == cam_match.get("id")
+        if not (same_camera or (key and _rig_camera_matches_key(rig, key))):
             continue
+        rig_binning = int(rig.get("binning") or 1)
+        rel_bin = relative_binning(width, height, xpixsz, image_binning,
+                                   rig.get("sensor_width_px"), rig.get("sensor_height_px"),
+                                   rig.get("pixel_size_um")) or rig_binning
         ref = rig.get("declared_scale") or rig.get("measured_scale_arcsec")
-        if ref and abs(ref - scale) / scale <= 0.07:
+        if not ref:
+            continue
+        ref_scaled = ref * rel_bin / rig_binning
+        if abs(ref_scaled - scale) / scale <= 0.07:
             return rig
     return None
 

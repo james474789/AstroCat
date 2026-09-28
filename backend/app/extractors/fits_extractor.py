@@ -63,6 +63,7 @@ class FITSExtractor(BaseExtractor):
                 metadata["exposure_time_seconds"] = self._get_exposure(header)
                 metadata["capture_date"] = self._get_date(header)
                 metadata["gain"] = self._parse_float(self._safe_get(header, "GAIN"))
+                metadata["binning"] = self._get_binning(header)
                 metadata["iso_speed"] = self._parse_int(self._safe_get(header, "ISOSPEED", "ISO"))
                 metadata["temperature_celsius"] = self._parse_float(self._safe_get(header, "CCD-TEMP", "TEMP", "SET-TEMP"))
                 
@@ -182,6 +183,14 @@ class FITSExtractor(BaseExtractor):
         if "/" in value:
             value = value.split("/", 1)[0].strip()
         return value or None
+
+    def _get_binning(self, header):
+        """"NxM" from XBINNING/YBINNING (handles 2, 2.0, "2"); YBINNING defaults to XBINNING."""
+        x = self._parse_int(self._safe_get(header, "XBINNING"))
+        if not x:
+            return None
+        y = self._parse_int(self._safe_get(header, "YBINNING")) or x
+        return f"{x}x{y}"
 
     def _get_exposure(self, header) -> float:
         """Try multiple keywords for exposure time."""

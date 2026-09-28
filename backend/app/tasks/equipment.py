@@ -123,7 +123,7 @@ def run_assignment(scope: str = "unassigned") -> Dict[str, Any]:
 
 _ROWS_SQL = """
     SELECT id, camera_name, width_pixels, height_pixels, binning, pixel_scale_arcsec,
-           raw_header->'FOCALLEN' AS focallen, focal_length,
+           raw_header->'XPIXSZ' AS xpixsz, raw_header->'FOCALLEN' AS focallen, focal_length,
            site_latitude, site_longitude, rig_id, rig_source, site_id
     FROM images
     WHERE id > :after {where}
@@ -288,31 +288,44 @@ def _fill_capture_utc(session, sites, clock_modes: Dict[str, str], scope: str, s
 
 
 def _refresh_measured(session) -> int:
-    """rigs.measured_scale_arcsec / measured_count = median valid solved scale of assigned light subs."""
+    """
+    rigs.measured_scale_arcsec / measured_count = median solved scale of
+    assigned light subs, each rescaled to rig.binning via its binning
+    relative to rig's camera (Python pass: a plain SQL median would mix bin 1
+    and bin 2 frames of the same rig into one meaningless number).
+    """
+    import statistics
     from sqlalchemy import text
+    from app.services.equipment_assignment import load_rig_infos_sync, measured_scale_normalized
 
-    session.execute(text("""
-        UPDATE rigs r SET measured_scale_arcsec = m.med, measured_count = m.cnt
-        FROM (
-            SELECT rig_id, percentile_cont(0.5) WITHIN GROUP (ORDER BY pixel_scale_arcsec) AS med,
-                   count(*) AS cnt
-            FROM images
-            WHERE rig_id IS NOT NULL AND frame_type = 'LIGHT' AND subtype = 'SUB_FRAME'
-              AND pixel_scale_arcsec BETWEEN 0.05 AND 300 AND abs(pixel_scale_arcsec - 72.0) >= 0.001
-            GROUP BY rig_id
-        ) m
-        WHERE r.id = m.rig_id
-    """))
-    session.execute(text("""
-        UPDATE rigs SET measured_scale_arcsec = NULL, measured_count = 0
-        WHERE id NOT IN (
-            SELECT DISTINCT rig_id FROM images
-            WHERE rig_id IS NOT NULL AND frame_type = 'LIGHT' AND subtype = 'SUB_FRAME'
-              AND pixel_scale_arcsec BETWEEN 0.05 AND 300 AND abs(pixel_scale_arcsec - 72.0) >= 0.001
-        )
-    """))
+    rigs = {r.id: r for r in load_rig_infos_sync(session)}
+    rows = session.execute(text("""
+        SELECT rig_id, width_pixels, height_pixels, binning, pixel_scale_arcsec,
+               raw_header->'XPIXSZ' AS xpixsz
+        FROM images
+        WHERE rig_id IS NOT NULL AND frame_type = 'LIGHT' AND subtype = 'SUB_FRAME'
+          AND pixel_scale_arcsec BETWEEN 0.05 AND 300 AND abs(pixel_scale_arcsec - 72.0) >= 0.001
+    """)).mappings().all()
+
+    by_rig: Dict[int, List[float]] = defaultdict(list)
+    for row in rows:
+        rig = rigs.get(row["rig_id"])
+        if rig is None:
+            continue
+        norm = measured_scale_normalized(dict(row), rig)
+        if norm is not None:
+            by_rig[rig.id].append(norm)
+
+    for rig_id in rigs:
+        scales = by_rig.get(rig_id)
+        if scales:
+            session.execute(text("UPDATE rigs SET measured_scale_arcsec = :m, measured_count = :c WHERE id = :id"),
+                            {"m": statistics.median(scales), "c": len(scales), "id": rig_id})
+        else:
+            session.execute(text("UPDATE rigs SET measured_scale_arcsec = NULL, measured_count = 0 WHERE id = :id"),
+                            {"id": rig_id})
     session.commit()
-    return session.execute(text("SELECT count(*) FROM rigs WHERE measured_count > 0")).scalar() or 0
+    return sum(1 for scales in by_rig.values() if scales)
 
 
 def _invalidate_targets_cache() -> None:

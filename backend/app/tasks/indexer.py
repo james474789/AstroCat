@@ -356,6 +356,7 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
             # If capture date is missing from metadata, fallback to file modification time
             image.capture_date = metadata.get("capture_date") or (datetime.fromtimestamp(file_stats.get("modified_at")) if file_stats.get("modified_at") else None)
             image.gain = metadata.get("gain")
+            image.binning = metadata.get("binning")
             image.iso_speed = metadata.get("iso_speed")
             image.temperature_celsius = metadata.get("temperature_celsius")
             
@@ -437,6 +438,7 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
                 # If capture date is missing from metadata, fallback to file modification time
                 capture_date=metadata.get("capture_date") or (datetime.fromtimestamp(file_stats.get("modified_at")) if file_stats.get("modified_at") else None),
                 gain=metadata.get("gain"),
+                binning=metadata.get("binning"),
                 iso_speed=metadata.get("iso_speed"),
                 temperature_celsius=metadata.get("temperature_celsius"),
                 
