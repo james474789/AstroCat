@@ -28,8 +28,11 @@ def use_arcsec_for(rows: List[Dict[str, Any]]) -> bool:
     return bool(rows) and sum(1 for r in rows if r.get("scale")) >= 0.5 * len(rows)
 
 
-def histogram(rows, use_arcsec: bool, bins: int = 24) -> List[Dict[str, Any]]:
-    vals = [v for v in (_value(r, use_arcsec) for r in rows) if v is not None]
+def values(rows, use_arcsec: bool) -> List[float]:
+    return [v for v in (_value(r, use_arcsec) for r in rows) if v is not None]
+
+
+def histogram(vals: List[float], bins: int = 24) -> List[Dict[str, Any]]:
     if len(vals) < MIN_BIN:
         return []
     lo, hi = np.percentile(vals, 1), np.percentile(vals, 99)
@@ -37,7 +40,7 @@ def histogram(rows, use_arcsec: bool, bins: int = 24) -> List[Dict[str, Any]]:
         hi = lo + 1e-6
     counts, edges = np.histogram(np.clip(vals, lo, hi), bins=bins, range=(lo, hi))
     return [{"from": round(float(edges[i]), 3), "to": round(float(edges[i + 1]), 3), "count": int(c)}
-            for i, c in enumerate(counts)]
+            for i, c in enumerate(counts) if c >= MIN_BIN]
 
 
 def monthly(rows, use_arcsec: bool) -> List[Dict[str, Any]]:
@@ -109,10 +112,12 @@ def hfr_vs_temperature(rows, step: float = 1.0) -> Dict[str, Any]:
 
 def build_stats(rows: List[Dict[str, Any]], prefer_arcsec: bool = True) -> Dict[str, Any]:
     use_arcsec = prefer_arcsec and use_arcsec_for(rows)
+    vals = values(rows, use_arcsec)
     return {
         "units": "ARCSEC" if use_arcsec else "PX",
         "measured": len(rows),
-        "histogram": histogram(rows, use_arcsec),
+        "median": round(median(vals), 3) if vals else None,
+        "histogram": histogram(vals),
         "monthly": monthly(rows, use_arcsec),
         "by_altitude": by_altitude(rows, use_arcsec),
         "filters": filter_offsets(rows, use_arcsec),

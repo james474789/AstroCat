@@ -46,6 +46,9 @@ export default function QualityStatsSection() {
     const fmt = (v, digits = 2) => (v == null ? '—' : `${Number(v).toFixed(digits)}${u}`);
     const pxNote = d && units === 'ARCSEC' && d.units === 'PX' ? 'Most of this rig’s subs have no plate scale, so sizes are in pixels.' : null;
     const hist = (d?.histogram || []).map((b) => ({ ...b, label: Number(((b.from + b.to) / 2).toFixed(2)) }));
+    const medianBin = d?.median != null && hist.length
+        ? hist.reduce((a, b) => (Math.abs(b.label - d.median) < Math.abs(a.label - d.median) ? b : a))
+        : null;
     const filters = d?.filters || [];
     const temp = d?.temperature;
     const slopeNote = temp?.slope_px_per_degc != null
@@ -93,6 +96,10 @@ export default function QualityStatsSection() {
                                     formatter={(v) => [`${v} subs`, 'Count']}
                                     labelFormatter={(_, p) => (p?.[0] ? `${fmt(p[0].payload.from)} – ${fmt(p[0].payload.to)}` : '')} />
                                 <Bar dataKey="count" fill={BAR} radius={[4, 4, 0, 0]} />
+                                {medianBin && (
+                                    <ReferenceLine x={medianBin.label} stroke="var(--color-text-secondary)" strokeWidth={2} strokeDasharray="4 4"
+                                        label={{ value: `median ${fmt(d.median)}`, position: 'top', fontSize: 10, fill: 'var(--color-text-secondary)' }} />
+                                )}
                             </BarChart>
                         </ResponsiveContainer>
                     </Card>
