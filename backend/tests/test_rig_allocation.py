@@ -1,159 +1,171 @@
 """
-Tests for app.services.rig_allocation (R0b, docs/design/R0b-rig-allocation.md §7.1).
-Pure: no DB.
+Tests for app.services.rig_allocation (R0b): buckets by camera x derived
+binning x calculated focal length, rig suggestions and key round-trips. Pure: no DB.
 """
 
 import random
 from datetime import datetime
 
-from app.services.equipment_assignment import RigInfo, assign_rig
-from app.services.rig_allocation import group_unassigned, member_ids, suggest_rig
+from app.services.equipment_assignment import RigInfo
+from app.services.rig_allocation import frame_optics, group_unassigned, members_by_key, reference_sensor, known_sensors
 
 ASI2600 = ["zwo asi2600mm pro"]
+ASI294 = ["zwo asi294mm pro"]
 # 3.76 um at 530 mm -> 1.463"/px; at 2000 mm -> 0.388"/px.
 RASA = RigInfo(id=1, camera_id=10, patterns=ASI2600, sensor_width_px=6248, sensor_height_px=4176,
                pixel_size_um=3.76, focal_length_mm=530)
 SCT = RigInfo(id=2, camera_id=10, patterns=ASI2600, sensor_width_px=6248, sensor_height_px=4176,
               pixel_size_um=3.76, focal_length_mm=2000)
-SCT_OFF = RigInfo(id=3, camera_id=10, patterns=ASI2600, sensor_width_px=6248, sensor_height_px=4176,
-                  pixel_size_um=3.76, focal_length_mm=2000, is_active=False)
-RIGS = [RASA, SCT]
+# The ASI294MM: locked 4.63 um 4144x2822 and unlocked 2.315 um 8288x5644 modes.
+C11_LOCKED = RigInfo(id=3, camera_id=11, patterns=ASI294, sensor_width_px=4144, sensor_height_px=2822,
+                     pixel_size_um=4.63, focal_length_mm=900)
+EF200_UNLOCKED = RigInfo(id=4, camera_id=12, patterns=ASI294, sensor_width_px=8288, sensor_height_px=5644,
+                         pixel_size_um=2.315, focal_length_mm=200)
+RIGS = [RASA, SCT, C11_LOCKED, EF200_UNLOCKED]
+
+_ids = iter(range(1, 100_000))
 
 
-def _sample(camera="ZWO ASI2600MM Pro", w=6000, h=4000, scale=None, **kw):
-    return {"camera_name": camera, "width_pixels": w, "height_pixels": h, "binning": None,
-            "pixel_scale_arcsec": scale, "xpixsz": None, "focallen": None, "focal_length": None, **kw}
+def _row(camera="ZWO ASI2600MM Pro", w=6248, h=4176, scale=None, subtype="SUB_FRAME", **kw):
+    row = {"id": next(_ids), "camera_name": camera, "width_pixels": w, "height_pixels": h, "binning": None,
+           "pixel_scale_arcsec": scale, "xpixsz": None, "focallen": None, "focal_length": None,
+           "subtype": subtype, "filter_name": "Ha", "exposure_time_seconds": 300.0,
+           "capture_date": datetime(2026, 1, 1, 22, 0)}
+    row.update(kw)
+    return row
 
 
-_next_id = iter(range(1, 10_000))
+def _one(rows, rigs=RIGS):
+    groups = group_unassigned(rows, rigs)
+    assert len(groups) == 1, [g["key"] for g in groups]
+    return groups[0]
 
 
-def _row(subtype="INTEGRATION_MASTER", scale=None, **kw):
-    return {"id": next(_next_id), "subtype": subtype, "filter_name": "Ha", "exposure_time_seconds": 300.0,
-            "capture_date": datetime(2026, 1, 1, 22, 0), **_sample(scale=scale, **kw)}
+# --- per-frame optics --------------------------------------------------------
+
+def test_binning_is_derived_from_the_native_sensor_not_the_header():
+    ref = reference_sensor("ZWO ASI294MM Pro", known_sensors(RIGS))
+    assert (ref.width, ref.height) == (8288, 5644)
+    # Older and newer drivers label the same 4144x2822 mode bin 1 and bin 2.
+    a = frame_optics(_row("ZWO ASI294MM Pro", 4144, 2822, scale=1.06, binning="1x1", xpixsz=4.63), ref)
+    b = frame_optics(_row("ZWO ASI294MM Pro", 4144, 2822, scale=1.06, binning="2x2", xpixsz=4.63), ref)
+    assert a["bin"] == b["bin"] == 2
+    assert round(a["focal"]) == round(b["focal"]) == 901
 
 
-# --- suggest_rig -------------------------------------------------------------
-
-def test_cropped_master_is_suggested_by_scale():
-    sample = _sample(scale=1.47)
-    assert assign_rig(sample, RIGS) == (None, "no_camera_match")
-    assert suggest_rig(sample, RIGS) == (1, "scale")
-
-
-def test_drizzled_master_is_suggested_by_focal_length():
-    sample = _sample(w=12496, h=8352, scale=0.7317, focallen=530)
-    assert suggest_rig(sample, RIGS) == (1, "focal")
+def test_focal_is_calculated_from_scale_then_header():
+    ref = reference_sensor("ZWO ASI2600MM Pro", known_sensors(RIGS))
+    solved = frame_optics(_row(scale=1.463), ref)
+    assert solved["focal_basis"] == "scale" and abs(solved["focal"] - 530) < 1
+    unsolved = frame_optics(_row(focallen=530), ref)
+    assert unsolved["focal_basis"] == "header" and unsolved["focal"] == 530
+    assert frame_optics(_row(), ref)["focal"] is None
 
 
-def test_two_active_rigs_without_evidence_is_no_suggestion():
-    assert suggest_rig(_sample(), RIGS) == (None, None)
+def test_unknown_camera_uses_xpixsz_and_header_binning():
+    opt = frame_optics(_row("ASI Camera (1)", 4656, 3520, scale=1.77, binning="1x1", xpixsz=3.8), None)
+    assert opt["bin"] == 1 and round(opt["focal"]) == 443
 
 
-def test_single_active_rig_on_camera_is_suggested():
-    assert suggest_rig(_sample(), [RASA.__class__(**{**RASA.__dict__, "is_active": False}), SCT]) == (2, "camera")
-    assert suggest_rig(_sample(), [SCT_OFF, RASA]) == (1, "camera")
+# --- buckets -----------------------------------------------------------------
+
+def test_subs_and_cropped_masters_share_a_bucket_by_focal():
+    g = _one([_row(scale=1.46), _row(scale=1.47), _row(w=6000, h=4000, scale=1.465, subtype="INTEGRATION_MASTER")])
+    assert (g["count"], g["sub_count"], g["master_count"]) == (3, 2, 1)
+    assert g["frame_size_count"] == 2 and g["frame_sizes"][0] == "6248x4176"
+    assert (g["suggested_rig_id"], g["suggestion_basis"]) == (1, "focal")
 
 
-def test_only_inactive_candidate_is_still_suggested():
-    assert suggest_rig(_sample(), [SCT_OFF]) == (3, "camera")
+def test_header_binning_does_not_split_one_rig():
+    rows = ([_row("ZWO ASI294MM Pro", 4144, 2822, scale=1.06, binning="1x1", xpixsz=4.63) for _ in range(3)]
+            + [_row("ZWO ASI294MM Pro", 4144, 2822, scale=1.06, binning="2x2", xpixsz=4.63) for _ in range(2)])
+    g = _one(rows)
+    assert g["count"] == 5 and g["binning"] == 2
+    assert g["suggested_rig_id"] == 3  # the locked-mode rig: same 4.63 um effective pixel, 900 mm
 
 
-def test_unknown_camera_is_no_suggestion():
-    assert suggest_rig(_sample(camera="Canon EOS R7", scale=1.46), RIGS) == (None, None)
-    assert suggest_rig(_sample(camera=None, scale=1.46), RIGS) == (None, None)
+def test_focal_clusters_split_beyond_five_percent():
+    assert len(group_unassigned([_row(scale=s) for s in (1.46, 1.48, 1.50)], RIGS)) == 1
+    assert len(group_unassigned([_row(scale=s) for s in (1.46, 1.60)], RIGS)) == 2
 
 
-def test_exact_when_assign_rig_would_succeed():
-    assert suggest_rig(_sample(w=6248, h=4176, scale=1.46), RIGS) == (1, "exact")
-
-
-def test_scale_outside_suggest_tolerance_falls_through():
-    # 1.0"/px is >25% from both rigs; no focal evidence; two active rigs.
-    assert suggest_rig(_sample(scale=1.0), RIGS) == (None, None)
-
-
-# --- group_unassigned --------------------------------------------------------
-
-def test_subs_and_masters_are_separate_groups():
-    rows = [_row("SUB_FRAME", scale=1.46), _row("INTEGRATION_MASTER", scale=1.46)]
+def test_drizzled_master_lands_in_its_own_bucket():
+    rows = [_row(scale=1.463), _row(w=12496, h=8352, scale=0.7315, xpixsz=3.76, subtype="INTEGRATION_MASTER")]
     groups = group_unassigned(rows, RIGS)
-    assert sorted(g["subtype"] for g in groups) == ["INTEGRATION_MASTER", "SUB_FRAME"]
+    assert len(groups) == 2
+    drizzled = next(g for g in groups if g["master_count"])
+    assert round(drizzled["focal_mm"]) == 1060 and drizzled["suggested_rig_id"] is None
 
 
-def test_close_scales_cluster_and_far_scales_split():
-    assert len(group_unassigned([_row(scale=s) for s in (1.20, 1.22, 1.24)], RIGS)) == 1
-    assert len(group_unassigned([_row(scale=s) for s in (1.20, 1.40)], RIGS)) == 2
-
-
-def test_unsolved_rows_form_their_own_group():
-    groups = group_unassigned([_row(scale=1.46), _row(), _row()], RIGS)
-    unsolved = [g for g in groups if g["scale_min"] is None]
-    assert len(unsolved) == 1
-    assert unsolved[0]["count"] == 2 and unsolved[0]["key"].endswith("|-")
-    assert unsolved[0]["scale_max"] is None and unsolved[0]["scale_median"] is None
+def test_unknown_focal_is_one_bucket_per_camera_and_binning():
+    groups = group_unassigned([_row(), _row(), _row("QHY5LII-C", 1280, 960)], RIGS)
+    assert sorted(g["count"] for g in groups) == [1, 2]
+    assert all(g["key"].endswith("|-") and g["focal_mm"] is None for g in groups)
+    assert all(g["suggested_rig_id"] is None for g in groups)
 
 
 def test_null_camera_is_a_valid_partition():
-    groups = group_unassigned([_row(camera=None, w=None, h=None, scale=1.3)], RIGS)
-    assert len(groups) == 1
-    g = groups[0]
-    assert g["camera_name"] is None
-    assert g["key"] == "INTEGRATION_MASTER|none|nonexnone|none|1.3000"
+    g = _one([_row(camera=None, w=None, h=None, scale=1.3, xpixsz=3.76)])
+    assert g["camera_name"] is None and g["key"].startswith("none|b1|")
     assert g["reason"] == "no_camera_match" and g["suggested_rig_id"] is None
 
 
-def test_groups_sorted_by_count_and_fields_filled():
-    rows = ([_row("SUB_FRAME", scale=1.46, filter_name=f) for f in ("OIII", "Ha", "Ha", None)]
-            + [_row(scale=0.39)])
+def test_no_suggestion_outside_focal_tolerance_or_for_other_binning():
+    assert _one([_row(scale=1.30)])["suggested_rig_id"] is None  # ~596 mm: 12% from the 530 mm rig
+    # Unlocked full-res frame at 900 mm: 2.315 um pixel doesn't match the locked 900 mm rig.
+    g = _one([_row("ZWO ASI294MM Pro", 8288, 5644, scale=0.5305, xpixsz=2.315)])
+    assert g["binning"] == 1 and g["suggested_rig_id"] is None
+
+
+def test_exact_when_assign_rig_would_succeed():
+    g = _one([_row(scale=0.388)])
+    assert (g["suggested_rig_id"], g["suggestion_basis"]) == (2, "exact")
+
+
+def test_fields_and_sort_order():
+    rows = ([_row(scale=1.46, filter_name=f) for f in ("OIII", "Ha", "Ha", None)] + [_row(scale=0.39)])
     groups = group_unassigned(rows, RIGS)
     assert [g["count"] for g in groups] == [4, 1]
     g = groups[0]
     assert g["filters"] == ["Ha", "OIII"]
     assert g["total_exposure_s"] == 1200.0
-    assert g["reason"] == "no_camera_match"
-    assert (g["suggested_rig_id"], g["suggestion_basis"]) == (1, "scale")
-    assert g["camera_name"] == "ZWO ASI2600MM Pro"
+    assert g["focal_basis"] == "scale"
     assert g["first_capture"] == "2026-01-01T22:00:00"
     assert g["sample_image_id"] in {r["id"] for r in rows[:4]}
-    assert groups[1]["suggested_rig_id"] == 2
 
 
-def test_focal_mm_is_median_of_known_focals():
-    rows = [_row(scale=1.46, focallen=530), _row(scale=1.46, focal_length=540), _row(scale=1.46)]
-    assert group_unassigned(rows, RIGS)[0]["focal_mm"] == 535.0
-
-
-# --- member_ids / keys -------------------------------------------------------
+# --- keys --------------------------------------------------------------------
 
 def _mixed_rows():
-    return ([_row("SUB_FRAME", scale=s) for s in (1.45, 1.46, 1.47, 0.39, 0.40)]
-            + [_row("INTEGRATION_MASTER", scale=s, w=12496, h=8352) for s in (0.73, 0.74)]
-            + [_row("SUB_FRAME"), _row("SUB_FRAME", camera=None, w=None, h=None)]
-            + [_row("SUB_FRAME", scale=1.46, binning="2")])
+    return ([_row(scale=s) for s in (1.45, 1.46, 1.47, 0.39, 0.40)]
+            + [_row(w=12496, h=8352, scale=s, xpixsz=3.76, subtype="INTEGRATION_MASTER") for s in (0.73, 0.74)]
+            + [_row(), _row(camera=None, w=None, h=None)]
+            + [_row("ZWO ASI294MM Pro", 4144, 2822, scale=1.06, binning=b, xpixsz=4.63) for b in ("1x1", "2x2")]
+            + [_row("ASI Camera (1)", 4656, 3520, focallen=400)])
 
 
-def test_member_ids_round_trip_every_group():
+def test_members_by_key_round_trip_every_bucket():
     rows = _mixed_rows()
     groups = group_unassigned(rows, RIGS)
-    seen = []
+    found = members_by_key(rows, RIGS, [g["key"] for g in groups])
+    assert len({g["key"] for g in groups}) == len(groups) == len(found)
     for g in groups:
-        ids = member_ids(rows, RIGS, g["key"])
-        assert ids is not None and len(ids) == g["count"]
-        seen.extend(ids)
-    assert sorted(seen) == sorted(r["id"] for r in rows)
-    assert len({g["key"] for g in groups}) == len(groups)
+        assert len(found[g["key"]]) == g["count"]
+    assert sorted(i for ids in found.values() for i in ids) == sorted(r["id"] for r in rows)
 
 
-def test_unknown_key_is_none():
-    assert member_ids(_mixed_rows(), RIGS, "SUB_FRAME|nope|1x1|none|1.0000") is None
+def test_unknown_keys_are_left_out():
+    rows = _mixed_rows()
+    key = group_unassigned(rows, RIGS)[0]["key"]
+    assert set(members_by_key(rows, RIGS, [key, "nope|b1|1.0"])) == {key}
 
 
 def test_keys_are_independent_of_row_order():
     rows = _mixed_rows()
-    before = {g["key"]: sorted(member_ids(rows, RIGS, g["key"])) for g in group_unassigned(rows, RIGS)}
     shuffled = rows[:]
     random.Random(7).shuffle(shuffled)
-    after = {g["key"]: sorted(member_ids(shuffled, RIGS, g["key"])) for g in group_unassigned(shuffled, RIGS)}
-    assert before == after
-    assert [g["key"] for g in group_unassigned(rows, RIGS)] == [g["key"] for g in group_unassigned(shuffled, RIGS)]
+    a, b = group_unassigned(rows, RIGS), group_unassigned(shuffled, RIGS)
+    assert [g["key"] for g in a] == [g["key"] for g in b]
+    keys = [g["key"] for g in a]
+    ma, mb = members_by_key(rows, RIGS, keys), members_by_key(shuffled, RIGS, keys)
+    assert {k: sorted(v) for k, v in ma.items()} == {k: sorted(v) for k, v in mb.items()}

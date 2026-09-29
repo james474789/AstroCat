@@ -859,7 +859,7 @@ async def _unassigned_inputs(db: AsyncSession):
 
 @router.get("/unassigned")
 async def list_unassigned(db: AsyncSession = Depends(get_db)):
-    """Rig-less light subs and masters, grouped by camera, frame size, binning and plate scale."""
+    """Rig-less light subs and masters, bucketed by camera, derived binning and calculated focal length."""
     from app.services.rig_allocation import group_unassigned
 
     rows, rigs = await _unassigned_inputs(db)
@@ -869,19 +869,35 @@ async def list_unassigned(db: AsyncSession = Depends(get_db)):
 
 @router.post("/unassigned/assign", dependencies=[Depends(require_admin)])
 async def assign_unassigned(body: UnassignedAssign, db: AsyncSession = Depends(get_db)):
-    """Allocate one group (re-derived server-side from its key) to a rig, as MANUAL."""
-    from app.services.rig_allocation import member_ids
+    """
+    Allocate buckets to rigs as MANUAL. Each bucket's members are re-derived
+    server-side from its key. Buckets that no longer exist are reported in
+    `stale_keys`; if none of them exist the request fails with 409.
+    """
+    from app.services.rig_allocation import members_by_key
 
-    if await db.get(Rig, body.rig_id) is None:
+    rig_ids = {i.rig_id for i in body.items}
+    known = set((await db.execute(select(Rig.id).where(Rig.id.in_(rig_ids)))).scalars().all())
+    if rig_ids - known:
         raise HTTPException(status_code=400, detail="Unknown rig_id")
-    rows, rigs = await _unassigned_inputs(db)
-    ids = await asyncio.to_thread(member_ids, rows, rigs, body.key)
-    if ids is None:
-        raise HTTPException(status_code=409, detail="This group changed; refresh and try again")
 
-    result = await db.execute(
-        text("UPDATE images SET rig_id = :rig, rig_source = 'MANUAL' WHERE id = ANY(:ids) AND rig_id IS NULL"),
-        {"rig": body.rig_id, "ids": ids})
+    rows, rigs = await _unassigned_inputs(db)
+    members = await asyncio.to_thread(members_by_key, rows, rigs, [i.key for i in body.items])
+    stale = [i.key for i in body.items if i.key not in members]
+    if len(stale) == len(body.items):
+        raise HTTPException(status_code=409, detail="These groups changed; refresh and try again")
+
+    update_sql = text("UPDATE images SET rig_id = :rig, rig_source = 'MANUAL' "
+                      "WHERE id = ANY(:ids) AND rig_id IS NULL")
+    results = []
+    for item in body.items:
+        ids = members.get(item.key)
+        if ids is None:
+            continue
+        updated = 0
+        for n in range(0, len(ids), 5000):
+            updated += (await db.execute(update_sql, {"rig": item.rig_id, "ids": ids[n:n + 5000]})).rowcount
+        results.append({"key": item.key, "rig_id": item.rig_id, "updated_count": updated})
     await db.commit()
 
     await _equipment_changed(queue=False)
@@ -890,7 +906,11 @@ async def assign_unassigned(body: UnassignedAssign, db: AsyncSession = Depends(g
         await _invalidate_targets_cache()
     except Exception as e:
         logger.warning(f"Failed to invalidate targets cache: {e}")
-    return {"updated_count": result.rowcount, "rig_id": body.rig_id, "key": body.key}
+    return {
+        "updated_count": sum(r["updated_count"] for r in results),
+        "results": results,
+        "stale_keys": stale,
+    }
 
 
 # ---------------------------------------------------------------------------

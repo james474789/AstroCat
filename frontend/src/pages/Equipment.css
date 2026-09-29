@@ -431,6 +431,17 @@
 .unassigned-header h3 { margin: 0; font-size: 1rem; color: var(--color-text-primary); }
 .unassigned-caret { width: 1rem; color: var(--color-text-secondary); }
 
+.unassigned-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: flex-end;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.unassigned-table tr.selected td { background: var(--color-primary-glow); }
+
 .unassigned-table-wrap {
     overflow-x: auto;
     border-top: 1px solid var(--color-border);
@@ -441,13 +452,6 @@
 .unassigned-table .nowrap { white-space: nowrap; }
 .unassigned-table .small { font-size: 0.78rem; }
 .unassigned-rig-select { min-width: 12rem; max-width: 18rem; }
-
-.unassigned-actions {
-    display: flex;
-    gap: 0.35rem;
-    align-items: center;
-    white-space: nowrap;
-}
 
 .spinner.spinner-inline {
     display: inline-block;

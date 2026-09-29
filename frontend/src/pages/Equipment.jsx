@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import {
     fetchEquipment, fetchEquipmentDetect, applyEquipmentDetect, importFromTelescopius,
-    triggerEquipmentAssign, fetchUnassignedImages, assignUnassignedGroup,
+    triggerEquipmentAssign, fetchUnassignedImages, assignUnassignedGroups,
     createCamera, updateCamera, deleteCamera,
     createOptic, updateOptic, deleteOptic,
     createFilter, updateFilter, deleteFilter,
@@ -1035,7 +1035,8 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
 
 // ============ Main page ============
 
-// R0b: rig-less light subs and masters, grouped for bulk allocation.
+// R0b: rig-less light subs and masters, bucketed by camera, derived binning
+// and calculated focal length, for bulk allocation.
 const REASON_TEXT = {
     no_camera_match: "Camera or frame size doesn't match any rig",
     scale_mismatch: "Plate scale doesn't match any rig",
@@ -1044,9 +1045,7 @@ const REASON_TEXT = {
 };
 const SUGGESTION_TEXT = {
     exact: 'matches rig',
-    scale: 'Suggested (by scale)',
-    focal: 'Suggested (by focal length)',
-    camera: 'Suggested (by camera)',
+    focal: 'Suggested (camera, binning, focal length)',
 };
 const UNASSIGNED_OPEN_KEY = 'equipment.unassigned.open';
 
@@ -1070,11 +1069,12 @@ function rigOptionLabel(rig) {
     const parts = [rig.name];
     if (rig.camera_name) parts.push(rig.camera_name);
     if (rig.effective_focal_mm) parts.push(`${Math.round(rig.effective_focal_mm)} mm`);
+    if (rig.binning > 1) parts.push(`bin ${rig.binning}`);
     return parts.join(' · ');
 }
 
 function unassignedSearchLink(g) {
-    const params = new URLSearchParams({ rig_id: 'none', frame_type: 'LIGHT', subtype: g.subtype });
+    const params = new URLSearchParams({ rig_id: 'none', frame_type: 'LIGHT' });
     if (g.camera_name) params.set('camera', g.camera_name);
     if (g.scale_min != null && g.scale_max != null) {
         params.set('pixel_scale_min', Math.max(0, g.scale_min - 0.005).toFixed(3));
@@ -1083,18 +1083,19 @@ function unassignedSearchLink(g) {
     return `/search?${params.toString()}`;
 }
 
-function formatScaleRange(g) {
-    if (g.scale_min == null) return 'unsolved';
-    const lo = g.scale_min.toFixed(2);
-    const hi = g.scale_max.toFixed(2);
-    return lo === hi ? `${lo}″` : `${lo}–${hi}″`;
+function formatFocal(g) {
+    if (g.focal_mm == null) return 'unknown';
+    const lo = Math.round(g.focal_min);
+    const hi = Math.round(g.focal_max);
+    return lo === hi ? `${lo} mm` : `${lo}–${hi} mm`;
 }
 
-function UnassignedImagesSection({ rigs, isAdmin, showToast, onAssigned }) {
+function UnassignedImagesSection({ rigs, isAdmin, showToast }) {
     const queryClient = useQueryClient();
     const [open, setOpen] = useState(readUnassignedOpen);
-    const [choices, setChoices] = useState({}); // key -> rig id string
-    const [busyKey, setBusyKey] = useState(null);
+    const [choices, setChoices] = useState({});   // key -> rig id string (overrides the suggestion)
+    const [selected, setSelected] = useState({}); // key -> true
+    const [busy, setBusy] = useState(false);
 
     const query = useQuery({
         queryKey: ['equipmentUnassigned'],
@@ -1102,7 +1103,7 @@ function UnassignedImagesSection({ rigs, isAdmin, showToast, onAssigned }) {
         staleTime: 60_000,
     });
 
-    const rigNames = useMemo(() => Object.fromEntries(rigs.map((r) => [String(r.id), r.name])), [rigs]);
+    const groups = useMemo(() => query.data?.groups || [], [query.data]);
 
     if (query.isLoading) {
         return (
@@ -1120,151 +1121,185 @@ function UnassignedImagesSection({ rigs, isAdmin, showToast, onAssigned }) {
     }
 
     const total = query.data?.total || 0;
-    const groups = query.data?.groups || [];
     if (total === 0) return null;
 
-    function toggle() {
+    function rigFor(g) {
+        if (choices[g.key] !== undefined) return choices[g.key];
+        return g.suggested_rig_id != null ? String(g.suggested_rig_id) : '';
+    }
+
+    // Only buckets that are ticked and have a rig are applied.
+    const ready = groups.filter((g) => selected[g.key] && rigFor(g));
+    const readyImages = ready.reduce((sum, g) => sum + g.count, 0);
+    const suggestedCount = groups.filter((g) => g.suggested_rig_id != null).length;
+
+    function toggleOpen() {
         const next = !open;
         setOpen(next);
         writeUnassignedOpen(next);
     }
 
-    function selectedFor(g) {
-        if (choices[g.key] !== undefined) return choices[g.key];
-        return g.suggested_rig_id != null ? String(g.suggested_rig_id) : '';
+    function chooseRig(g, value) {
+        setChoices((prev) => ({ ...prev, [g.key]: value }));
+        setSelected((prev) => ({ ...prev, [g.key]: !!value }));
     }
 
-    async function handleAssign(g) {
-        const rigId = selectedFor(g);
-        if (!rigId) return;
-        setBusyKey(g.key);
+    function selectSuggested() {
+        setSelected(Object.fromEntries(groups.filter((g) => rigFor(g)).map((g) => [g.key, true])));
+    }
+
+    async function handleAssign() {
+        if (ready.length === 0) return;
+        setBusy(true);
         try {
-            const result = await assignUnassignedGroup(g.key, Number(rigId));
+            const result = await assignUnassignedGroups(ready.map((g) => ({ key: g.key, rig_id: Number(rigFor(g)) })));
             const n = result?.updated_count ?? 0;
-            showToast(`Assigned ${n} image${n === 1 ? '' : 's'} to ${rigNames[rigId] || `rig #${rigId}`}`, 'success');
-            setChoices((prev) => {
-                const next = { ...prev };
-                delete next[g.key];
-                return next;
-            });
+            const buckets = result?.results?.length ?? 0;
+            const stale = result?.stale_keys?.length ?? 0;
+            let message = `Assigned ${n} image${n === 1 ? '' : 's'} in ${buckets} bucket${buckets === 1 ? '' : 's'}`;
+            if (stale) message += ` — ${stale} changed and were skipped; refreshed`;
+            showToast(message, stale ? 'info' : 'success', 6000);
+            setChoices({});
+            setSelected({});
             queryClient.invalidateQueries({ queryKey: ['equipmentUnassigned'] });
             queryClient.invalidateQueries({ queryKey: ['equipment'] });
-            if (onAssigned) onAssigned();
         } catch (err) {
             if (err.status === 409) {
-                showToast('This group changed — refreshed', 'error');
+                showToast('These buckets changed — refreshed', 'error');
+                setSelected({});
                 query.refetch();
             } else {
                 showToast(`Failed to assign: ${err.message}`, 'error', 6000);
             }
         } finally {
-            setBusyKey(null);
+            setBusy(false);
         }
     }
 
     return (
         <div className="unassigned-section">
-            <button type="button" className="unassigned-header" onClick={toggle} aria-expanded={open}>
+            <button type="button" className="unassigned-header" onClick={toggleOpen} aria-expanded={open}>
                 <span className="unassigned-caret">{open ? '▾' : '▸'}</span>
                 <h3>Unassigned images</h3>
                 <span className="badge badge-warning">{total}</span>
-                <span className="muted small">Light subs and masters that couldn't be matched to a rig automatically.</span>
+                <span className="muted small">
+                    Light subs and masters that couldn't be matched to a rig automatically, grouped by camera, binning and calculated focal length.
+                </span>
             </button>
             {open && (
-                <div className="unassigned-table-wrap">
-                    <table className="table unassigned-table">
-                        <thead>
-                            <tr>
-                                <th>Type</th>
-                                <th>Camera</th>
-                                <th>Frame</th>
-                                <th>Scale</th>
-                                <th>Filters</th>
-                                <th>Images</th>
-                                <th>Dates</th>
-                                <th>Why</th>
-                                <th>Rig</th>
-                                <th />
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {groups.map((g) => {
-                                const selected = selectedFor(g);
-                                const isSuggested = g.suggested_rig_id != null && selected === String(g.suggested_rig_id);
-                                const binned = g.binning && !['1', '1x1'].includes(String(g.binning));
-                                const isMaster = g.subtype === 'INTEGRATION_MASTER';
-                                return (
-                                    <tr key={g.key}>
-                                        <td>
-                                            <span className={`badge ${isMaster ? 'badge-primary' : 'badge-success'}`}>
-                                                {isMaster ? 'Master' : 'Sub'}
-                                            </span>
-                                        </td>
-                                        <td>{g.camera_name || <span className="muted">Unknown camera</span>}</td>
-                                        <td className="nowrap">
-                                            {g.width_pixels && g.height_pixels ? `${g.width_pixels}×${g.height_pixels}` : '—'}
-                                            {binned && <div className="muted small">bin {g.binning}</div>}
-                                        </td>
-                                        <td className="nowrap">
-                                            {formatScaleRange(g)}
-                                            {g.focal_mm && <div className="muted small">{Math.round(g.focal_mm)} mm</div>}
-                                        </td>
-                                        <td>
-                                            <div className="chip-row">
-                                                {g.filters.map((f) => <span key={f} className="chip">{f.replace(/^Other:/, '')}</span>)}
-                                            </div>
-                                        </td>
-                                        <td className="nowrap">
-                                            {g.count}
-                                            <div className="muted small">{formatHours(g.total_exposure_s)}</div>
-                                        </td>
-                                        <td className="small">
-                                            {g.first_capture ? formatDateTime(g.first_capture) : '—'}
-                                            {g.last_capture && g.last_capture !== g.first_capture && (
-                                                <div className="muted">to {formatDateTime(g.last_capture)}</div>
+                <>
+                    {isAdmin && (
+                        <div className="unassigned-toolbar">
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={selectSuggested} disabled={suggestedCount === 0 && Object.keys(choices).length === 0}>
+                                Select all with a rig ({groups.filter((g) => rigFor(g)).length})
+                            </button>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelected({})} disabled={ready.length === 0}>
+                                Clear selection
+                            </button>
+                            <button type="button" className="btn btn-primary btn-sm" onClick={handleAssign} disabled={busy || ready.length === 0}>
+                                {busy ? 'Assigning…' : `Assign selected (${ready.length} bucket${ready.length === 1 ? '' : 's'} · ${readyImages} image${readyImages === 1 ? '' : 's'})`}
+                            </button>
+                        </div>
+                    )}
+                    <div className="unassigned-table-wrap">
+                        <table className="table unassigned-table">
+                            <thead>
+                                <tr>
+                                    {isAdmin && <th />}
+                                    <th>Camera</th>
+                                    <th>Bin</th>
+                                    <th>Focal length</th>
+                                    <th>Images</th>
+                                    <th>Frame sizes</th>
+                                    <th>Filters</th>
+                                    <th>Dates</th>
+                                    <th>Why</th>
+                                    <th>Rig</th>
+                                    <th />
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {groups.map((g) => {
+                                    const rig = rigFor(g);
+                                    const isSuggested = g.suggested_rig_id != null && rig === String(g.suggested_rig_id);
+                                    return (
+                                        <tr key={g.key} className={selected[g.key] ? 'selected' : undefined}>
+                                            {isAdmin && (
+                                                <td>
+                                                    <input
+                                                        type="checkbox"
+                                                        aria-label="Select bucket"
+                                                        checked={!!selected[g.key] && !!rig}
+                                                        disabled={!rig}
+                                                        title={rig ? 'Include in "Assign selected"' : 'Choose a rig first'}
+                                                        onChange={(e) => setSelected((prev) => ({ ...prev, [g.key]: e.target.checked }))}
+                                                    />
+                                                </td>
                                             )}
-                                        </td>
-                                        <td className="small">{REASON_TEXT[g.reason] || g.reason}</td>
-                                        <td>
-                                            <select
-                                                className="input unassigned-rig-select"
-                                                value={selected}
-                                                onChange={(e) => setChoices((prev) => ({ ...prev, [g.key]: e.target.value }))}
-                                                disabled={!isAdmin}
-                                            >
-                                                <option value="">Choose rig…</option>
-                                                {rigs.map((r) => <option key={r.id} value={String(r.id)}>{rigOptionLabel(r)}</option>)}
-                                            </select>
-                                            {isSuggested && (
-                                                <div className="muted small">{SUGGESTION_TEXT[g.suggestion_basis] || 'Suggested'}</div>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <div className="unassigned-actions">
-                                                {isAdmin && (
-                                                    <button
-                                                        className="btn btn-primary btn-sm"
-                                                        onClick={() => handleAssign(g)}
-                                                        disabled={!selected || busyKey === g.key}
-                                                    >
-                                                        {busyKey === g.key ? 'Assigning…' : 'Assign'}
-                                                    </button>
+                                            <td>{g.camera_name || <span className="muted">Unknown camera</span>}</td>
+                                            <td className="nowrap">
+                                                {g.binning}
+                                                {g.pixel_um && <div className="muted small">{g.pixel_um} µm</div>}
+                                            </td>
+                                            <td className="nowrap">
+                                                {formatFocal(g)}
+                                                {g.focal_basis === 'header' && <div className="muted small">from header</div>}
+                                            </td>
+                                            <td className="nowrap">
+                                                {g.count}
+                                                <div className="muted small">
+                                                    {g.master_count ? `${g.sub_count} subs · ${g.master_count} masters` : 'subs'}
+                                                </div>
+                                                <div className="muted small">{formatHours(g.total_exposure_s)}</div>
+                                            </td>
+                                            <td className="small">
+                                                {g.frame_sizes.map((d) => <div key={d}>{d.replace('x', '×')}</div>)}
+                                                {g.frame_size_count > g.frame_sizes.length && (
+                                                    <div className="muted">+{g.frame_size_count - g.frame_sizes.length} more</div>
                                                 )}
+                                            </td>
+                                            <td>
+                                                <div className="chip-row">
+                                                    {g.filters.map((f) => <span key={f} className="chip">{f.replace(/^Other:/, '')}</span>)}
+                                                </div>
+                                            </td>
+                                            <td className="small">
+                                                {g.first_capture ? formatDateTime(g.first_capture) : '—'}
+                                                {g.last_capture && g.last_capture !== g.first_capture && (
+                                                    <div className="muted">to {formatDateTime(g.last_capture)}</div>
+                                                )}
+                                            </td>
+                                            <td className="small">{REASON_TEXT[g.reason] || g.reason}</td>
+                                            <td>
+                                                <select
+                                                    className="input unassigned-rig-select"
+                                                    value={rig}
+                                                    onChange={(e) => chooseRig(g, e.target.value)}
+                                                    disabled={!isAdmin || busy}
+                                                >
+                                                    <option value="">Choose rig…</option>
+                                                    {rigs.map((r) => <option key={r.id} value={String(r.id)}>{rigOptionLabel(r)}</option>)}
+                                                </select>
+                                                {isSuggested && (
+                                                    <div className="muted small">{SUGGESTION_TEXT[g.suggestion_basis] || 'Suggested'}</div>
+                                                )}
+                                            </td>
+                                            <td>
                                                 <Link
                                                     className="btn btn-ghost btn-sm"
                                                     to={unassignedSearchLink(g)}
-                                                    title="Approximate — Search can't filter by frame size"
+                                                    title="Approximate — Search filters by camera and plate scale, not binning or frame size"
                                                 >
                                                     View
                                                 </Link>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
             )}
         </div>
     );

@@ -1,26 +1,40 @@
 """
 Find & allocate images with no rig (R0b, docs/design/R0b-rig-allocation.md).
 
-Pure core (no session, no I/O), same style as equipment_assignment:
-- `suggest_rig(sample, rigs)` -> (rig_id | None, basis). Unlike assign_rig it
-  ignores frame dimensions (crops, drizzle) and accepts a looser scale, so it
-  is only ever a pre-selection the user confirms.
-- `group_unassigned(rows, rigs)`: groups similar rig-less light subs / masters
-  for the Equipment page.
-- `member_ids(rows, rigs, key)`: the ids of one group, re-derived from its key
-  so the assign POST never trusts client-sent ids.
+Pure core (no session, no I/O), same style as equipment_assignment. Rig-less
+light subs and masters are bucketed by what physically identifies a rig:
+
+    camera  x  derived binning  x  calculated focal length (5% clusters)
+
+- Derived binning is relative to the camera's native sensor (dims, then
+  XPIXSZ, see relative_binning); header binning is only a fallback, since
+  drivers disagree on it for the same sensor mode.
+- Focal length is 206.265 * effective pixel size / solved scale; unsolved
+  frames fall back to FOCALLEN / the EXIF focal length. Frames with neither
+  form one "unknown focal" bucket per camera and binning.
+
+- `group_unassigned(rows, rigs)`: bucket summaries for the Equipment page.
+- `members_by_key(rows, rigs, keys)`: the ids of those buckets, re-derived
+  from their keys so the assign POST never trusts client-sent ids.
+- `suggest_rig(bucket, rigs)`: an exact assign_rig match, else the rig on the
+  same camera and binning whose effective focal length is within 5%.
 """
 
 import statistics
 from collections import Counter
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from app.services.equipment_assignment import _num, assign_rig, camera_matches, RigInfo
+from app.utils.capture_time import unchar
 from app.utils.filter_names import filter_sort_key, normalize_filter
-from app.utils.rig_optics import CLUSTER_TOLERANCE, cluster_by_scale, valid_pixel_scale, weighted_median
+from app.utils.rig_optics import (
+    ARCSEC_PER_RADIAN_OVER_1000, SEED_SENSORS, binning_factor, cluster_by_scale, parse_pixel_size,
+    relative_binning, valid_pixel_scale, weighted_median,
+)
 
-SUGGEST_SCALE_TOLERANCE = 0.25
-SUGGEST_FOCAL_TOLERANCE = 0.10
+FOCAL_TOLERANCE = 0.05   # bucket clustering and rig suggestion
+PIXEL_TOLERANCE = 0.05   # effective (binned) pixel size: rig vs bucket
 
 
 def allocatable_clause():
@@ -31,87 +45,99 @@ def allocatable_clause():
 
 
 # ---------------------------------------------------------------------------
-# Suggestion
+# Per-frame optics
 # ---------------------------------------------------------------------------
 
-def suggest_rig(sample: Dict[str, Any], rigs: List[RigInfo]) -> Tuple[Optional[int], Optional[str]]:
+@dataclass(frozen=True)
+class Sensor:
+    patterns: Tuple[str, ...]
+    width: int
+    height: int
+    pixel_um: float
+
+
+def known_sensors(rigs: Iterable[RigInfo]) -> List[Sensor]:
+    """Sensors of the configured cameras (via their rigs), then the seed table."""
+    out = [Sensor(tuple(r.patterns), r.sensor_width_px, r.sensor_height_px, r.pixel_size_um)
+           for r in rigs if r.patterns and r.sensor_width_px and r.sensor_height_px and r.pixel_size_um]
+    out += [Sensor((e["pattern"],), e["width"], e["height"], e["pixel_um"])
+            for e in SEED_SENSORS if e.get("width") and e.get("height") and e.get("pixel_um")]
+    return out
+
+
+def reference_sensor(camera_name: Any, sensors: Sequence[Sensor]) -> Optional[Sensor]:
+    """The native (largest) sensor matching a camera name, so every mode of one camera shares a basis."""
+    hits = [s for s in sensors if camera_matches(camera_name, s.patterns)]
+    return max(hits, key=lambda s: (s.width * s.height, -s.pixel_um)) if hits else None
+
+
+def frame_optics(row: Dict[str, Any], sensor: Optional[Sensor]) -> Dict[str, Any]:
     """
-    sample: the same keys as assign_rig's image dict. Returns (rig_id, basis),
-    basis in "exact" | "scale" | "focal" | "camera", or (None, None).
+    {"bin", "pixel_um" (effective, binned), "scale", "focal", "focal_basis"} for one frame.
+    focal_basis: "scale" (calculated from the solve) | "header" (FOCALLEN / EXIF) | None.
     """
-    rig_id, _ = assign_rig(sample, rigs)
-    if rig_id is not None:
-        return rig_id, "exact"
+    w, h = row.get("width_pixels"), row.get("height_pixels")
+    xpixsz = unchar(row.get("xpixsz"))
+    b = None
+    if sensor is not None:
+        b = relative_binning(w, h, xpixsz, row.get("binning"), sensor.width, sensor.height, sensor.pixel_um)
+    if not b:
+        b = binning_factor(row.get("binning"))
 
-    cands = [r for r in rigs if camera_matches(sample.get("camera_name"), r.patterns)]
-    if not cands:
-        return None, None
+    pixel = parse_pixel_size(xpixsz)
+    if pixel is None and sensor is not None:
+        pixel = sensor.pixel_um * b
 
-    s = valid_pixel_scale(sample.get("pixel_scale_arcsec"))
-    if s is not None:
-        best = None
-        for r in cands:
-            ref = r.declared_scale() or r.measured_scale_arcsec
-            if not ref:
-                continue
-            err = abs(ref - s) / ref
-            if best is None or err < best[0]:
-                best = (err, r)
-        if best is not None and best[0] <= SUGGEST_SCALE_TOLERANCE:
-            return best[1].id, "scale"
-
-    focal = _num(sample.get("focallen")) or _num(sample.get("focal_length"))
-    if focal:
-        hits = [r for r in cands
-                if r.effective_focal and abs(r.effective_focal - focal) / r.effective_focal <= SUGGEST_FOCAL_TOLERANCE]
-        if len(hits) == 1:
-            return hits[0].id, "focal"
-
-    active = [r for r in cands if r.is_active]
-    if len(active) == 1:
-        return active[0].id, "camera"
-    if len(cands) == 1:
-        return cands[0].id, "camera"
-    return None, None
+    scale = valid_pixel_scale(row.get("pixel_scale_arcsec"))
+    focal, basis = None, None
+    if scale and pixel:
+        focal, basis = ARCSEC_PER_RADIAN_OVER_1000 * pixel / scale, "scale"
+    else:
+        header = _num(row.get("focallen")) or _num(row.get("focal_length"))
+        if header:
+            focal, basis = header, "header"
+    return {"bin": b, "pixel_um": pixel, "scale": scale, "focal": focal, "focal_basis": basis}
 
 
 # ---------------------------------------------------------------------------
-# Grouping
+# Buckets
 # ---------------------------------------------------------------------------
 
-def _part(value: Any) -> str:
-    return "none" if value is None or value == "" else str(value)
-
-
-def _partition_key(row: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
-    """(subtype, cam_key, w, h, binning) as rendered key parts, so the key alone identifies the partition."""
+def _groups(rows: Iterable[Dict[str, Any]], rigs: List[RigInfo]) -> Iterator[Tuple[str, List[Dict[str, Any]]]]:
+    """
+    Yield (key, members) per bucket. Members are row copies carrying "_opt"
+    (frame_optics) and "_focal", sorted by (_focal, id). Shared by
+    group_unassigned and members_by_key so the two can't drift apart.
+    """
     from app.services.equipment_detection import normalize_camera_name
 
-    return (_part(row.get("subtype")), _part(normalize_camera_name(row.get("camera_name")) or ""),
-            _part(row.get("width_pixels")), _part(row.get("height_pixels")), _part(row.get("binning")))
-
-
-def _groups(rows: Iterable[Dict[str, Any]]) -> Iterator[Tuple[str, List[Dict[str, Any]]]]:
-    """
-    Yield (key, members) for every group. Members are copies of the rows with
-    "_scale" set (valid pixel scale or None), sorted by (_scale, id). Shared
-    by group_unassigned and member_ids so the two can't drift apart.
-    """
-    partitions: Dict[Tuple[str, ...], Dict[str, list]] = {}
+    sensors = known_sensors(rigs)
+    ref_cache: Dict[Any, Optional[Sensor]] = {}
+    cam_cache: Dict[Any, str] = {}
+    partitions: Dict[Tuple[str, int], Dict[str, list]] = {}
     for row in rows:
+        raw = unchar(row.get("camera_name"))
+        name = raw if isinstance(raw, str) or raw is None else str(raw)
+        if name not in ref_cache:
+            ref_cache[name] = reference_sensor(name, sensors)
+            cam_cache[name] = normalize_camera_name(name) or "none"
         item = dict(row)
-        item["_scale"] = valid_pixel_scale(row.get("pixel_scale_arcsec"))
-        p = partitions.setdefault(_partition_key(item), {"scaled": [], "unscaled": []})
-        (p["scaled"] if item["_scale"] is not None else p["unscaled"]).append(item)
+        item["_opt"] = frame_optics(row, ref_cache[name])
+        item["_focal"] = item["_opt"]["focal"]
+        p = partitions.setdefault((cam_cache[name], item["_opt"]["bin"]), {"known": [], "unknown": []})
+        (p["known"] if item["_focal"] else p["unknown"]).append(item)
 
-    for (subtype, cam, w, h, binning), p in partitions.items():
-        prefix = f"{subtype}|{cam}|{w}x{h}|{binning}"
-        # cluster_by_scale is order-sensitive only through its input order, so sort first.
-        scaled = sorted(p["scaled"], key=lambda m: (m["_scale"], m.get("id") or 0))
-        for members in cluster_by_scale(scaled, "_scale", CLUSTER_TOLERANCE):
-            yield f"{prefix}|{members[0]['_scale']:.4f}", members
-        if p["unscaled"]:
-            yield f"{prefix}|-", sorted(p["unscaled"], key=lambda m: m.get("id") or 0)
+    for (cam, b), p in partitions.items():
+        prefix = f"{cam}|b{b}"
+        known = sorted(p["known"], key=lambda m: (m["_focal"], m.get("id") or 0))
+        for members in cluster_by_scale(known, "_focal", FOCAL_TOLERANCE):
+            yield f"{prefix}|{members[0]['_focal']:.1f}", members
+        if p["unknown"]:
+            yield f"{prefix}|-", sorted(p["unknown"], key=lambda m: m.get("id") or 0)
+
+
+def _median(values: List[float]) -> Optional[float]:
+    return statistics.median(values) if values else None
 
 
 def _iso(value: Any) -> Optional[str]:
@@ -121,47 +147,85 @@ def _iso(value: Any) -> Optional[str]:
 
 
 def _representative(members: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """The member with the median scale (the first member for an unscaled group)."""
-    median = weighted_median([(m["_scale"], 1) for m in members if m["_scale"] is not None])
+    """The member with the median focal length (the first member for an unknown-focal bucket)."""
+    median = weighted_median([(m["_focal"], 1) for m in members if m["_focal"]])
     if median is None:
         return members[0]
-    return next(m for m in members if m["_scale"] == median)
+    return next(m for m in members if m["_focal"] == median)
+
+
+def suggest_rig(bucket: Dict[str, Any], rep: Dict[str, Any], rigs: List[RigInfo]) -> Tuple[Optional[int], Optional[str]]:
+    """
+    bucket: {"camera_name", "binning", "pixel_um", "focal_mm"}; rep: a member
+    row (assign_rig's image dict). Returns (rig_id, "exact" | "focal") or (None, None).
+    """
+    rig_id, _ = assign_rig(rep, rigs)
+    if rig_id is not None:
+        return rig_id, "exact"
+
+    focal = bucket.get("focal_mm")
+    if not focal:
+        return None, None
+    best = None
+    for r in rigs:
+        if not camera_matches(bucket.get("camera_name"), r.patterns) or not r.effective_focal:
+            continue
+        rig_pixel = r.pixel_size_um * r.binning if r.pixel_size_um else None
+        if rig_pixel and bucket.get("pixel_um"):
+            if abs(rig_pixel - bucket["pixel_um"]) / rig_pixel > PIXEL_TOLERANCE:
+                continue
+        elif r.binning != bucket.get("binning"):
+            continue
+        err = abs(r.effective_focal - focal) / r.effective_focal
+        if err <= FOCAL_TOLERANCE:
+            rank = (err, not r.is_active, r.id)
+            if best is None or rank < best[0]:
+                best = (rank, r.id)
+    return (best[1], "focal") if best else (None, None)
 
 
 def _describe(key: str, members: List[Dict[str, Any]], rigs: List[RigInfo]) -> Dict[str, Any]:
-    first = members[0]
-    scales = [m["_scale"] for m in members if m["_scale"] is not None]
     names = Counter(m.get("camera_name") for m in members if m.get("camera_name"))
-    camera_name = max(names.items(), key=lambda kv: (kv[1], kv[0]))[0] if names else None
-    focals = [f for f in ((_num(m.get("focallen")) or _num(m.get("focal_length"))) for m in members) if f]
+    camera_name = max(names.items(), key=lambda kv: (kv[1], str(kv[0])))[0] if names else None
+    focals = [m["_focal"] for m in members if m["_focal"]]
+    scales = [m["_opt"]["scale"] for m in members if m["_opt"]["scale"]]
+    pixels = [m["_opt"]["pixel_um"] for m in members if m["_opt"]["pixel_um"]]
+    subtypes = Counter(m.get("subtype") for m in members)
+    dims = Counter((m.get("width_pixels"), m.get("height_pixels")) for m in members
+                   if m.get("width_pixels") and m.get("height_pixels"))
     filters = {normalize_filter(m.get("filter_name")) for m in members} - {"None"}
     captures = [m["capture_date"] for m in members if m.get("capture_date") is not None]
+    bases = Counter(m["_opt"]["focal_basis"] for m in members if m["_opt"]["focal_basis"])
 
     rep = _representative(members)
     _, reason = assign_rig(rep, rigs)
-    suggested, basis = suggest_rig(rep, rigs)
-    median = weighted_median([(s, 1) for s in scales])
-    return {
+    pixel = _median(pixels)
+    focal = _median(focals)
+    bucket = {
         "key": key,
-        "subtype": first.get("subtype"),
         "camera_name": camera_name,
-        "width_pixels": first.get("width_pixels"),
-        "height_pixels": first.get("height_pixels"),
-        "binning": first.get("binning"),
+        "binning": members[0]["_opt"]["bin"],
+        "pixel_um": round(pixel, 3) if pixel else None,
+        "focal_mm": round(focal, 1) if focal else None,
+        "focal_min": round(min(focals), 1) if focals else None,
+        "focal_max": round(max(focals), 1) if focals else None,
+        "focal_basis": bases.most_common(1)[0][0] if bases else None,
         "scale_min": round(min(scales), 4) if scales else None,
         "scale_max": round(max(scales), 4) if scales else None,
-        "scale_median": round(median, 4) if median is not None else None,
-        "focal_mm": round(statistics.median(focals), 1) if focals else None,
-        "filters": sorted(filters, key=filter_sort_key),
         "count": len(members),
+        "sub_count": subtypes.get("SUB_FRAME", 0),
+        "master_count": subtypes.get("INTEGRATION_MASTER", 0),
+        "frame_sizes": [f"{w}x{h}" for (w, h), _ in dims.most_common(3)],
+        "frame_size_count": len(dims),
+        "filters": sorted(filters, key=filter_sort_key),
         "total_exposure_s": float(sum(float(m.get("exposure_time_seconds") or 0) for m in members)),
         "first_capture": _iso(min(captures)) if captures else None,
         "last_capture": _iso(max(captures)) if captures else None,
         "reason": reason,
-        "suggested_rig_id": suggested,
-        "suggestion_basis": basis,
         "sample_image_id": rep.get("id"),
     }
+    bucket["suggested_rig_id"], bucket["suggestion_basis"] = suggest_rig(bucket, rep, rigs)
+    return bucket
 
 
 def group_unassigned(rows: Iterable[Dict[str, Any]], rigs: List[RigInfo]) -> List[Dict[str, Any]]:
@@ -169,16 +233,15 @@ def group_unassigned(rows: Iterable[Dict[str, Any]], rigs: List[RigInfo]) -> Lis
     rows: one dict per unassigned allocatable image (id, camera_name, subtype,
     width_pixels, height_pixels, binning, pixel_scale_arcsec, xpixsz, focallen,
     focal_length, filter_name, exposure_time_seconds, capture_date).
-    Returns one summary per group, largest first.
+    Returns one summary per bucket, largest first.
     """
-    groups = [_describe(key, members, rigs) for key, members in _groups(rows)]
+    groups = [_describe(key, members, rigs) for key, members in _groups(rows, rigs)]
     groups.sort(key=lambda g: (-g["count"], g["key"]))
     return groups
 
 
-def member_ids(rows: Iterable[Dict[str, Any]], rigs: List[RigInfo], key: str) -> Optional[List[int]]:
-    """The ids of the group whose key equals `key`, or None when no group has it."""
-    for k, members in _groups(rows):
-        if k == key:
-            return [m["id"] for m in members]
-    return None
+def members_by_key(rows: Iterable[Dict[str, Any]], rigs: List[RigInfo],
+                   keys: Iterable[str]) -> Dict[str, List[int]]:
+    """{key: ids} for the requested keys that still exist (missing keys are left out)."""
+    wanted = set(keys)
+    return {k: [m["id"] for m in members] for k, members in _groups(rows, rigs) if k in wanted}
