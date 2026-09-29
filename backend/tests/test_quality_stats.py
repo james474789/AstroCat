@@ -6,6 +6,7 @@ import pytest
 
 from app.services.quality_stats import (
     build_stats, by_altitude, filter_offsets, histogram, hfr_vs_temperature, monthly, use_arcsec_for,
+    values,
 )
 
 
@@ -43,8 +44,14 @@ def test_monthly_and_altitude_bins():
 
 def test_histogram_has_all_counts():
     rows = [_r(i, fwhm=2 + i * 0.01) for i in range(100)]
-    h = histogram(rows, True, bins=10)
+    h = histogram(values(rows, True), bins=10)
     assert len(h) == 10 and sum(b["count"] for b in h) == 100
+
+
+def test_histogram_drops_sparse_bins():
+    # Bins with fewer than MIN_BIN subs are left out so thin tails don't stretch the chart.
+    h = histogram([2.0] * 50 + [5.0] * 3, bins=3)
+    assert [b["count"] for b in h] == [50]
 
 
 def test_hfr_temperature_slope():
