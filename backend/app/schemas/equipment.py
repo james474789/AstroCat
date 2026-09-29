@@ -162,7 +162,20 @@ class DetectApply(_Body):
     include_older: bool = False
 
 
-class UnassignedAssign(_Body):
-    """R0b: allocate one "Unassigned images" group (identified by its key) to a rig."""
+class UnassignedAssignItem(_Body):
+    """R0b: one "Unassigned images" bucket (identified by its key) and the rig to allocate it to."""
     key: str = Field(..., min_length=1, max_length=400)
     rig_id: int
+
+
+class UnassignedAssign(_Body):
+    """R0b: allocate several buckets at once, each to its own rig."""
+    items: List[UnassignedAssignItem] = Field(..., min_length=1, max_length=1000)
+
+    @field_validator("items")
+    @classmethod
+    def _unique_keys(cls, v):
+        keys = [i.key for i in v]
+        if len(set(keys)) != len(keys):
+            raise ValueError("each bucket key may appear only once")
+        return v

@@ -931,11 +931,12 @@ export async function fetchUnassignedImages() {
     return handleResponse(await fetch(`${API_BASE_URL}/equipment/unassigned`, { credentials: 'include' }));
 }
 
-export async function assignUnassignedGroup(key, rigId) {
+// items: [{ key, rig_id }] - each bucket allocated to its own rig.
+export async function assignUnassignedGroups(items) {
     return handleResponse(await fetch(`${API_BASE_URL}/equipment/unassigned/assign`, {
         method: 'POST',
         headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ key, rig_id: rigId }),
+        body: JSON.stringify({ items }),
         credentials: 'include',
     }));
 }

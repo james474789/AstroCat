@@ -143,21 +143,29 @@ frames and allocate them by hand, in bulk. Design: [R0b-rig-allocation.md](../de
   deprecated and calibration frames are never listed or allocated.
 - **Manual.** Allocations are written as `rig_source = 'MANUAL'`, so the batch task and the
   indexer hook never overwrite them (not even `scope=all`).
-- **Equipment → Rigs → "Unassigned images".** This panel groups rig-less frames by subtype,
-  camera, frame size and binning. It then clusters each of those by solved plate scale
-  (5%); unsolved frames form their own group. Each group shows its scale range, focal
-  length, filters, image count, exposure, dates and why auto-assignment failed.
-  - **Suggestion.** A group can pre-select a rig (`app/services/rig_allocation.py`
-    `suggest_rig`); the user still confirms. The rig is taken from, in order:
-    1. an exact `assign_rig` match;
-    2. otherwise, among rigs whose camera matches (dimensions ignored), the nearest
-       declared/measured scale within 25%;
-    3. otherwise, exactly one rig within 10% on `FOCALLEN`/EXIF focal length;
-    4. otherwise, the only active rig on that camera, or the only rig.
-  - **Assigning.** An admin picks a rig and clicks Assign. The server re-derives the
-    group's members from its key, so ids never come from the client. If the group has
-    changed since the page loaded, it returns 409 and the panel refreshes. Anyone can view
-    the panel.
+- **Equipment → Rigs → "Unassigned images".** Rig-less frames are bucketed by what
+  identifies a rig physically (`app/services/rig_allocation.py`):
+  - **camera**: the normalised camera name;
+  - **binning, derived** against the camera's native (largest) sensor from the configured
+    cameras or the seed table: frame dimensions first, then XPIXSZ. Header binning is only
+    a fallback, because drivers label the same sensor mode differently;
+  - **calculated focal length**: `206.265 × effective pixel ÷ solved scale`, where the
+    effective pixel is XPIXSZ or native pixel × binning. Unsolved frames use `FOCALLEN` /
+    the EXIF focal length. Focal lengths cluster at 5%. Frames with no focal evidence form
+    one "unknown" bucket per camera and binning.
+
+  Subs and masters share a bucket; cropped masters keep the rig's focal length. Drizzled
+  masters calculate to a multiple of it, so they land in their own bucket. Each bucket
+  shows its focal range, sub/master counts, frame sizes, filters, exposure, dates and why
+  auto-assignment failed.
+  - **Suggestion.** A bucket pre-selects a rig when `assign_rig` matches exactly, or when
+    one rig on the same camera has the same effective pixel size (i.e. binning) and an
+    effective focal length within 5%. Otherwise nothing is pre-selected.
+  - **Bulk assigning.** An admin ticks buckets. Picking a rig ticks that bucket, and
+    "Select all with a rig" ticks every bucket that has one. **Assign selected** applies
+    each bucket's own rig in one request. The server re-derives each bucket's members from
+    its key, so ids never come from the client. Buckets that changed since the page loaded
+    are skipped and reported (409 if all of them did). Anyone can view the panel.
 - **Search.** The Rig filter offers Any / Unassigned / each rig. **Assign Rig…** allocates
   a rig to every light sub and master in the current results; other frames are reported
   as skipped. "Clear rig" resets them to auto-assignment.
@@ -211,8 +219,8 @@ See the R0 API contract in the design doc. Reads need a logged-in user; writes n
 | `GET /api/equipment/detect`, `POST /api/equipment/detect/apply` | Proposals / accept |
 | `POST /api/equipment/import/telescopius` | Optional import |
 | `POST /api/equipment/assign?scope=` | Queue assignment |
-| `GET /api/equipment/unassigned` | Rig-less light subs and masters: `{total, groups}` (R0b) |
-| `POST /api/equipment/unassigned/assign` | Admin. `{key, rig_id}`: allocate one group as `MANUAL`. Returns 409 if the group changed. |
+| `GET /api/equipment/unassigned` | Rig-less light subs and masters bucketed by camera, derived binning and calculated focal length: `{total, groups}` (R0b) |
+| `POST /api/equipment/unassigned/assign` | Admin. `{items: [{key, rig_id}]}`: allocate buckets as `MANUAL`. Returns `{updated_count, results, stale_keys}`; 409 if every bucket changed. |
 | `PUT /api/images/bulk/rig?new_rig_id=<id or none>&<search filters>` | Allocate a rig to the light subs and masters in the results; others are counted as skipped |
 | `GET/POST/PUT/DELETE /api/sites[/{id}]` | Sites (`is_default` exclusive) |
 | `GET /api/sites/{id}/horizon/learned`, `PUT .../horizon`, `POST .../horizon/import`, `GET .../horizon/export` | Horizon |

@@ -189,14 +189,17 @@ def test_unassigned_assign_validation():
     from pydantic import ValidationError
     from app.schemas.equipment import UnassignedAssign
 
-    body = UnassignedAssign(key="SUB_FRAME|zwo asi2600mm pro|6248x4176|none|1.4600", rig_id=3)
-    assert body.rig_id == 3
-    with pytest.raises(ValidationError):
-        UnassignedAssign(key="", rig_id=3)
-    with pytest.raises(ValidationError):
-        UnassignedAssign.model_validate({"key": "SUB_FRAME|x|1x1|none|-"})
-    with pytest.raises(ValidationError):
-        UnassignedAssign(key="k" * 401, rig_id=3)
+    body = UnassignedAssign(items=[{"key": "zwo asi2600mm pro|b1|528.4", "rig_id": 3},
+                                   {"key": "zwo asi2600mm pro|b1|-", "rig_id": 4}])
+    assert [i.rig_id for i in body.items] == [3, 4]
+    for bad in ({"items": []},
+                {"items": [{"key": "", "rig_id": 3}]},
+                {"items": [{"key": "k"}]},
+                {"items": [{"key": "k" * 401, "rig_id": 3}]},
+                {"items": [{"key": "k", "rig_id": 3}, {"key": "k", "rig_id": 4}]},
+                {}):
+        with pytest.raises(ValidationError):
+            UnassignedAssign.model_validate(bad)
 
 
 def test_unassigned_routes_are_registered():
