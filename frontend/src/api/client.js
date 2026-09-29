@@ -136,6 +136,7 @@ export async function fetchImages(params = {}) {
         sort_order: params.sort_order,
         frame_type: params.frame_type,
         target_key: params.target_key,
+        rig_id: params.rig_id,
     };
 
     const queryString = buildQueryString(queryParams);
@@ -487,6 +488,18 @@ export async function bulkUpdateFrameType(newFrameType, searchParams) {
     // Pass search filters as query parameters, same pattern as bulkUpdateImageType.
     const queryString = new URLSearchParams(searchParams).toString();
     return handleResponse(await fetch(`${API_BASE_URL}/images/bulk/frame-type?new_frame_type=${encodeURIComponent(newFrameType)}&${queryString}`, {
+        method: 'PUT',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        credentials: 'include'
+    }));
+}
+
+// ============ R0b: Rig allocation ============
+
+export async function bulkAssignRig(newRigId, searchParams) {
+    // Pass search filters as query parameters, same pattern as bulkUpdateFrameType.
+    const queryString = new URLSearchParams(searchParams).toString();
+    return handleResponse(await fetch(`${API_BASE_URL}/images/bulk/rig?new_rig_id=${encodeURIComponent(newRigId)}&${queryString}`, {
         method: 'PUT',
         headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include'
@@ -911,6 +924,19 @@ export async function triggerEquipmentAssign(scope = 'unassigned') {
         method: 'POST',
         headers: withCsrfHeaders(),
         credentials: 'include'
+    }));
+}
+
+export async function fetchUnassignedImages() {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment/unassigned`, { credentials: 'include' }));
+}
+
+export async function assignUnassignedGroup(key, rigId) {
+    return handleResponse(await fetch(`${API_BASE_URL}/equipment/unassigned/assign`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ key, rig_id: rigId }),
+        credentials: 'include',
     }));
 }
 

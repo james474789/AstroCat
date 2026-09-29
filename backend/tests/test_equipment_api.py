@@ -183,3 +183,23 @@ def test_update_image_request_distinguishes_absent_and_null():
     assert UpdateImageRequest.model_validate({"rig_id": 4}).rig_id == 4
     for field in ("rig_id", "rig_name", "rig_source", "site_id", "site_name"):
         assert field in ImageDetail.model_fields
+
+
+def test_unassigned_assign_validation():
+    from pydantic import ValidationError
+    from app.schemas.equipment import UnassignedAssign
+
+    body = UnassignedAssign(key="SUB_FRAME|zwo asi2600mm pro|6248x4176|none|1.4600", rig_id=3)
+    assert body.rig_id == 3
+    with pytest.raises(ValidationError):
+        UnassignedAssign(key="", rig_id=3)
+    with pytest.raises(ValidationError):
+        UnassignedAssign.model_validate({"key": "SUB_FRAME|x|1x1|none|-"})
+    with pytest.raises(ValidationError):
+        UnassignedAssign(key="k" * 401, rig_id=3)
+
+
+def test_unassigned_routes_are_registered():
+    paths = {(r.path, m) for r in api.router.routes for m in r.methods}
+    assert ("/unassigned", "GET") in paths
+    assert ("/unassigned/assign", "POST") in paths

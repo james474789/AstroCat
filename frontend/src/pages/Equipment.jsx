@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Camera as CameraIcon, Aperture, SlidersHorizontal, MapPin,
@@ -11,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import {
     fetchEquipment, fetchEquipmentDetect, applyEquipmentDetect, importFromTelescopius,
-    triggerEquipmentAssign,
+    triggerEquipmentAssign, fetchUnassignedImages, assignUnassignedGroup,
     createCamera, updateCamera, deleteCamera,
     createOptic, updateOptic, deleteOptic,
     createFilter, updateFilter, deleteFilter,
@@ -19,7 +20,7 @@ import {
     fetchSites, createSite, updateSite, deleteSite,
     fetchLearnedHorizon, updateSiteHorizon, importSiteHorizon, exportSiteHorizon,
     computePixelScale, computeFovDeg, computeFocalRatio,
-    formatDateTime,
+    formatDateTime, formatHours,
 } from '../api/client';
 import './Equipment.css';
 import QualityValue from '../components/quality/QualityValue';
@@ -1034,6 +1035,241 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
 
 // ============ Main page ============
 
+// R0b: rig-less light subs and masters, grouped for bulk allocation.
+const REASON_TEXT = {
+    no_camera_match: "Camera or frame size doesn't match any rig",
+    scale_mismatch: "Plate scale doesn't match any rig",
+    ambiguous: "Several rigs fit; couldn't choose",
+    no_active_rig: 'Only inactive rigs match',
+};
+const SUGGESTION_TEXT = {
+    exact: 'matches rig',
+    scale: 'Suggested (by scale)',
+    focal: 'Suggested (by focal length)',
+    camera: 'Suggested (by camera)',
+};
+const UNASSIGNED_OPEN_KEY = 'equipment.unassigned.open';
+
+function readUnassignedOpen() {
+    try {
+        return localStorage.getItem(UNASSIGNED_OPEN_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function writeUnassignedOpen(open) {
+    try {
+        localStorage.setItem(UNASSIGNED_OPEN_KEY, open ? '1' : '0');
+    } catch {
+        // storage unavailable: the section just starts collapsed next time
+    }
+}
+
+function rigOptionLabel(rig) {
+    const parts = [rig.name];
+    if (rig.camera_name) parts.push(rig.camera_name);
+    if (rig.effective_focal_mm) parts.push(`${Math.round(rig.effective_focal_mm)} mm`);
+    return parts.join(' · ');
+}
+
+function unassignedSearchLink(g) {
+    const params = new URLSearchParams({ rig_id: 'none', frame_type: 'LIGHT', subtype: g.subtype });
+    if (g.camera_name) params.set('camera', g.camera_name);
+    if (g.scale_min != null && g.scale_max != null) {
+        params.set('pixel_scale_min', Math.max(0, g.scale_min - 0.005).toFixed(3));
+        params.set('pixel_scale_max', (g.scale_max + 0.005).toFixed(3));
+    }
+    return `/search?${params.toString()}`;
+}
+
+function formatScaleRange(g) {
+    if (g.scale_min == null) return 'unsolved';
+    const lo = g.scale_min.toFixed(2);
+    const hi = g.scale_max.toFixed(2);
+    return lo === hi ? `${lo}″` : `${lo}–${hi}″`;
+}
+
+function UnassignedImagesSection({ rigs, isAdmin, showToast, onAssigned }) {
+    const queryClient = useQueryClient();
+    const [open, setOpen] = useState(readUnassignedOpen);
+    const [choices, setChoices] = useState({}); // key -> rig id string
+    const [busyKey, setBusyKey] = useState(null);
+
+    const query = useQuery({
+        queryKey: ['equipmentUnassigned'],
+        queryFn: fetchUnassignedImages,
+        staleTime: 60_000,
+    });
+
+    const rigNames = useMemo(() => Object.fromEntries(rigs.map((r) => [String(r.id), r.name])), [rigs]);
+
+    if (query.isLoading) {
+        return (
+            <div className="unassigned-section">
+                <p className="muted small"><span className="spinner spinner-inline" /> Looking for unassigned images…</p>
+            </div>
+        );
+    }
+    if (query.isError) {
+        return (
+            <div className="unassigned-section">
+                <p className="muted small">Couldn't load unassigned images: {query.error?.message}</p>
+            </div>
+        );
+    }
+
+    const total = query.data?.total || 0;
+    const groups = query.data?.groups || [];
+    if (total === 0) return null;
+
+    function toggle() {
+        const next = !open;
+        setOpen(next);
+        writeUnassignedOpen(next);
+    }
+
+    function selectedFor(g) {
+        if (choices[g.key] !== undefined) return choices[g.key];
+        return g.suggested_rig_id != null ? String(g.suggested_rig_id) : '';
+    }
+
+    async function handleAssign(g) {
+        const rigId = selectedFor(g);
+        if (!rigId) return;
+        setBusyKey(g.key);
+        try {
+            const result = await assignUnassignedGroup(g.key, Number(rigId));
+            const n = result?.updated_count ?? 0;
+            showToast(`Assigned ${n} image${n === 1 ? '' : 's'} to ${rigNames[rigId] || `rig #${rigId}`}`, 'success');
+            setChoices((prev) => {
+                const next = { ...prev };
+                delete next[g.key];
+                return next;
+            });
+            queryClient.invalidateQueries({ queryKey: ['equipmentUnassigned'] });
+            queryClient.invalidateQueries({ queryKey: ['equipment'] });
+            if (onAssigned) onAssigned();
+        } catch (err) {
+            if (err.status === 409) {
+                showToast('This group changed — refreshed', 'error');
+                query.refetch();
+            } else {
+                showToast(`Failed to assign: ${err.message}`, 'error', 6000);
+            }
+        } finally {
+            setBusyKey(null);
+        }
+    }
+
+    return (
+        <div className="unassigned-section">
+            <button type="button" className="unassigned-header" onClick={toggle} aria-expanded={open}>
+                <span className="unassigned-caret">{open ? '▾' : '▸'}</span>
+                <h3>Unassigned images</h3>
+                <span className="badge badge-warning">{total}</span>
+                <span className="muted small">Light subs and masters that couldn't be matched to a rig automatically.</span>
+            </button>
+            {open && (
+                <div className="unassigned-table-wrap">
+                    <table className="table unassigned-table">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Camera</th>
+                                <th>Frame</th>
+                                <th>Scale</th>
+                                <th>Filters</th>
+                                <th>Images</th>
+                                <th>Dates</th>
+                                <th>Why</th>
+                                <th>Rig</th>
+                                <th />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {groups.map((g) => {
+                                const selected = selectedFor(g);
+                                const isSuggested = g.suggested_rig_id != null && selected === String(g.suggested_rig_id);
+                                const binned = g.binning && !['1', '1x1'].includes(String(g.binning));
+                                const isMaster = g.subtype === 'INTEGRATION_MASTER';
+                                return (
+                                    <tr key={g.key}>
+                                        <td>
+                                            <span className={`badge ${isMaster ? 'badge-primary' : 'badge-success'}`}>
+                                                {isMaster ? 'Master' : 'Sub'}
+                                            </span>
+                                        </td>
+                                        <td>{g.camera_name || <span className="muted">Unknown camera</span>}</td>
+                                        <td className="nowrap">
+                                            {g.width_pixels && g.height_pixels ? `${g.width_pixels}×${g.height_pixels}` : '—'}
+                                            {binned && <div className="muted small">bin {g.binning}</div>}
+                                        </td>
+                                        <td className="nowrap">
+                                            {formatScaleRange(g)}
+                                            {g.focal_mm && <div className="muted small">{Math.round(g.focal_mm)} mm</div>}
+                                        </td>
+                                        <td>
+                                            <div className="chip-row">
+                                                {g.filters.map((f) => <span key={f} className="chip">{f.replace(/^Other:/, '')}</span>)}
+                                            </div>
+                                        </td>
+                                        <td className="nowrap">
+                                            {g.count}
+                                            <div className="muted small">{formatHours(g.total_exposure_s)}</div>
+                                        </td>
+                                        <td className="small">
+                                            {g.first_capture ? formatDateTime(g.first_capture) : '—'}
+                                            {g.last_capture && g.last_capture !== g.first_capture && (
+                                                <div className="muted">to {formatDateTime(g.last_capture)}</div>
+                                            )}
+                                        </td>
+                                        <td className="small">{REASON_TEXT[g.reason] || g.reason}</td>
+                                        <td>
+                                            <select
+                                                className="input unassigned-rig-select"
+                                                value={selected}
+                                                onChange={(e) => setChoices((prev) => ({ ...prev, [g.key]: e.target.value }))}
+                                                disabled={!isAdmin}
+                                            >
+                                                <option value="">Choose rig…</option>
+                                                {rigs.map((r) => <option key={r.id} value={String(r.id)}>{rigOptionLabel(r)}</option>)}
+                                            </select>
+                                            {isSuggested && (
+                                                <div className="muted small">{SUGGESTION_TEXT[g.suggestion_basis] || 'Suggested'}</div>
+                                            )}
+                                        </td>
+                                        <td>
+                                            <div className="unassigned-actions">
+                                                {isAdmin && (
+                                                    <button
+                                                        className="btn btn-primary btn-sm"
+                                                        onClick={() => handleAssign(g)}
+                                                        disabled={!selected || busyKey === g.key}
+                                                    >
+                                                        {busyKey === g.key ? 'Assigning…' : 'Assign'}
+                                                    </button>
+                                                )}
+                                                <Link
+                                                    className="btn btn-ghost btn-sm"
+                                                    to={unassignedSearchLink(g)}
+                                                    title="Approximate — Search can't filter by frame size"
+                                                >
+                                                    View
+                                                </Link>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function Equipment() {
     const { user } = useAuth();
     const isAdmin = !!user?.is_admin;
@@ -1262,6 +1498,7 @@ export default function Equipment() {
                             <Plus size={16} /> Add rig
                         </button>
                     </div>
+                    <UnassignedImagesSection rigs={rigs} isAdmin={isAdmin} showToast={showToast} />
                     </>
                 )
             )}

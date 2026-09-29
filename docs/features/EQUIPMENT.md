@@ -133,6 +133,38 @@ proposals) queues a **debounced** `scope=all` run.
 With `"rig_id": null` it clears the rig and its source. If the field is absent, the rig is
 left alone.
 
+### Unassigned images (R0b)
+
+Auto-assignment never guesses, so some frames keep `rig_id IS NULL`. Masters are hit
+hardest: cropped or drizzled stacks never match the sensor dimensions. You can find these
+frames and allocate them by hand, in bulk. Design: [R0b-rig-allocation.md](../design/R0b-rig-allocation.md).
+
+- **Scope.** Only light frames with subtype `SUB_FRAME` or `INTEGRATION_MASTER`. Planetary,
+  deprecated and calibration frames are never listed or allocated.
+- **Manual.** Allocations are written as `rig_source = 'MANUAL'`, so the batch task and the
+  indexer hook never overwrite them (not even `scope=all`).
+- **Equipment → Rigs → "Unassigned images".** This panel groups rig-less frames by subtype,
+  camera, frame size and binning. It then clusters each of those by solved plate scale
+  (5%); unsolved frames form their own group. Each group shows its scale range, focal
+  length, filters, image count, exposure, dates and why auto-assignment failed.
+  - **Suggestion.** A group can pre-select a rig (`app/services/rig_allocation.py`
+    `suggest_rig`); the user still confirms. The rig is taken from, in order:
+    1. an exact `assign_rig` match;
+    2. otherwise, among rigs whose camera matches (dimensions ignored), the nearest
+       declared/measured scale within 25%;
+    3. otherwise, exactly one rig within 10% on `FOCALLEN`/EXIF focal length;
+    4. otherwise, the only active rig on that camera, or the only rig.
+  - **Assigning.** An admin picks a rig and clicks Assign. The server re-derives the
+    group's members from its key, so ids never come from the client. If the group has
+    changed since the page loaded, it returns 409 and the panel refreshes. Anyone can view
+    the panel.
+- **Search.** The Rig filter offers Any / Unassigned / each rig. **Assign Rig…** allocates
+  a rig to every light sub and master in the current results; other frames are reported
+  as skipped. "Clear rig" resets them to auto-assignment.
+- **Counts.** `rig.image_count` and `rigs.measured_scale_arcsec` still count light subs
+  only, so manually allocated masters don't change them. Manually allocated subs do feed
+  the measured scale on the next task run.
+
 ## Optics (computed, not stored)
 
 `app/utils/optics.py` computes these for each rig in the API:
@@ -179,9 +211,12 @@ See the R0 API contract in the design doc. Reads need a logged-in user; writes n
 | `GET /api/equipment/detect`, `POST /api/equipment/detect/apply` | Proposals / accept |
 | `POST /api/equipment/import/telescopius` | Optional import |
 | `POST /api/equipment/assign?scope=` | Queue assignment |
+| `GET /api/equipment/unassigned` | Rig-less light subs and masters: `{total, groups}` (R0b) |
+| `POST /api/equipment/unassigned/assign` | Admin. `{key, rig_id}`: allocate one group as `MANUAL`. Returns 409 if the group changed. |
+| `PUT /api/images/bulk/rig?new_rig_id=<id or none>&<search filters>` | Allocate a rig to the light subs and masters in the results; others are counted as skipped |
 | `GET/POST/PUT/DELETE /api/sites[/{id}]` | Sites (`is_default` exclusive) |
 | `GET /api/sites/{id}/horizon/learned`, `PUT .../horizon`, `POST .../horizon/import`, `GET .../horizon/export` | Horizon |
 
-Image list, search and bulk endpoints accept `?rig_id=` and `?site_id=`. `ImageDetail`
+Image list, search and bulk endpoints accept `?rig_id=` (an id, or `none` for images with no rig) and `?site_id=`. `ImageDetail`
 gains `rig_id`, `rig_name`, `rig_source` and `site_id`. `site_name` is the assigned site's
 name when there is one, else the header value.
