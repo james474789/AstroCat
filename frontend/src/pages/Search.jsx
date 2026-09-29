@@ -1,6 +1,10 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { fetchImages, API_BASE_URL, bulkUpdateImageType, bulkSyncMetadata, bulkUpdateFrameType } from '../api/client';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+    fetchImages, API_BASE_URL, bulkUpdateImageType, bulkSyncMetadata, bulkUpdateFrameType,
+    bulkAssignRig, fetchEquipment,
+} from '../api/client';
 import ImageCard from '../components/images/ImageCard';
 import FilterSection from '../components/layout/FilterSection';
 import FilterChips from '../components/layout/FilterChips';
@@ -58,6 +62,16 @@ export default function Search() {
     const [bulkFrameTypeValue, setBulkFrameTypeValue] = useState('DARK');
     const [bulkFrameTypeLoading, setBulkFrameTypeLoading] = useState(false);
     const [bulkFrameTypeMessage, setBulkFrameTypeMessage] = useState('');
+    // R0b: bulk "Assign Rig..." action
+    const [bulkRigModalOpen, setBulkRigModalOpen] = useState(false);
+    const [bulkRigValue, setBulkRigValue] = useState('');
+    const [bulkRigLoading, setBulkRigLoading] = useState(false);
+    const [bulkRigMessage, setBulkRigMessage] = useState('');
+
+    // Same key as Equipment.jsx, so the cache is shared.
+    const equipmentQuery = useQuery({ queryKey: ['equipment'], queryFn: fetchEquipment, staleTime: 60_000 });
+    const rigs = useMemo(() => equipmentQuery.data?.rigs || [], [equipmentQuery.data]);
+    const rigNames = useMemo(() => Object.fromEntries(rigs.map((r) => [String(r.id), r.name])), [rigs]);
 
     useEffect(() => {
         localStorage.setItem('thumbnailSize', thumbnailSize);
@@ -103,6 +117,8 @@ export default function Search() {
         // 'ALL' means no filter. Otherwise DARK/FLAT/BIAS/DARK_FLAT.
         frame_type: searchParams.get('frame_type') || '',
         target_key: searchParams.get('target_key') || '',
+        rig_id: searchParams.get('rig_id') || '',
+        rig_bucket: searchParams.get('rig_bucket') || '',
         ...qualityFromParams(searchParams),
     });
     const { units } = useQualityUnits();
@@ -144,6 +160,8 @@ export default function Search() {
             path: searchParams.get('path') || '',
             frame_type: searchParams.get('frame_type') || '',
             target_key: searchParams.get('target_key') || '',
+            rig_id: searchParams.get('rig_id') || '',
+            rig_bucket: searchParams.get('rig_bucket') || '',
             ...qualityFromParams(searchParams),
         });
 
@@ -193,6 +211,8 @@ export default function Search() {
             // "ALL" is sent through as-is (backend treats it as no filter).
             params.frame_type = searchParams.get('frame_type') || 'LIGHT';
             if (searchParams.get('target_key')) params.target_key = searchParams.get('target_key');
+            if (searchParams.get('rig_id')) params.rig_id = searchParams.get('rig_id');
+            if (searchParams.get('rig_bucket')) params.rig_bucket = searchParams.get('rig_bucket');
             QUALITY_KEYS.forEach((k) => { if (searchParams.get(k)) params[k] = searchParams.get(k); });
 
             const data = await fetchImages(params);
@@ -294,6 +314,8 @@ export default function Search() {
             // F1: "Clear filters" resets to the Lights default, not All.
             frame_type: '',
             target_key: '',
+            rig_id: '',
+            rig_bucket: '',
             ...QUALITY_EMPTY,
         });
         setRaInput('');
@@ -433,6 +455,38 @@ export default function Search() {
         }
     };
 
+    // R0b: allocate a rig to every light sub / master in the current results.
+    const handleBulkAssignRig = async () => {
+        if (!bulkRigValue || images.length === 0) {
+            setBulkRigMessage('No valid selection');
+            return;
+        }
+
+        setBulkRigLoading(true);
+        setBulkRigMessage('');
+
+        try {
+            const result = await bulkAssignRig(bulkRigValue, effectiveSearchParams());
+
+            if (result.errors?.length) {
+                setBulkRigMessage(`✗ ${result.errors.join('; ')}`);
+            } else if (result.updated_count > 0) {
+                setBulkRigMessage(`✓ Updated ${result.updated_count} image(s); skipped ${result.skipped_count}`);
+                setTimeout(() => {
+                    loadImages();
+                    setBulkRigModalOpen(false);
+                }, 1500);
+            } else {
+                setBulkRigMessage(`No images were updated; skipped ${result.skipped_count}`);
+            }
+        } catch (error) {
+            console.error('Error assigning rig:', error);
+            setBulkRigMessage(`Error: ${error.message}`);
+        } finally {
+            setBulkRigLoading(false);
+        }
+    };
+
     return (
         <div className="search-page">
             <div className="page-header">
@@ -482,6 +536,17 @@ export default function Search() {
                     </button>
                     <button
                         className="btn btn-secondary"
+                        onClick={() => {
+                            setBulkRigModalOpen(true);
+                            setBulkRigMessage('');
+                        }}
+                        title="Assign a rig to every light sub-frame and master in the results"
+                        disabled={images.length === 0}
+                    >
+                        🔭 Assign Rig…
+                    </button>
+                    <button
+                        className="btn btn-secondary"
                         onClick={() => setShowFilters(!showFilters)}
                     >
                         {showFilters ? 'Hide Filters' : 'Show Filters'}
@@ -508,6 +573,7 @@ export default function Search() {
                         {/* Active Filters Display */}
                         <FilterChips
                             filters={filters}
+                            rigNames={rigNames}
                             onRemove={(key) => {
                                 if (key === 'frame_type') {
                                     // Removing the "Lights only" chip switches to All;
@@ -580,6 +646,26 @@ export default function Search() {
                                     <option value="FLAT">Flats</option>
                                     <option value="BIAS">Bias</option>
                                     <option value="DARK_FLAT">Dark Flats</option>
+                                </select>
+                            </div>
+
+                            <div className="filter-group">
+                                <label className="label">Rig</label>
+                                <select
+                                    className="input select"
+                                    value={filters.rig_id || ''}
+                                    onChange={(e) => {
+                                        const updatedFilters = { ...filters, rig_id: e.target.value };
+                                        setFilters(updatedFilters);
+                                        applyCurrentFilters(updatedFilters);
+                                    }}
+                                >
+                                    <option value="">Any rig</option>
+                                    <option value="none">Unassigned</option>
+                                    {rigs.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
+                                    {filters.rig_id && filters.rig_id !== 'none' && !rigNames[filters.rig_id] && (
+                                        <option value={filters.rig_id}>{`Rig #${filters.rig_id}`}</option>
+                                    )}
                                 </select>
                             </div>
 
@@ -904,6 +990,16 @@ export default function Search() {
                                 <div key={i} className="skeleton image-skeleton" />
                             ))}
                         </div>
+                    ) : images.length === 0 && totalCount === 0 && searchParams.get('rig_bucket') ? (
+                        // R0c: a bucket link whose images have since been assigned (or regrouped).
+                        <div className="empty-state">
+                            <div className="empty-state-icon">🔭</div>
+                            <h3 className="empty-state-title">No images found</h3>
+                            <p className="empty-state-text">
+                                This bucket no longer exists. Its images may have been assigned to a rig, or the rig list changed.
+                                Go back to <Link to="/equipment">Equipment → Unassigned images</Link> to see the current buckets.
+                            </p>
+                        </div>
                     ) : images.length === 0 ? (
                         <div className="empty-state">
                             <div className="empty-state-icon">🔭</div>
@@ -1156,6 +1252,95 @@ export default function Search() {
                                 style={{ minWidth: '100px' }}
                             >
                                 {bulkFrameTypeLoading ? 'Updating...' : 'Update'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {bulkRigModalOpen && (
+                <div
+                    className="modal-overlay"
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 2000
+                    }}
+                    onClick={() => !bulkRigLoading && setBulkRigModalOpen(false)}
+                >
+                    <div
+                        className="modal-content"
+                        style={{
+                            backgroundColor: 'var(--color-bg-secondary)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: '8px',
+                            padding: '24px',
+                            maxWidth: '420px',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <h3 style={{ marginTop: 0, marginBottom: '16px', color: 'var(--color-text-primary)' }}>
+                            Assign Rig
+                        </h3>
+
+                        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
+                            Assigns a rig to every <strong>Light sub-frame and master</strong> in the current results ({totalCount.toLocaleString()} shown). Other frames are skipped. Assigned rigs are marked manual and won't be changed by auto-assignment.
+                        </p>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label className="label" style={{ display: 'block', marginBottom: '8px' }}>
+                                Rig
+                            </label>
+                            <select
+                                className="input select"
+                                value={bulkRigValue}
+                                onChange={(e) => setBulkRigValue(e.target.value)}
+                                disabled={bulkRigLoading}
+                                style={{ width: '100%' }}
+                            >
+                                <option value="">Choose rig…</option>
+                                {rigs.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
+                                <option value="none">Clear rig (let auto-assign decide)</option>
+                            </select>
+                        </div>
+
+                        {bulkRigMessage && (
+                            <div style={{
+                                padding: '12px',
+                                marginBottom: '16px',
+                                borderRadius: '4px',
+                                backgroundColor: bulkRigMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
+                                color: bulkRigMessage.includes('✓') ? '#4CAF50' : '#F44336',
+                                fontSize: '0.9rem'
+                            }}>
+                                {bulkRigMessage}
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setBulkRigModalOpen(false)}
+                                disabled={bulkRigLoading}
+                                style={{ minWidth: '100px' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={handleBulkAssignRig}
+                                disabled={bulkRigLoading || !bulkRigValue}
+                                style={{ minWidth: '100px' }}
+                            >
+                                {bulkRigLoading ? 'Updating...' : 'Assign'}
                             </button>
                         </div>
                     </div>

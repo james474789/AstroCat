@@ -2,6 +2,26 @@
 
 Status: **Proposed** · Written: 2026-09-29 · Base commit: `b9edc51` (`main`) · Parent: [P0-R0-equipment-sites.md](P0-R0-equipment-sites.md), shipped behaviour in [docs/features/EQUIPMENT.md](../features/EQUIPMENT.md)
 
+## Revision (2026-09-29, after first build)
+
+Grouping by subtype × frame size × header binning × plate scale gave 519 groups on the live
+library, and the 25% scale rule made loose suggestions. The user changed the design as
+follows. This supersedes §4 and §5.2, and the parts of §6.2 and §7.1 that depend on them.
+
+- **Buckets** are camera × **derived** binning × **calculated focal length** (5% clusters).
+  Binning is relative to the camera's native sensor (dims, then XPIXSZ; header binning
+  only as a fallback). Focal length is `206.265 × effective pixel ÷ solved scale`, with
+  FOCALLEN / EXIF as the fallback for unsolved frames. Subs and masters share a bucket.
+  Key: `{cam_key|none}|b{bin}|{focal_min:.1f}`, or `|-` for unknown focal.
+  On the live data this gives 161 buckets (75 with ≥ 20 images).
+- **Suggestion:** an exact `assign_rig` match, else a rig on the same camera with the same
+  effective pixel size (binning) and effective focal length within 5%. Otherwise none.
+  The scale-25% and camera-only fallbacks are gone.
+- **Bulk apply:** `POST /api/equipment/unassigned/assign` takes
+  `{items: [{key, rig_id}]}` and returns `{updated_count, results, stale_keys}`. It
+  returns 409 only when every key is stale. The panel has per-bucket checkboxes, a
+  "Select all with a rig" shortcut and one "Assign selected" button.
+
 ## 0. Who builds this
 
 **Recommended:** use one `general-purpose` agent on **Opus** with `isolation: "worktree"`, and have it build backend and frontend in a single pass. Don't split the work.

@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Camera as CameraIcon, Aperture, SlidersHorizontal, MapPin,
-    Plus, Pencil, Trash2, Sparkles, Upload, Download, RefreshCw,
+    Plus, Pencil, Trash2, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon,
 } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -11,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import {
     fetchEquipment, fetchEquipmentDetect, applyEquipmentDetect, importFromTelescopius,
-    triggerEquipmentAssign,
+    triggerEquipmentAssign, fetchUnassignedImages, assignUnassignedGroups,
     createCamera, updateCamera, deleteCamera,
     createOptic, updateOptic, deleteOptic,
     createFilter, updateFilter, deleteFilter,
@@ -19,7 +20,7 @@ import {
     fetchSites, createSite, updateSite, deleteSite,
     fetchLearnedHorizon, updateSiteHorizon, importSiteHorizon, exportSiteHorizon,
     computePixelScale, computeFovDeg, computeFocalRatio,
-    formatDateTime,
+    formatDateTime, formatHours,
 } from '../api/client';
 import './Equipment.css';
 import QualityValue from '../components/quality/QualityValue';
@@ -126,6 +127,8 @@ function useToast() {
 
 // ============ Rig card ============
 
+const rigSearchLink = (rig) => `/search?rig_id=${rig.id}&frame_type=LIGHT`;
+
 function RigCard({ rig, isAdmin, mountLimit, onEdit, onDelete, onMountToggle, onActiveToggle, onAssign }) {
     const scaleCheckMsg = scaleCheckText(rig.scale_check);
     return (
@@ -197,11 +200,17 @@ function RigCard({ rig, isAdmin, mountLimit, onEdit, onDelete, onMountToggle, on
                     </div>
                 )}
                 <div className="rig-line muted small">
-                    {rig.image_count} subs · last used {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
+                    <Link to={rigSearchLink(rig)} title="Open in Search: all light frames on this rig (subs and masters)">
+                        {rig.image_count} subs
+                    </Link>
+                    {' · last used'} {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
                 </div>
             </div>
 
             <div className="equip-card-actions">
+                <Link className="btn btn-ghost btn-sm" to={rigSearchLink(rig)}>
+                    <SearchIcon size={14} /> View images
+                </Link>
                 <button className="btn btn-ghost btn-sm" onClick={() => onAssign(rig)} disabled={!isAdmin} title="Assign images now">
                     <RefreshCw size={14} /> Assign images
                 </button>
@@ -1034,6 +1043,268 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
 
 // ============ Main page ============
 
+// R0b: rig-less light subs and masters, bucketed by camera, derived binning
+// and calculated focal length, for bulk allocation.
+const REASON_TEXT = {
+    no_camera_match: "Camera or frame size doesn't match any rig",
+    scale_mismatch: "Plate scale doesn't match any rig",
+    ambiguous: "Several rigs fit; couldn't choose",
+    no_active_rig: 'Only inactive rigs match',
+};
+const SUGGESTION_TEXT = {
+    exact: 'matches rig',
+    focal: 'Suggested (camera, binning, focal length)',
+};
+const UNASSIGNED_OPEN_KEY = 'equipment.unassigned.open';
+
+function readUnassignedOpen() {
+    try {
+        return localStorage.getItem(UNASSIGNED_OPEN_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function writeUnassignedOpen(open) {
+    try {
+        localStorage.setItem(UNASSIGNED_OPEN_KEY, open ? '1' : '0');
+    } catch {
+        // storage unavailable: the section just starts collapsed next time
+    }
+}
+
+function rigOptionLabel(rig) {
+    const parts = [rig.name];
+    if (rig.camera_name) parts.push(rig.camera_name);
+    if (rig.effective_focal_mm) parts.push(`${Math.round(rig.effective_focal_mm)} mm`);
+    if (rig.binning > 1) parts.push(`bin ${rig.binning}`);
+    return parts.join(' · ');
+}
+
+const bucketSearchLink = (g) => `/search?rig_bucket=${encodeURIComponent(g.key)}`;
+
+function formatFocal(g) {
+    if (g.focal_mm == null) return 'unknown';
+    const lo = Math.round(g.focal_min);
+    const hi = Math.round(g.focal_max);
+    return lo === hi ? `${lo} mm` : `${lo}–${hi} mm`;
+}
+
+function UnassignedImagesSection({ rigs, isAdmin, showToast }) {
+    const queryClient = useQueryClient();
+    const [open, setOpen] = useState(readUnassignedOpen);
+    const [choices, setChoices] = useState({});   // key -> rig id string (overrides the suggestion)
+    const [selected, setSelected] = useState({}); // key -> true
+    const [busy, setBusy] = useState(false);
+
+    const query = useQuery({
+        queryKey: ['equipmentUnassigned'],
+        queryFn: fetchUnassignedImages,
+        staleTime: 60_000,
+    });
+
+    const groups = useMemo(() => query.data?.groups || [], [query.data]);
+
+    if (query.isLoading) {
+        return (
+            <div className="unassigned-section">
+                <p className="muted small"><span className="spinner spinner-inline" /> Looking for unassigned images…</p>
+            </div>
+        );
+    }
+    if (query.isError) {
+        return (
+            <div className="unassigned-section">
+                <p className="muted small">Couldn't load unassigned images: {query.error?.message}</p>
+            </div>
+        );
+    }
+
+    const total = query.data?.total || 0;
+    if (total === 0) return null;
+
+    function rigFor(g) {
+        if (choices[g.key] !== undefined) return choices[g.key];
+        return g.suggested_rig_id != null ? String(g.suggested_rig_id) : '';
+    }
+
+    // Only buckets that are ticked and have a rig are applied.
+    const ready = groups.filter((g) => selected[g.key] && rigFor(g));
+    const readyImages = ready.reduce((sum, g) => sum + g.count, 0);
+    const suggestedCount = groups.filter((g) => g.suggested_rig_id != null).length;
+
+    function toggleOpen() {
+        const next = !open;
+        setOpen(next);
+        writeUnassignedOpen(next);
+    }
+
+    function chooseRig(g, value) {
+        setChoices((prev) => ({ ...prev, [g.key]: value }));
+        setSelected((prev) => ({ ...prev, [g.key]: !!value }));
+    }
+
+    function selectSuggested() {
+        setSelected(Object.fromEntries(groups.filter((g) => rigFor(g)).map((g) => [g.key, true])));
+    }
+
+    async function handleAssign() {
+        if (ready.length === 0) return;
+        setBusy(true);
+        try {
+            const result = await assignUnassignedGroups(ready.map((g) => ({ key: g.key, rig_id: Number(rigFor(g)) })));
+            const n = result?.updated_count ?? 0;
+            const buckets = result?.results?.length ?? 0;
+            const stale = result?.stale_keys?.length ?? 0;
+            let message = `Assigned ${n} image${n === 1 ? '' : 's'} in ${buckets} bucket${buckets === 1 ? '' : 's'}`;
+            if (stale) message += ` — ${stale} changed and were skipped; refreshed`;
+            showToast(message, stale ? 'info' : 'success', 6000);
+            setChoices({});
+            setSelected({});
+            queryClient.invalidateQueries({ queryKey: ['equipmentUnassigned'] });
+            queryClient.invalidateQueries({ queryKey: ['equipment'] });
+        } catch (err) {
+            if (err.status === 409) {
+                showToast('These buckets changed — refreshed', 'error');
+                setSelected({});
+                query.refetch();
+            } else {
+                showToast(`Failed to assign: ${err.message}`, 'error', 6000);
+            }
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    return (
+        <div className="unassigned-section">
+            <button type="button" className="unassigned-header" onClick={toggleOpen} aria-expanded={open}>
+                <span className="unassigned-caret">{open ? '▾' : '▸'}</span>
+                <h3>Unassigned images</h3>
+                <span className="badge badge-warning">{total}</span>
+                <span className="muted small">
+                    Light subs and masters that couldn't be matched to a rig automatically, grouped by camera, binning and calculated focal length.
+                </span>
+            </button>
+            {open && (
+                <>
+                    {isAdmin && (
+                        <div className="unassigned-toolbar">
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={selectSuggested} disabled={suggestedCount === 0 && Object.keys(choices).length === 0}>
+                                Select all with a rig ({groups.filter((g) => rigFor(g)).length})
+                            </button>
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelected({})} disabled={ready.length === 0}>
+                                Clear selection
+                            </button>
+                            <button type="button" className="btn btn-primary btn-sm" onClick={handleAssign} disabled={busy || ready.length === 0}>
+                                {busy ? 'Assigning…' : `Assign selected (${ready.length} bucket${ready.length === 1 ? '' : 's'} · ${readyImages} image${readyImages === 1 ? '' : 's'})`}
+                            </button>
+                        </div>
+                    )}
+                    <div className="unassigned-table-wrap">
+                        <table className="table unassigned-table">
+                            <thead>
+                                <tr>
+                                    {isAdmin && <th />}
+                                    <th>Camera</th>
+                                    <th>Bin</th>
+                                    <th>Focal length</th>
+                                    <th>Images</th>
+                                    <th>Frame sizes</th>
+                                    <th>Filters</th>
+                                    <th>Dates</th>
+                                    <th>Why</th>
+                                    <th>Rig</th>
+                                    <th />
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {groups.map((g) => {
+                                    const rig = rigFor(g);
+                                    const isSuggested = g.suggested_rig_id != null && rig === String(g.suggested_rig_id);
+                                    return (
+                                        <tr key={g.key} className={selected[g.key] ? 'selected' : undefined}>
+                                            {isAdmin && (
+                                                <td>
+                                                    <input
+                                                        type="checkbox"
+                                                        aria-label="Select bucket"
+                                                        checked={!!selected[g.key] && !!rig}
+                                                        disabled={!rig}
+                                                        title={rig ? 'Include in "Assign selected"' : 'Choose a rig first'}
+                                                        onChange={(e) => setSelected((prev) => ({ ...prev, [g.key]: e.target.checked }))}
+                                                    />
+                                                </td>
+                                            )}
+                                            <td>{g.camera_name || <span className="muted">Unknown camera</span>}</td>
+                                            <td className="nowrap">
+                                                {g.binning}
+                                                {g.pixel_um && <div className="muted small">{g.pixel_um} µm</div>}
+                                            </td>
+                                            <td className="nowrap">
+                                                {formatFocal(g)}
+                                                {g.focal_basis === 'header' && <div className="muted small">from header</div>}
+                                            </td>
+                                            <td className="nowrap">
+                                                <Link to={bucketSearchLink(g)} title={`Show the ${g.count} images in this bucket`}>{g.count}</Link>
+                                                <div className="muted small">
+                                                    {g.master_count ? `${g.sub_count} subs · ${g.master_count} masters` : 'subs'}
+                                                </div>
+                                                <div className="muted small">{formatHours(g.total_exposure_s)}</div>
+                                            </td>
+                                            <td className="small">
+                                                {g.frame_sizes.map((d) => <div key={d}>{d.replace('x', '×')}</div>)}
+                                                {g.frame_size_count > g.frame_sizes.length && (
+                                                    <div className="muted">+{g.frame_size_count - g.frame_sizes.length} more</div>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <div className="chip-row">
+                                                    {g.filters.map((f) => <span key={f} className="chip">{f.replace(/^Other:/, '')}</span>)}
+                                                </div>
+                                            </td>
+                                            <td className="small">
+                                                {g.first_capture ? formatDateTime(g.first_capture) : '—'}
+                                                {g.last_capture && g.last_capture !== g.first_capture && (
+                                                    <div className="muted">to {formatDateTime(g.last_capture)}</div>
+                                                )}
+                                            </td>
+                                            <td className="small">{REASON_TEXT[g.reason] || g.reason}</td>
+                                            <td>
+                                                <select
+                                                    className="input unassigned-rig-select"
+                                                    value={rig}
+                                                    onChange={(e) => chooseRig(g, e.target.value)}
+                                                    disabled={!isAdmin || busy}
+                                                >
+                                                    <option value="">Choose rig…</option>
+                                                    {rigs.map((r) => <option key={r.id} value={String(r.id)}>{rigOptionLabel(r)}</option>)}
+                                                </select>
+                                                {isSuggested && (
+                                                    <div className="muted small">{SUGGESTION_TEXT[g.suggestion_basis] || 'Suggested'}</div>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <Link
+                                                    className="btn btn-ghost btn-sm"
+                                                    to={bucketSearchLink(g)}
+                                                    title={`Show the ${g.count} images in this bucket`}
+                                                >
+                                                    View images
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
 export default function Equipment() {
     const { user } = useAuth();
     const isAdmin = !!user?.is_admin;
@@ -1262,6 +1533,7 @@ export default function Equipment() {
                             <Plus size={16} /> Add rig
                         </button>
                     </div>
+                    <UnassignedImagesSection rigs={rigs} isAdmin={isAdmin} showToast={showToast} />
                     </>
                 )
             )}

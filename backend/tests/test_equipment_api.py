@@ -183,3 +183,26 @@ def test_update_image_request_distinguishes_absent_and_null():
     assert UpdateImageRequest.model_validate({"rig_id": 4}).rig_id == 4
     for field in ("rig_id", "rig_name", "rig_source", "site_id", "site_name"):
         assert field in ImageDetail.model_fields
+
+
+def test_unassigned_assign_validation():
+    from pydantic import ValidationError
+    from app.schemas.equipment import UnassignedAssign
+
+    body = UnassignedAssign(items=[{"key": "zwo asi2600mm pro|b1|528.4", "rig_id": 3},
+                                   {"key": "zwo asi2600mm pro|b1|-", "rig_id": 4}])
+    assert [i.rig_id for i in body.items] == [3, 4]
+    for bad in ({"items": []},
+                {"items": [{"key": "", "rig_id": 3}]},
+                {"items": [{"key": "k"}]},
+                {"items": [{"key": "k" * 401, "rig_id": 3}]},
+                {"items": [{"key": "k", "rig_id": 3}, {"key": "k", "rig_id": 4}]},
+                {}):
+        with pytest.raises(ValidationError):
+            UnassignedAssign.model_validate(bad)
+
+
+def test_unassigned_routes_are_registered():
+    paths = {(r.path, m) for r in api.router.routes for m in r.methods}
+    assert ("/unassigned", "GET") in paths
+    assert ("/unassigned/assign", "POST") in paths
