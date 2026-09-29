@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, Crosshair, Moon, Activity } from 'lucide-react';
+import { LogOut, Crosshair, Moon, Activity, MoreHorizontal } from 'lucide-react';
+import BottomSheet from '../common/BottomSheet';
 import TelescopeIcon from '../icons/TelescopeIcon';
 
 import logo from '../../assets/logo.png';
@@ -95,9 +96,18 @@ const navItems = [
     { path: '/admin', label: 'Admin', icon: AdminIcon },
 ];
 
+const primaryPaths = ['/', '/search', '/targets', '/tonight'];
+
 export default function Layout({ children }) {
     const { logout, user, systemVersion } = useAuth();
     const location = useLocation();
+    const [moreOpen, setMoreOpen] = useState(false);
+
+    const primaryItems = primaryPaths.map((p) => navItems.find((n) => n.path === p));
+    const moreItems = navItems.filter((n) => !primaryPaths.includes(n.path));
+    const moreActive = moreItems.some((n) =>
+        n.end ? location.pathname === n.path : location.pathname.startsWith(n.path)
+    );
 
 
     const [isPinned, setIsPinned] = useState(() => {
@@ -179,6 +189,57 @@ export default function Layout({ children }) {
                     {children}
                 </div>
             </main>
+
+            {/* Mobile bottom tab bar (shown below 1024px via CSS) */}
+            <nav className="bottom-nav" aria-label="Primary">
+                {primaryItems.map(({ path, label, icon: Icon, end }) => (
+                    <NavLink
+                        key={path}
+                        to={path}
+                        end={end}
+                        className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                        <Icon />
+                        <span>{label === 'Dashboard' ? 'Home' : label}</span>
+                    </NavLink>
+                ))}
+                <button
+                    className={`bottom-nav-item ${moreActive || moreOpen ? 'active' : ''}`}
+                    onClick={() => setMoreOpen(true)}
+                >
+                    <MoreHorizontal size={20} strokeWidth={2} />
+                    <span>More</span>
+                </button>
+            </nav>
+
+            <BottomSheet open={moreOpen} onClose={() => setMoreOpen(false)} title="Menu">
+                <div className="more-grid">
+                    {moreItems.map(({ path, label, icon: Icon, end }) => (
+                        <NavLink
+                            key={path}
+                            to={path}
+                            end={end}
+                            className={({ isActive }) => `more-item ${isActive ? 'active' : ''}`}
+                            onClick={() => setMoreOpen(false)}
+                        >
+                            <Icon />
+                            <span>{label}</span>
+                        </NavLink>
+                    ))}
+                </div>
+                <div className="more-footer">
+                    <div className="sidebar-units">
+                        <span>Star sizes</span>
+                        <QualityUnitsToggle compact />
+                    </div>
+                    <button className="btn btn-secondary" onClick={logout}>
+                        <LogOut size={18} /> Logout ({user?.email || 'User'})
+                    </button>
+                    <span className="text-muted more-version">
+                        v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')}
+                    </span>
+                </div>
+            </BottomSheet>
         </div>
     );
 }

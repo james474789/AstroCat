@@ -236,3 +236,209 @@
         width: 100%;
     }
 }
+
+.filters-done {
+    display: none;
+}
+
+/* Phones/tablets: filters open as a full-screen sheet */
+@media (max-width: 1024px) {
+    .search-page .page-header {
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+
+    .filters-sidebar {
+        position: fixed !important;
+        inset: 0;
+        z-index: 1500;
+        width: 100% !important;
+        height: 100dvh;
+        border-radius: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-top: calc(var(--spacing-lg) + var(--safe-top));
+        padding-bottom: calc(var(--spacing-xl) + var(--safe-bottom));
+    }
+
+    .filters-header {
+        position: sticky;
+        top: calc(-1 * var(--spacing-lg) - var(--safe-top));
+        z-index: 2;
+        background: var(--color-surface);
+        gap: var(--spacing-sm);
+    }
+
+    .filters-done {
+        display: inline-flex;
+    }
+
+    .search-page .folder-context-menu {
+        left: 12px !important;
+        right: 12px;
+        top: auto !important;
+        bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 12px);
+        position: fixed;
+    }
+
+    .pagination {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
+
+/* ---- Header actions: one row on desktop-wrap, swipeable strip on touch ---- */
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+@media (max-width: 1024px) {
+    .search-page,
+    .search-layout,
+    .search-results,
+    .search-page .page-header > * {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .search-page .page-header {
+        margin-bottom: var(--spacing-md);
+    }
+
+    .search-page .page-title {
+        font-size: 1.5rem;
+    }
+
+    .search-page .page-subtitle {
+        display: none;
+    }
+
+    /* Swipeable strip; the long row used to widen the page, which made iOS zoom out */
+    .header-actions {
+        width: 100%;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 4px;
+    }
+
+    .header-actions::-webkit-scrollbar {
+        display: none;
+    }
+
+    .header-actions .btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        order: 1;
+    }
+
+    .header-actions .header-filters-btn {
+        order: 0;
+        position: sticky;
+        left: 0;
+    }
+
+    /* Results toolbar: count + sort on compact rows, no size slider */
+    .results-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-sm) var(--spacing-md);
+        margin-bottom: var(--spacing-md);
+    }
+
+    .results-left {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--spacing-md);
+    }
+
+    .sort-group {
+        flex-direction: row !important;
+        gap: var(--spacing-sm);
+    }
+
+    .sort-label {
+        display: none;
+    }
+
+    .sort-select {
+        min-width: 0;
+        flex: 1;
+        width: auto !important;
+    }
+
+    /* Filter sheet: compact, and Apply always reachable */
+    .filters-sidebar {
+        padding-left: var(--spacing-md);
+        padding-right: var(--spacing-md);
+    }
+
+    .btn-apply-filters {
+        position: sticky;
+        bottom: 0;
+        z-index: 3;
+        margin-top: var(--spacing-md);
+        box-shadow: 0 -8px 16px var(--color-surface);
+    }
+
+    .filter-range,
+    .date-range-inputs {
+        min-width: 0;
+    }
+
+    .filter-range .input,
+    .date-range-inputs .input {
+        min-width: 0;
+        width: 100%;
+    }
+}
+
+/* Cards fill the screen: 2 columns on phones regardless of saved slider size */
+@media (max-width: 640px) {
+    .size-control {
+        display: none !important;
+    }
+
+    .search-results .image-grid,
+    .search-results .loading-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: var(--spacing-sm);
+    }
+
+    .search-results .image-card-meta,
+    .search-results .image-card-objects .object-tag:nth-child(n+2),
+    .search-results .meta-format {
+        display: none;
+    }
+
+    .search-results .image-card-content {
+        padding: var(--spacing-sm);
+    }
+
+    .search-results .image-card-title {
+        font-size: 0.78rem;
+    }
+
+    .search-results .image-badge {
+        padding: 1px 5px;
+        font-size: 10px;
+    }
+
+    .pagination {
+        gap: var(--spacing-sm);
+    }
+
+    .pagination .btn {
+        flex: 1;
+    }
+
+    .pagination-info {
+        order: -1;
+        flex: 1 1 100%;
+        text-align: center;
+    }
+}
