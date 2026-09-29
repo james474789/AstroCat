@@ -17,6 +17,14 @@ export default function ImageDetail() {
     const [annotatedImageError, setAnnotatedImageError] = useState(false);
     // Navigation state
     const [navInfo, setNavInfo] = useState({ prevId: null, nextId: null, currentIndex: -1, total: 0 });
+    // Touch zoom/pan: view = {s: scale, x, y translate in px, origin top-left of the preview}
+    const [view, setView] = useState({ s: 1, x: 0, y: 0 });
+    const viewRef = useRef(view);
+    viewRef.current = view;
+    const previewRef = useRef(null);
+    const pointersRef = useRef(new Map());
+    const gestureRef = useRef(null);
+    const lastTapRef = useRef(0);
     // Cache buster timestamp
     const [pageLoadTimestamp] = useState(Date.now());
 
@@ -24,6 +32,8 @@ export default function ImageDetail() {
     useEffect(() => {
         setImgError(false);
         setAnnotatedImageError(false);
+        setView({ s: 1, x: 0, y: 0 });
+        setCursorPos(null);
     }, [id]);
 
     // Annotations Toggle: 0=None, 1=Nova (Image Overlay), 2=PixInsight (Full Image)
@@ -306,13 +316,15 @@ export default function ImageDetail() {
     const handleMouseMove = (e) => {
         if (!imageRef.current || !image) return;
 
+        // The overlay sits inside the zoomed container, so its rect is already scaled.
         const rect = imageRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const scale = viewRef.current.s;
+        const x = (e.clientX - rect.left) / scale; // local (unscaled) px for crosshair lines
+        const y = (e.clientY - rect.top) / scale;
 
         // Calculate image coordinates
-        const imgX = (x / rect.width) * image.width_pixels;
-        const imgY = (y / rect.height) * image.height_pixels;
+        const imgX = ((e.clientX - rect.left) / rect.width) * image.width_pixels;
+        const imgY = ((e.clientY - rect.top) / rect.height) * image.height_pixels;
 
         // Calculate RA/Dec
         const sky = pixelToSky(
@@ -339,6 +351,101 @@ export default function ImageDetail() {
 
     const handleMouseLeave = () => {
         setCursorPos(null);
+    };
+
+    // ---- Pointer handling: mouse hover = crosshair; touch = tap to read, pinch/pan to zoom ----
+    const clampView = (v) => {
+        const box = previewRef.current?.getBoundingClientRect();
+        const sc = Math.min(8, Math.max(1, v.s));
+        if (!box) return { s: sc, x: 0, y: 0 };
+        return {
+            s: sc,
+            x: Math.min(0, Math.max(box.width * (1 - sc), v.x)),
+            y: Math.min(0, Math.max(box.height * (1 - sc), v.y)),
+        };
+    };
+
+    // Zoom by factor around a screen point, keeping that point fixed
+    const zoomAround = (v, factor, cx, cy) => {
+        const box = previewRef.current.getBoundingClientRect();
+        const px = cx - box.left;
+        const py = cy - box.top;
+        const ns = Math.min(8, Math.max(1, v.s * factor));
+        const k = ns / v.s;
+        return clampView({ s: ns, x: px - (px - v.x) * k, y: py - (py - v.y) * k });
+    };
+
+    const handlePointerDown = (e) => {
+        if (e.pointerType === 'mouse') return;
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const pts = [...pointersRef.current.values()];
+        gestureRef.current = {
+            startView: { ...viewRef.current },
+            start: pts.map((p) => ({ ...p })),
+            moved: false,
+            multi: pts.length > 1,
+            t0: Date.now(),
+        };
+    };
+
+    const handlePointerMove = (e) => {
+        if (e.pointerType === 'mouse') {
+            handleMouseMove(e);
+            return;
+        }
+        if (!pointersRef.current.has(e.pointerId) || !gestureRef.current) return;
+        pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const g = gestureRef.current;
+        const pts = [...pointersRef.current.values()];
+        if (pts.length >= 2 && g.start.length >= 2) {
+            g.moved = true;
+            g.multi = true;
+            const d0 = Math.hypot(g.start[0].x - g.start[1].x, g.start[0].y - g.start[1].y) || 1;
+            const d1 = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            const m0 = { x: (g.start[0].x + g.start[1].x) / 2, y: (g.start[0].y + g.start[1].y) / 2 };
+            const m1 = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+            const zoomed = zoomAround(g.startView, d1 / d0, m0.x, m0.y);
+            setView(clampView({ ...zoomed, x: zoomed.x + (m1.x - m0.x), y: zoomed.y + (m1.y - m0.y) }));
+        } else if (pts.length === 1 && !g.multi) {
+            const dx = pts[0].x - g.start[0].x;
+            const dy = pts[0].y - g.start[0].y;
+            if (Math.hypot(dx, dy) > 8) g.moved = true;
+            if (g.moved && g.startView.s > 1) {
+                setView(clampView({ s: g.startView.s, x: g.startView.x + dx, y: g.startView.y + dy }));
+            }
+        }
+    };
+
+    const handlePointerUp = (e) => {
+        if (e.pointerType === 'mouse') return;
+        const g = gestureRef.current;
+        pointersRef.current.delete(e.pointerId);
+        if (!g) return;
+        if (pointersRef.current.size === 0) {
+            const wasTap = !g.moved && !g.multi && Date.now() - g.t0 < 500;
+            const dx = e.clientX - g.start[0].x;
+            const dy = e.clientY - g.start[0].y;
+            if (wasTap) {
+                const now = Date.now();
+                if (now - lastTapRef.current < 300) {
+                    // double-tap: reset if zoomed, else zoom in at the tap
+                    setView(viewRef.current.s > 1 ? { s: 1, x: 0, y: 0 } : zoomAround(viewRef.current, 2.5, e.clientX, e.clientY));
+                    lastTapRef.current = 0;
+                } else {
+                    lastTapRef.current = now;
+                    handleMouseMove(e); // tap places the crosshair + RA/Dec readout
+                }
+            } else if (e.type === 'pointerup' && !g.multi && g.startView.s === 1 && Math.abs(dx) > 70 && Math.abs(dy) < 50) {
+                // swipe (not zoomed) navigates prev/next
+                const target = dx < 0 ? navInfo.nextId : navInfo.prevId;
+                if (target) {
+                    sessionStorage.setItem('lastClickedImageId', target);
+                    navigate(`/images/${target}`);
+                }
+            }
+            gestureRef.current = null;
+        }
     };
 
     if (loading) {
@@ -410,9 +517,19 @@ export default function ImageDetail() {
                 <div className="image-main-content">
                     {/* Image Preview */}
                     <div className="image-preview-section">
-                        <div className="image-preview" style={imgError ? getPlaceholderStyle() : {}}>
+                        <div className="image-preview" ref={previewRef} style={imgError ? getPlaceholderStyle() : {}}>
                             {!imgError ? (
-                                <div className="preview-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
+                                <div
+                                    className="preview-container"
+                                    style={{
+                                        position: 'relative',
+                                        width: '100%',
+                                        height: '100%',
+                                        transformOrigin: '0 0',
+                                        transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
+                                        '--inv-zoom': 1 / view.s,
+                                    }}
+                                >
                                     {/* 
                                      Hierarchy:
                                      1. Stretched Overlay (Top Priority if enabled)
@@ -485,11 +602,15 @@ export default function ImageDetail() {
                                             width: '100%',
                                             height: '100%',
                                             zIndex: 10,
-                                            cursor: 'crosshair'
+                                            cursor: 'crosshair',
+                                            touchAction: 'none'
                                         }}
                                         ref={imageRef}
-                                        onMouseMove={handleMouseMove}
-                                        onMouseLeave={handleMouseLeave}
+                                        onPointerDown={handlePointerDown}
+                                        onPointerMove={handlePointerMove}
+                                        onPointerUp={handlePointerUp}
+                                        onPointerCancel={handlePointerUp}
+                                        onPointerLeave={(e) => e.pointerType === 'mouse' && handleMouseLeave()}
                                     />
 
                                     {cursorPos && (
@@ -523,6 +644,12 @@ export default function ImageDetail() {
                                 </div>
                             )}
                         </div>
+
+                        {view.s > 1 && (
+                            <button className="btn btn-secondary btn-sm zoom-reset" onClick={() => setView({ s: 1, x: 0, y: 0 })}>
+                                Reset zoom ({view.s.toFixed(1)}x)
+                            </button>
+                        )}
 
                         {/* Quick Actions */}
                         <div className="image-actions">

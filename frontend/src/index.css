@@ -89,6 +89,7 @@ body {
   color: var(--color-text-primary);
   background-color: var(--color-background);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 #root {
@@ -256,9 +257,11 @@ a:hover {
   transition: all var(--transition-base);
 }
 
+@media (hover: hover) {
 .card:hover {
   border-color: var(--color-border-light);
   box-shadow: var(--shadow-lg);
+}
 }
 
 .card-header {
@@ -575,4 +578,65 @@ a:hover {
 @keyframes twinkle {
   0%, 100% { opacity: 0.3; }
   50% { opacity: 0.5; }
+}
+
+
+/* ==========================================================================
+   Mobile / touch foundation
+   Breakpoints used across the app: 1024 (tablet/nav switch), 768, 480.
+   ========================================================================== */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --bottom-nav-height: 60px;
+}
+
+button, a, .btn, .nav-item {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Horizontally scrollable wrapper for wide tables */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+@media (pointer: coarse) {
+  /* 16px stops iOS Safari zooming the page on input focus */
+  input, select, textarea, .input, .select {
+    font-size: 16px !important;
+  }
+  .btn, .input, .select {
+    min-height: 44px;
+  }
+  .btn-icon {
+    min-width: 44px;
+  }
+}
+
+@media (max-width: 768px) {
+  .content-wrapper {
+    max-width: 100%;
+    padding: 12px;
+  }
+}
+
+/* Wide tables without a wrapper scroll sideways on phones instead of overflowing the page */
+@media (max-width: 768px) {
+  .target-filter-table,
+  .unassigned-table,
+  .table-wrapper > .table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  .recharts-legend-wrapper {
+    font-size: 11px;
+  }
 }

@@ -36,6 +36,21 @@ export default function ImageCard({ image, onContextMenu, showQuality = false })
             onClick={() => sessionStorage.setItem('lastClickedImageId', image.id)}
             onContextMenu={(e) => onContextMenu && onContextMenu(e, image)}
         >
+            {onContextMenu && (
+                <button
+                    type="button"
+                    className="image-card-more"
+                    aria-label="Image actions"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const r = e.currentTarget.getBoundingClientRect();
+                        onContextMenu({ preventDefault() {}, clientX: r.left, clientY: r.bottom }, image);
+                    }}
+                >
+                    ⋯
+                </button>
+            )}
             <div className="image-card-thumbnail">
                 {(!imageLoaded || imageError) && (
                     <div
