@@ -40,6 +40,9 @@ SITE_MAX_KM = 10.0
 DEFAULT_SITE_SHARE = 0.90
 CACHE_TTL_SECONDS = 60
 
+# Light frames a user may allocate to a rig by hand (R0b).
+ALLOCATABLE_SUBTYPES = ("SUB_FRAME", "INTEGRATION_MASTER")
+
 CLOCK_UTC = "UTC"
 CLOCK_LOCAL = "LOCAL"
 _CLOCK_MATCH = timedelta(minutes=10)

@@ -13,6 +13,7 @@ before starting any of the four.
 | F7 | Imaging sessions (group by observing night) | [F7-imaging-sessions.md](F7-imaging-sessions.md) | F1 (schema only) | yes |
 | F16 | Mosaic detection & coverage map | [F16-mosaics.md](F16-mosaics.md) | F1 (schema only) | yes |
 | R0b | Find & allocate images with no rig (subs + masters) | [R0b-rig-allocation.md](R0b-rig-allocation.md) | R0 (shipped) | no |
+| R0c | Click through from Equipment (rigs, unassigned buckets) to Search | [R0c-equipment-click-through.md](R0c-equipment-click-through.md) | R0b | no |
 
 ## 1. Recommended execution plan
 
