@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -855,6 +856,18 @@ async def _unassigned_inputs(db: AsyncSession):
     rows = [dict(r) for r in (await db.execute(_UNASSIGNED_SQL)).mappings().all()]
     rigs = await db.run_sync(lambda s: load_rig_infos_sync(s))
     return rows, rigs
+
+
+async def bucket_image_ids(db: AsyncSession, key: str) -> List[int]:
+    """Current member ids of an Unassigned bucket; [] when the key no longer exists (R0c)."""
+    from app.services.rig_allocation import members_by_key
+
+    started = time.monotonic()
+    rows, rigs = await _unassigned_inputs(db)
+    members = await asyncio.to_thread(members_by_key, rows, rigs, [key])
+    ids = members.get(key, [])
+    logger.debug(f"Resolved bucket {key!r} to {len(ids)} images in {time.monotonic() - started:.3f}s")
+    return ids
 
 
 @router.get("/unassigned")

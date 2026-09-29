@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
     fetchImages, API_BASE_URL, bulkUpdateImageType, bulkSyncMetadata, bulkUpdateFrameType,
@@ -118,6 +118,7 @@ export default function Search() {
         frame_type: searchParams.get('frame_type') || '',
         target_key: searchParams.get('target_key') || '',
         rig_id: searchParams.get('rig_id') || '',
+        rig_bucket: searchParams.get('rig_bucket') || '',
         ...qualityFromParams(searchParams),
     });
     const { units } = useQualityUnits();
@@ -160,6 +161,7 @@ export default function Search() {
             frame_type: searchParams.get('frame_type') || '',
             target_key: searchParams.get('target_key') || '',
             rig_id: searchParams.get('rig_id') || '',
+            rig_bucket: searchParams.get('rig_bucket') || '',
             ...qualityFromParams(searchParams),
         });
 
@@ -210,6 +212,7 @@ export default function Search() {
             params.frame_type = searchParams.get('frame_type') || 'LIGHT';
             if (searchParams.get('target_key')) params.target_key = searchParams.get('target_key');
             if (searchParams.get('rig_id')) params.rig_id = searchParams.get('rig_id');
+            if (searchParams.get('rig_bucket')) params.rig_bucket = searchParams.get('rig_bucket');
             QUALITY_KEYS.forEach((k) => { if (searchParams.get(k)) params[k] = searchParams.get(k); });
 
             const data = await fetchImages(params);
@@ -312,6 +315,7 @@ export default function Search() {
             frame_type: '',
             target_key: '',
             rig_id: '',
+            rig_bucket: '',
             ...QUALITY_EMPTY,
         });
         setRaInput('');
@@ -985,6 +989,16 @@ export default function Search() {
                             {Array.from({ length: 8 }).map((_, i) => (
                                 <div key={i} className="skeleton image-skeleton" />
                             ))}
+                        </div>
+                    ) : images.length === 0 && totalCount === 0 && searchParams.get('rig_bucket') ? (
+                        // R0c: a bucket link whose images have since been assigned (or regrouped).
+                        <div className="empty-state">
+                            <div className="empty-state-icon">🔭</div>
+                            <h3 className="empty-state-title">No images found</h3>
+                            <p className="empty-state-text">
+                                This bucket no longer exists. Its images may have been assigned to a rig, or the rig list changed.
+                                Go back to <Link to="/equipment">Equipment → Unassigned images</Link> to see the current buckets.
+                            </p>
                         </div>
                     ) : images.length === 0 ? (
                         <div className="empty-state">

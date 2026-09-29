@@ -1,5 +1,18 @@
 import './FilterChips.css';
 
+// R0c: Unassigned bucket key `{cam_key|none}|b{bin}|{focal:.1f or -}` as a chip label.
+// The camera key may itself contain '|', so parse from the right.
+function formatRigBucket(key) {
+    const parts = String(key).split('|');
+    if (parts.length < 3) return key;
+    const focal = parts.pop();
+    const bin = parts.pop().replace(/^b/, '');
+    const cam = parts.join('|');
+    const camLabel = cam === 'none' ? 'Unknown camera' : cam;
+    const focalLabel = focal === '-' ? 'focal unknown' : `~${Math.round(Number(focal))} mm`;
+    return `${camLabel} · bin ${bin} · ${focalLabel}`;
+}
+
 /**
  * Displays applied filters as dismissible chips
  * Allows users to see and remove active filters at a glance
@@ -38,6 +51,7 @@ export default function FilterChips({ filters, onRemove, rigNames = {} }) {
         },
         target_key: { label: 'Target', format: (v) => v === '__none__' ? 'Unassigned' : v },
         rig_id: { label: 'Rig', format: (v) => v === 'none' ? 'Unassigned' : (rigNames[v] || `#${v}`) },
+        rig_bucket: { label: 'Bucket', format: formatRigBucket },
         // Q1d star quality
         fwhm_min: { label: 'Min FWHM', format: (v) => v },
         fwhm_max: { label: 'Max FWHM', format: (v) => v },

@@ -137,6 +137,7 @@ export async function fetchImages(params = {}) {
         frame_type: params.frame_type,
         target_key: params.target_key,
         rig_id: params.rig_id,
+        rig_bucket: params.rig_bucket,
     };
 
     const queryString = buildQueryString(queryParams);

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Camera as CameraIcon, Aperture, SlidersHorizontal, MapPin,
-    Plus, Pencil, Trash2, Sparkles, Upload, Download, RefreshCw,
+    Plus, Pencil, Trash2, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon,
 } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -127,6 +127,8 @@ function useToast() {
 
 // ============ Rig card ============
 
+const rigSearchLink = (rig) => `/search?rig_id=${rig.id}&frame_type=LIGHT`;
+
 function RigCard({ rig, isAdmin, mountLimit, onEdit, onDelete, onMountToggle, onActiveToggle, onAssign }) {
     const scaleCheckMsg = scaleCheckText(rig.scale_check);
     return (
@@ -198,11 +200,17 @@ function RigCard({ rig, isAdmin, mountLimit, onEdit, onDelete, onMountToggle, on
                     </div>
                 )}
                 <div className="rig-line muted small">
-                    {rig.image_count} subs · last used {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
+                    <Link to={rigSearchLink(rig)} title="Open in Search: all light frames on this rig (subs and masters)">
+                        {rig.image_count} subs
+                    </Link>
+                    {' · last used'} {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
                 </div>
             </div>
 
             <div className="equip-card-actions">
+                <Link className="btn btn-ghost btn-sm" to={rigSearchLink(rig)}>
+                    <SearchIcon size={14} /> View images
+                </Link>
                 <button className="btn btn-ghost btn-sm" onClick={() => onAssign(rig)} disabled={!isAdmin} title="Assign images now">
                     <RefreshCw size={14} /> Assign images
                 </button>
@@ -1073,15 +1081,7 @@ function rigOptionLabel(rig) {
     return parts.join(' · ');
 }
 
-function unassignedSearchLink(g) {
-    const params = new URLSearchParams({ rig_id: 'none', frame_type: 'LIGHT' });
-    if (g.camera_name) params.set('camera', g.camera_name);
-    if (g.scale_min != null && g.scale_max != null) {
-        params.set('pixel_scale_min', Math.max(0, g.scale_min - 0.005).toFixed(3));
-        params.set('pixel_scale_max', (g.scale_max + 0.005).toFixed(3));
-    }
-    return `/search?${params.toString()}`;
-}
+const bucketSearchLink = (g) => `/search?rig_bucket=${encodeURIComponent(g.key)}`;
 
 function formatFocal(g) {
     if (g.focal_mm == null) return 'unknown';
@@ -1246,7 +1246,7 @@ function UnassignedImagesSection({ rigs, isAdmin, showToast }) {
                                                 {g.focal_basis === 'header' && <div className="muted small">from header</div>}
                                             </td>
                                             <td className="nowrap">
-                                                {g.count}
+                                                <Link to={bucketSearchLink(g)} title={`Show the ${g.count} images in this bucket`}>{g.count}</Link>
                                                 <div className="muted small">
                                                     {g.master_count ? `${g.sub_count} subs · ${g.master_count} masters` : 'subs'}
                                                 </div>
@@ -1287,10 +1287,10 @@ function UnassignedImagesSection({ rigs, isAdmin, showToast }) {
                                             <td>
                                                 <Link
                                                     className="btn btn-ghost btn-sm"
-                                                    to={unassignedSearchLink(g)}
-                                                    title="Approximate — Search filters by camera and plate scale, not binning or frame size"
+                                                    to={bucketSearchLink(g)}
+                                                    title={`Show the ${g.count} images in this bucket`}
                                                 >
-                                                    View
+                                                    View images
                                                 </Link>
                                             </td>
                                         </tr>
