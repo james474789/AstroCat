@@ -660,3 +660,18 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Mobile / touch */
+@media (max-width: 768px) {
+    .tonight-controls > * { min-width: 0 !important; flex: 1 1 100%; }
+    .tonight-toast {
+        left: 12px;
+        right: 12px;
+        bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 12px);
+    }
+    .action-menu { position: fixed; left: 12px; right: 12px; top: auto; bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 12px); min-width: 0; z-index: 1500; }
+}
+
+@media (pointer: coarse) {
+    .action-menu button, .action-menu a { min-height: 44px; }
+}

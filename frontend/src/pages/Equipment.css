@@ -460,3 +460,24 @@
     vertical-align: middle;
     margin-right: 0.35rem;
 }
+
+/* Mobile / touch */
+.equip-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+.equip-tab { white-space: nowrap; flex-shrink: 0; min-height: 44px; }
+.horizon-panel { min-width: min(100%, 320px); }
+
+@media (max-width: 768px) {
+    .equip-toast { top: calc(12px + var(--safe-top)); left: 12px; right: 12px; }
+    .equipment-modal,
+    .equipment-modal.wide {
+        width: 100%;
+        max-width: 100%;
+        max-height: 100dvh;
+        height: 100dvh;
+        border-radius: 0;
+    }
+    .equipment-modal .modal-body { padding: 1rem; }
+    .detect-banner { flex-wrap: wrap; }
+    .unassigned-rig-select { min-width: 0; max-width: 100%; width: 100%; }
+    .assign-now-btn { margin-left: 0; }
+}

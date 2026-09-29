@@ -8,10 +8,20 @@
     transition: all var(--transition-base);
 }
 
+.image-card {
+    position: relative;
+}
+
+.image-card-more {
+    display: none;
+}
+
+@media (hover: hover) {
 .image-card:hover {
     border-color: var(--color-primary);
     box-shadow: var(--shadow-glow);
     transform: translateY(-2px);
+}
 }
 
 /* Thumbnail Container */
@@ -71,7 +81,7 @@
 
 .image-badge {
     padding: 2px 8px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -203,4 +213,25 @@
     color: var(--color-text-secondary);
     border-radius: var(--border-radius-sm);
     text-transform: uppercase;
+}
+
+/* Touch: long-press contextmenu is unreliable on iOS, so show an explicit button */
+@media (hover: none) and (pointer: coarse) {
+    .image-card-more {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        z-index: 5;
+        width: 36px;
+        height: 36px;
+        border: none;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        font-size: 20px;
+        line-height: 1;
+    }
 }

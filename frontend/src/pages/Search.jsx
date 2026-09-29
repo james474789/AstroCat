@@ -126,7 +126,8 @@ export default function Search() {
     // Local state for RA input to allow HH:MM editing
     const [raInput, setRaInput] = useState('');
 
-    const [showFilters, setShowFilters] = useState(true);
+    // Phones/tablets: filters live in a full-screen sheet, closed by default
+    const [showFilters, setShowFilters] = useState(() => !window.matchMedia('(max-width: 1024px)').matches);
 
     useEffect(() => {
         loadImages();
@@ -284,6 +285,7 @@ export default function Search() {
         });
         params.set('page', '1');
         setSearchParams(params);
+        if (window.matchMedia('(max-width: 1024px)').matches) setShowFilters(false);
         // loadImages(); // Handled by useEffect dependence on searchParams
     }
 
@@ -487,6 +489,10 @@ export default function Search() {
         }
     };
 
+    const activeFilterCount = Object.entries(filters).filter(([k, v]) =>
+        v && !['sort_by', 'sort_order', 'quality_units'].includes(k) && !(k === 'frame_type' && v === 'LIGHT')
+    ).length;
+
     return (
         <div className="search-page">
             <div className="page-header">
@@ -496,7 +502,7 @@ export default function Search() {
                         Browse and filter your astronomical image collection
                     </p>
                 </div>
-                <div className="header-actions" style={{ display: 'flex', gap: '10px' }}>
+                <div className="header-actions">
                     <button
                         className="btn btn-secondary"
                         onClick={handleExportCsv}
@@ -546,10 +552,10 @@ export default function Search() {
                         🔭 Assign Rig…
                     </button>
                     <button
-                        className="btn btn-secondary"
+                        className="btn btn-primary header-filters-btn"
                         onClick={() => setShowFilters(!showFilters)}
                     >
-                        {showFilters ? 'Hide Filters' : 'Show Filters'}
+                        {showFilters ? 'Hide Filters' : `Filters${activeFilterCount ? ` (${activeFilterCount})` : ''}`}
                     </button>
                 </div>
                 {syncMetadataMessage && (
@@ -567,6 +573,9 @@ export default function Search() {
                             <h3>🔍 Search & Filter</h3>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>
                                 Clear All
+                            </button>
+                            <button type="button" className="btn btn-primary btn-sm filters-done" onClick={() => setShowFilters(false)}>
+                                Done
                             </button>
                         </div>
 
@@ -597,7 +606,7 @@ export default function Search() {
                         />
 
                         {/* Folder Structure */}
-                        <FilterSection title="Folder Structure" icon="📂" defaultOpen={true}>
+                        <FilterSection title="Folder Structure" icon="📂" defaultOpen={!window.matchMedia('(max-width: 1024px)').matches}>
                             <FolderTree
                                 selectedPath={filters.path}
                                 onSelect={(path) => {
@@ -926,11 +935,11 @@ export default function Search() {
                 {/* Results Grid */}
                 <div className="search-results">
                     <div className="results-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                        <div className="results-left">
                             <span className="results-count">
                                 {loading ? 'Loading...' : `${totalCount.toLocaleString()} images found`}
                             </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div className="size-control" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Size</span>
                                 <input
                                     type="range"
