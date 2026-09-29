@@ -37,7 +37,7 @@ from app.models.equipment import (
 from app.models.image import FrameType, Image, ImageSubtype
 from app.schemas.equipment import (
     CameraCreate, CameraUpdate, DetectApply, FilterCreate, FilterUpdate, HorizonUpdate, OpticCreate,
-    OpticUpdate, RigCreate, RigUpdate, SiteCreate, SiteUpdate,
+    OpticUpdate, RigCreate, RigUpdate, SiteCreate, SiteUpdate, UnassignedAssign,
 )
 from app.services.site_horizon import HORIZON_CACHE_KEY, HORIZON_CACHE_TTL  # shared with the recommender
 from app.utils.filter_names import normalize_filter
@@ -831,6 +831,66 @@ async def queue_assignment(scope: str = Query("unassigned", pattern="^(unassigne
         logger.warning(f"Could not queue equipment assignment: {e}")
         raise HTTPException(status_code=503, detail="Could not queue the assignment task")
     return {"task_id": task_id, "queued": task_id is not None}
+
+
+# ---------------------------------------------------------------------------
+# Unassigned images (R0b)
+# ---------------------------------------------------------------------------
+
+# Light subs and masters with no rig; same shape as tasks/equipment.py _ROWS_SQL
+# (xpixsz / focallen are JSON values, which assign_rig copes with).
+_UNASSIGNED_SQL = text("""
+    SELECT id, camera_name, subtype::text AS subtype, width_pixels, height_pixels, binning,
+           pixel_scale_arcsec, raw_header->'XPIXSZ' AS xpixsz, raw_header->'FOCALLEN' AS focallen,
+           focal_length, filter_name, exposure_time_seconds, capture_date
+    FROM images
+    WHERE rig_id IS NULL AND frame_type = 'LIGHT'
+      AND subtype IN ('SUB_FRAME', 'INTEGRATION_MASTER')
+""")
+
+
+async def _unassigned_inputs(db: AsyncSession):
+    from app.services.equipment_assignment import load_rig_infos_sync
+
+    rows = [dict(r) for r in (await db.execute(_UNASSIGNED_SQL)).mappings().all()]
+    rigs = await db.run_sync(lambda s: load_rig_infos_sync(s))
+    return rows, rigs
+
+
+@router.get("/unassigned")
+async def list_unassigned(db: AsyncSession = Depends(get_db)):
+    """Rig-less light subs and masters, grouped by camera, frame size, binning and plate scale."""
+    from app.services.rig_allocation import group_unassigned
+
+    rows, rigs = await _unassigned_inputs(db)
+    groups = await asyncio.to_thread(group_unassigned, rows, rigs)
+    return {"total": len(rows), "groups": groups}
+
+
+@router.post("/unassigned/assign", dependencies=[Depends(require_admin)])
+async def assign_unassigned(body: UnassignedAssign, db: AsyncSession = Depends(get_db)):
+    """Allocate one group (re-derived server-side from its key) to a rig, as MANUAL."""
+    from app.services.rig_allocation import member_ids
+
+    if await db.get(Rig, body.rig_id) is None:
+        raise HTTPException(status_code=400, detail="Unknown rig_id")
+    rows, rigs = await _unassigned_inputs(db)
+    ids = await asyncio.to_thread(member_ids, rows, rigs, body.key)
+    if ids is None:
+        raise HTTPException(status_code=409, detail="This group changed; refresh and try again")
+
+    result = await db.execute(
+        text("UPDATE images SET rig_id = :rig, rig_source = 'MANUAL' WHERE id = ANY(:ids) AND rig_id IS NULL"),
+        {"rig": body.rig_id, "ids": ids})
+    await db.commit()
+
+    await _equipment_changed(queue=False)
+    try:
+        from app.api.targets import _invalidate_targets_cache
+        await _invalidate_targets_cache()
+    except Exception as e:
+        logger.warning(f"Failed to invalidate targets cache: {e}")
+    return {"updated_count": result.rowcount, "rig_id": body.rig_id, "key": body.key}
 
 
 # ---------------------------------------------------------------------------

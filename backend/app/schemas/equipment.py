@@ -160,3 +160,9 @@ class DetectApply(_Body):
     timezone: str = "UTC"
     accept: List[AcceptItem] = []
     include_older: bool = False
+
+
+class UnassignedAssign(_Body):
+    """R0b: allocate one "Unassigned images" group (identified by its key) to a rig."""
+    key: str = Field(..., min_length=1, max_length=400)
+    rig_id: int

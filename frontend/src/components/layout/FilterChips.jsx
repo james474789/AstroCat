@@ -4,7 +4,7 @@ import './FilterChips.css';
  * Displays applied filters as dismissible chips
  * Allows users to see and remove active filters at a glance
  */
-export default function FilterChips({ filters, onRemove }) {
+export default function FilterChips({ filters, onRemove, rigNames = {} }) {
     // Map filter keys to display labels
     const filterLabels = {
         subtype: { label: 'Type', format: (v) => v === 'SUB_FRAME' ? 'Sub Frames' : v === 'INTEGRATION_MASTER' ? 'Masters' : v === 'PLANETARY' ? 'Planetary' : 'Deprecated' },
@@ -37,6 +37,7 @@ export default function FilterChips({ filters, onRemove }) {
             }
         },
         target_key: { label: 'Target', format: (v) => v === '__none__' ? 'Unassigned' : v },
+        rig_id: { label: 'Rig', format: (v) => v === 'none' ? 'Unassigned' : (rigNames[v] || `#${v}`) },
         // Q1d star quality
         fwhm_min: { label: 'Min FWHM', format: (v) => v },
         fwhm_max: { label: 'Max FWHM', format: (v) => v },
