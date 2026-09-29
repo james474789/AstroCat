@@ -12,6 +12,7 @@ before starting any of the four.
 | F2 | Target integration dashboard ("Targets") | [F2-target-integration.md](F2-target-integration.md) | F1 (schema only) | yes |
 | F7 | Imaging sessions (group by observing night) | [F7-imaging-sessions.md](F7-imaging-sessions.md) | F1 (schema only) | yes |
 | F16 | Mosaic detection & coverage map | [F16-mosaics.md](F16-mosaics.md) | F1 (schema only) | yes |
+| R0b | Find & allocate images with no rig (subs + masters) | [R0b-rig-allocation.md](R0b-rig-allocation.md) | R0 (shipped) | no |
 
 ## 1. Recommended execution plan
 
