@@ -194,8 +194,27 @@ async def quality_stats(
     names = await _rig_names(db, [r.rig_id for r in counts])
     rigs = [{"rig_id": r.rig_id, "rig_name": names.get(r.rig_id), "measured": r.n} for r in counts if r.rig_id is not None]
 
+    prefer_arcsec = (units or "").upper() != "PX"
+    # Q2: per-rig medians over all measured subs (same data as the Equipment page's
+    # delivered FWHM), independent of the selected rig.
+    rig_rows = (await db.execute(text(f"""
+        SELECT images.rig_id, count(*) AS n, count({SCALE_SQL}) AS n_scaled,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px) AS fwhm_px,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px) AS hfr_px,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px * {SCALE_SQL}) AS fwhm_arcsec,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px * {SCALE_SQL}) AS hfr_arcsec
+        FROM images LEFT JOIN rigs r ON r.id = images.rig_id
+        WHERE {LIGHT_SUBS_SQL} AND images.star_metrics_status = 'OK'
+          AND images.rig_id IS NOT NULL AND images.capture_date IS NOT NULL
+        GROUP BY images.rig_id
+    """))).mappings().all()
+    rig_rows = [dict(r) for r in rig_rows]
+    by_rig_stats = build_by_rig(rig_rows, names, prefer_arcsec)
+
     if rig_id is None or rig_id == "":
-        chosen = rigs[0]["rig_id"] if rigs else "ALL"
+        # Default: the sharpest rig (lowest median FWHM); by_rig is sorted that way.
+        sharpest = next((r["rig_id"] for r in by_rig_stats if r["fwhm_median"] is not None), None)
+        chosen = sharpest if sharpest is not None else (rigs[0]["rig_id"] if rigs else "ALL")
     elif rig_id.upper() == "ALL":
         chosen = "ALL"
     else:
@@ -238,22 +257,7 @@ async def quality_stats(
         for p, a in zip(group, alt):
             p["alt_deg"] = float(a)
 
-    prefer_arcsec = (units or "").upper() != "PX"
     stats = build_stats(points, prefer_arcsec=prefer_arcsec)
 
-    # Q2: per-rig medians over all measured subs (same data as the Equipment page's
-    # delivered FWHM), independent of the selected rig.
-    rig_rows = (await db.execute(text(f"""
-        SELECT images.rig_id, count(*) AS n, count({SCALE_SQL}) AS n_scaled,
-               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px) AS fwhm_px,
-               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px) AS hfr_px,
-               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px * {SCALE_SQL}) AS fwhm_arcsec,
-               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px * {SCALE_SQL}) AS hfr_arcsec
-        FROM images LEFT JOIN rigs r ON r.id = images.rig_id
-        WHERE {LIGHT_SUBS_SQL} AND images.star_metrics_status = 'OK'
-          AND images.rig_id IS NOT NULL AND images.capture_date IS NOT NULL
-        GROUP BY images.rig_id
-    """))).mappings().all()
-    rig_rows = [dict(r) for r in rig_rows]
     return {"rigs": rigs, "rig_id": chosen, "rig_name": names.get(chosen) if chosen != "ALL" else None,
-            "by_rig": build_by_rig(rig_rows, names, prefer_arcsec), **stats}
+            "by_rig": by_rig_stats, **stats}

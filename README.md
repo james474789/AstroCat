@@ -17,7 +17,7 @@
 - **Rig Allocation**: Finds light subs and masters that couldn't be matched to a rig (e.g. cropped or drizzled masters), buckets them by camera, binning and calculated focal length with a suggested rig, and lets you allocate many buckets at once from Equipment or Search
 - **Imaging Sessions & Night Report**: Groups images into observing nights with a per-session timeline view
 - **Target Recommendations ("Tonight")**: Local recommendation engine that scores targets for tonight's session per rig, with feedback/outcomes tracking and a dashboard tile
-- **Star Quality Metrics**: Measures HFR/FWHM/eccentricity for every Light frame, surfaced as a Star Quality card (with arcsec/px toggle) on Targets, session timeline, search, equipment, stats, and the dashboard, plus a FITS Analytics chart comparing median FWHM/HFR across rigs (click a bar to open that rig's images)
+- **Star Quality Metrics**: Measures HFR/FWHM/eccentricity for every Light frame, surfaced as a Star Quality card (with arcsec/px toggle) on Targets, session timeline, search, equipment, stats, and the dashboard, plus a Statistics page chart comparing median FWHM/HFR across rigs (click a bar to open that rig's images)
 - **Advanced Search**: Search by object name, filename, coordinates, exposure time, frame type, and more
 - **Keyboard Navigation**: Use arrow keys to navigate between images in detail view
 - **Thumbnail Generation**: On-demand thumbnail generation with adjustable size slider

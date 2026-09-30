@@ -112,7 +112,7 @@ export default function FitsStats() {
         return (
             <div className="fits-stats-page loading-container">
                 <div className="spinner" />
-                <p>Loading FITS analytics...</p>
+                <p>Loading statistics...</p>
             </div>
         );
     }
@@ -357,7 +357,7 @@ export default function FitsStats() {
             <div className="starfield" />
 
             <div className="stats-header">
-                <h1 className="stats-title">FITS Analytics</h1>
+                <h1 className="stats-title">Statistics</h1>
                 <p className="stats-subtitle">Deep dive into technical metadata from your FITS headers.</p>
             </div>
 
