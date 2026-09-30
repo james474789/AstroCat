@@ -9,12 +9,12 @@ Backups in `library/backups/`: `pre_p0_20260926.dump`, `pre_r0_20260926.dump`,
 `pre_r1_20260926.dump`, `pre_r2a_20260927.dump`.
 
 > **Update, 2026-09-26 (late):** R0 is deployed and owner-checked (see §2a). The **R1 spec is
-> [R1-recommendation-engine.md](R1-recommendation-engine.md)**, which supersedes §4 of this file for
+> `R1-recommendation-engine.md`**, which supersedes §4 of this file for
 > R1 work. §3 below is kept as a record of how R0 was run; R1 uses the same pattern (R1 spec §12).
 
 > **Update, 2026-09-27:**
 > - **R1 is deployed**, with the owner keeping the default weights; see
->   [R1-replay-results.md](R1-replay-results.md).
+>   `R1-replay-results.md`.
 > - **R2a is deployed and owner-checked** (`20260927.02`). Tonight picks now have feedback actions:
 >   pin, snooze, dismiss, "imaged it". The page logs what it showed for the current night, and the
 >   outcomes endpoint checks those picks against the library. There's also a Dashboard tile.
@@ -27,7 +27,7 @@ Backups in `library/backups/`: `pre_p0_20260926.dump`, `pre_r0_20260926.dump`,
 2. [target-recommendations-research.md](target-recommendations-research.md): why the feature exists,
    competitor survey, engine design (§4), phasing (§7), the Equipment page rationale (§8a),
    Telescopius API findings (§8b), prototype lessons (§9).
-3. [P0-R0-equipment-sites.md](P0-R0-equipment-sites.md): **the spec for the next step (R0 = §4)**.
+3. `P0-R0-equipment-sites.md`: **the spec for the next step (R0 = §4)**.
    §3 (P0) is done; see §2 below for where the shipped code differs from it.
 4. [README.md](README.md) §3–§5 (defensive migrations, merge hotspots, conventions), and
    [HANDOVER.md](HANDOVER.md) (the F1/F2 handover: deploy notes, Windows quirks, agent pattern).
@@ -41,8 +41,8 @@ Backups in `library/backups/`: `pre_p0_20260926.dump`, `pre_r0_20260926.dump`,
 | Research + prototypes | Survey, live-data analysis, local and Telescopius-hybrid prototypes | ✅ done | — |
 | **P0** | Canonical target keys + Sh2 cross-IDs + `NONE` sentinel, capture-time provenance, site persistence | ✅ **deployed & verified** | actual: ~250k agent + ~150k orchestration |
 | **R0** | Equipment & Sites: spec §4 | ✅ **deployed & owner-checked** (§2a) | actual: ~340k B1 + ~260k B2 + ~120k orchestration |
-| **R1** | Local recommendation engine + replay test + Tonight page. Spec: [R1-recommendation-engine.md](R1-recommendation-engine.md), results: [R1-replay-results.md](R1-replay-results.md) | ✅ **deployed** (`20260927.01`). The owner kept default weights; replay §11.2 is knowingly not met (diagnostic only) | actual: ~1.3M |
-| **R2a** | Feedback actions, impressions and outcomes, Dashboard tile. Spec: [R2a-feedback-dashboard.md](R2a-feedback-dashboard.md) | ✅ **deployed & owner-checked** (`20260927.02`) | actual: ~0.25M B1 + ~0.17M B2 + orchestration |
+| **R1** | Local recommendation engine + replay test + Tonight page. Spec: `R1-recommendation-engine.md`, results: `R1-replay-results.md` | ✅ **deployed** (`20260927.01`). The owner kept default weights; replay §11.2 is knowingly not met (diagnostic only) | actual: ~1.3M |
+| **R2a** | Feedback actions, impressions and outcomes, Dashboard tile. Spec: `R2a-feedback-dashboard.md` | ✅ **deployed & owner-checked** (`20260927.02`) | actual: ~0.25M B1 + ~0.17M B2 + orchestration |
 | R2b | Affinity/novelty/revisit lanes, inferred goals, palette completeness, tuned on R2a feedback | ⏭ next, after a few weeks of feedback | 0.4–0.6M |
 | R3 | Season planner, opt-in weather, `.hrz`/Target Scheduler export | not started | 0.6–0.9M |
 | R4 | Optional LLM nightly briefing | not started | 0.2–0.4M |

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.equipment import Rig, Site
-from app.services.quality_stats import build_stats
+from app.services.quality_stats import build_stats, by_rig as build_by_rig
 from app.services.session_quality import build_timeline
 from app.utils.filter_names import normalize_filter
 from app.utils.observing_night import NIGHT_JOIN_SQL, NIGHT_SQL
@@ -238,5 +238,22 @@ async def quality_stats(
         for p, a in zip(group, alt):
             p["alt_deg"] = float(a)
 
-    stats = build_stats(points, prefer_arcsec=(units or "").upper() != "PX")
-    return {"rigs": rigs, "rig_id": chosen, "rig_name": names.get(chosen) if chosen != "ALL" else None, **stats}
+    prefer_arcsec = (units or "").upper() != "PX"
+    stats = build_stats(points, prefer_arcsec=prefer_arcsec)
+
+    # Q2: per-rig medians over all measured subs (same data as the Equipment page's
+    # delivered FWHM), independent of the selected rig.
+    rig_rows = (await db.execute(text(f"""
+        SELECT images.rig_id, count(*) AS n, count({SCALE_SQL}) AS n_scaled,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px) AS fwhm_px,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px) AS hfr_px,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.fwhm_px * {SCALE_SQL}) AS fwhm_arcsec,
+               percentile_cont(0.5) WITHIN GROUP (ORDER BY images.hfr_px * {SCALE_SQL}) AS hfr_arcsec
+        FROM images LEFT JOIN rigs r ON r.id = images.rig_id
+        WHERE {LIGHT_SUBS_SQL} AND images.star_metrics_status = 'OK'
+          AND images.rig_id IS NOT NULL AND images.capture_date IS NOT NULL
+        GROUP BY images.rig_id
+    """))).mappings().all()
+    rig_rows = [dict(r) for r in rig_rows]
+    return {"rigs": rigs, "rig_id": chosen, "rig_name": names.get(chosen) if chosen != "ALL" else None,
+            "by_rig": build_by_rig(rig_rows, names, prefer_arcsec), **stats}

@@ -9,6 +9,7 @@ import { fetchFitsStats } from '../api/client';
 import { MILKY_WAY_DATA } from '../data/mw_data';
 import { CONSTELLATION_LINES } from '../data/constellations_data';
 import { CONSTELLATION_LABELS } from '../data/constellations_labels';
+import RigStarSizeChart from '../components/quality/RigStarSizeChart';
 import QualityStatsSection from '../components/quality/QualityStatsSection';
 import './FitsStats.css';
 
@@ -758,6 +759,9 @@ export default function FitsStats() {
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
+
+                {/* Q2: median star size per rig */}
+                <RigStarSizeChart />
             </div>
 
             {/* Q1d: star quality statistics */}

@@ -7,7 +7,6 @@ Welcome to the AstroCat documentation. This folder contains technical details, g
 ### [Core Architecture](core/)
 The fundamental building blocks and design principles of the system.
 - [Architecture Overview](core/ARCHITECTURE.md)
-- [System Design](core/DESIGN.md) *(original design spec)*
 - [Data Model Specification](core/DATAMODEL.md)
 - [Database Schema](core/DATABASE_SCHEMA.md)
 
@@ -29,20 +28,17 @@ Detailed technical analysis and specifications for specific features.
 - [Overlay Logic](features/overlay_logic.md)
 - [Image Processors](features/Processors.md)
 - [Objects in Field Analysis](features/objects_in_field_technical_analysis.md)
-- [Indexer Scan Process](scanner.md)
+- [Indexer Scan Process](features/scanner.md)
+- [Equipment](features/EQUIPMENT.md)
+- [Frame Types](features/FRAME_TYPES.md)
+- [Targets](features/TARGETS.md)
+- [Recommendations](features/RECOMMENDATIONS.md)
 
 ### [Feature Designs](design/)
 Proposed designs for upcoming features. Start with the coordination contract in [design/README.md](design/README.md).
-- [F1 Frame Types](design/F1-frame-types.md) · [F2 Targets](design/F2-target-integration.md) · [F7 Sessions](design/F7-imaging-sessions.md) · [F16 Mosaics](design/F16-mosaics.md)
+- [F7 Sessions](design/F7-imaging-sessions.md) · [F16 Mosaics](design/F16-mosaics.md)
 
 ### [Infrastructure](infrastructure/)
 Documentation related to deployment, security, and data integrity.
 - [Backup & Restore Guide](infrastructure/BACKUP_RESTORE.md)
-- [Security Audit Summary](infrastructure/SECURITY_AUDIT.md) *(full report: [security.md](../security.md))*
 - [Redis Persistence](infrastructure/REDIS_PERSISTENCE.md)
-
-### [Performance Reports](reports/performance/)
-Historical performance benchmarks.
-
-### [Archive](archive/)
-Historical design documents and obsolete implementation details.

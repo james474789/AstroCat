@@ -1,7 +1,7 @@
 # Equipment & Sites (R0)
 
 Status: **Backend shipped** (branch `feat/r0-equipment-backend`). Design:
-[P0-R0-equipment-sites.md](../design/P0-R0-equipment-sites.md) §4.
+`P0-R0-equipment-sites.md` §4.
 
 ## What it is
 
@@ -140,7 +140,7 @@ left alone.
 
 Auto-assignment never guesses, so some frames keep `rig_id IS NULL`. Masters are hit
 hardest: cropped or drizzled stacks never match the sensor dimensions. You can find these
-frames and allocate them by hand, in bulk. Design: [R0b-rig-allocation.md](../design/R0b-rig-allocation.md).
+frames and allocate them by hand, in bulk. Design: `R0b-rig-allocation.md`.
 
 - **Scope.** Only light frames with subtype `SUB_FRAME` or `INTEGRATION_MASTER`. Planetary,
   deprecated and calibration frames are never listed or allocated.
@@ -175,7 +175,7 @@ frames and allocate them by hand, in bulk. Design: [R0b-rig-allocation.md](../de
     frames included. Bulk actions there (Assign Rig…, Set Frame Type…, CSV export, …) apply
     to exactly those images. A key that no longer exists (e.g. the bucket was just
     assigned) matches nothing, and Search says the bucket no longer exists.
-    Design: [R0c-equipment-click-through.md](../design/R0c-equipment-click-through.md).
+    Design: `R0c-equipment-click-through.md`.
 - **Search.** The Rig filter offers Any / Unassigned / each rig. **Assign Rig…** allocates
   a rig to every light sub and master in the current results; other frames are reported
   as skipped. "Clear rig" resets them to auto-assignment.

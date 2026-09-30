@@ -297,9 +297,7 @@ async def _site_counts(db: AsyncSession) -> Dict[int, int]:
 
 async def _rig_delivered(db: AsyncSession, rig_ids: Optional[Iterable[int]] = None) -> Dict[int, Dict[str, Any]]:
     """
-    Q1d: each rig's delivered FWHM over its last DELIVERED_WINDOW_DAYS of
-    measured Light subs (relative to its own latest sub, so a rig that has
-    been idle for months still reports its recent form).
+    Q1d: each rig's delivered FWHM over all of its measured Light subs.
     """
     rows = (await db.execute(text(f"""
         WITH m AS (
@@ -316,12 +314,12 @@ async def _rig_delivered(db: AsyncSession, rig_ids: Optional[Iterable[int]] = No
                percentile_cont(0.1) WITHIN GROUP (ORDER BY arc) AS best_arcsec,
                percentile_cont(0.5) WITHIN GROUP (ORDER BY fwhm_px) AS median_px,
                percentile_cont(0.1) WITHIN GROUP (ORDER BY fwhm_px) AS best_px
-        FROM m WHERE capture_date >= last - make_interval(days => :days)
+        FROM m
         GROUP BY rig_id
-    """), {"days": DELIVERED_WINDOW_DAYS, **({"ids": list(rig_ids)} if rig_ids is not None else {})})).all()
+    """), {**({"ids": list(rig_ids)} if rig_ids is not None else {})})).all()
     r3 = lambda v: round(float(v), 3) if v is not None else None  # noqa: E731
     return {r.rig_id: {
-        "n": int(r.n), "window_days": DELIVERED_WINDOW_DAYS,
+        "n": int(r.n),
         "since": _iso(r.since), "until": _iso(r.until),
         "median_arcsec": r3(r.median_arcsec), "best_arcsec": r3(r.best_arcsec),
         "median_px": r3(r.median_px), "best_px": r3(r.best_px),
