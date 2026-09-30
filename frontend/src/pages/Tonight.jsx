@@ -420,6 +420,41 @@ function ContextStrip({ context, onOpenHidden }) {
     );
 }
 
+// ============ Wide-field regions ============
+// R1b: a "WF" pick is a curated region (WF_…), not a catalog object, so /targets/WF_… has no
+// images. It links to its member objects instead.
+
+function TargetName({ pick, className }) {
+    const label = pick.name || pick.target_key;
+    if (pick.catalog === 'WF') return <span className={className}>{label}</span>;
+    return <Link to={`/targets/${encodeURIComponent(pick.target_key)}`} className={className}>{label}</Link>;
+}
+
+function MemberLinks({ members }) {
+    if (!members || members.length === 0) return null;
+    return (
+        <div className="pick-members small">
+            <span className="muted">Includes</span>{' '}
+            {members.map((m, i) => (
+                <span key={m}>
+                    {i > 0 && ', '}
+                    <Link to={`/targets/${encodeURIComponent(m)}`}>{m}</Link>
+                </span>
+            ))}
+        </div>
+    );
+}
+
+function formatSizeArcmin(v) {
+    if (v == null) return '';
+    if (v < 60) return `${Math.round(v)}′`;
+    return `${String(Math.round((v / 60) * 10) / 10)}°`;
+}
+
+function formatSizeWindow(w) {
+    return w && w.length === 2 ? `${formatSizeArcmin(w[0])}–${formatSizeArcmin(w[1])}` : null;
+}
+
 // ============ Hero card ============
 
 function HeroCard({ hero, verdict, onAction }) {
@@ -429,9 +464,7 @@ function HeroCard({ hero, verdict, onAction }) {
         <div className="hero-card">
             <div className="hero-card-top">
                 <VerdictPill level={verdict?.level} />
-                <Link to={`/targets/${encodeURIComponent(hero.target_key)}`} className="hero-name">
-                    {hero.name || hero.target_key}
-                </Link>
+                <TargetName pick={hero} className="hero-name" />
                 <span className="muted">{hero.kind}</span>
                 {onAction && (
                     <ActionRow
@@ -462,9 +495,7 @@ function PickCard({ pick, laneId, rank, onAction }) {
     return (
         <div className="pick-card">
             <div className="pick-card-header">
-                <Link to={`/targets/${encodeURIComponent(pick.target_key)}`} className="pick-name">
-                    {pick.name || pick.target_key}
-                </Link>
+                <TargetName pick={pick} className="pick-name" />
                 <span className="badge">{pick.kind}</span>
             </div>
             <div className="muted small">{pick.target_key}</div>
@@ -492,9 +523,13 @@ function PickCard({ pick, laneId, rank, onAction }) {
             <ReasonChips reasons={pick.reasons} max={3} />
             <AltitudeSparkline curve={pick.curve} height={70} />
             <GoalProgress haveHours={pick.have_hours} goalHours={pick.goal_hours} goalSource={pick.goal_source} />
-            <Link to={`/targets/${encodeURIComponent(pick.target_key)}`} className="btn btn-secondary btn-sm open-target-link">
-                Open target
-            </Link>
+            {pick.catalog === 'WF' ? (
+                <MemberLinks members={pick.members} />
+            ) : (
+                <Link to={`/targets/${encodeURIComponent(pick.target_key)}`} className="btn btn-secondary btn-sm open-target-link">
+                    Open target
+                </Link>
+            )}
         </div>
     );
 }
@@ -507,25 +542,33 @@ function RigPlanSection({ plan, onAction }) {
         <section className="lane-section rig-plan-section">
             <h2 className="section-title">Plan per mounted rig</h2>
             <p className="muted small rig-plan-hint">
-                One target per rig, none shared, with backups if the primary clouds out or sets.
+                One target per rig, none shared, with backups if the primary clouds out or sets. A rig with no target that clears 1.5 h says why.
             </p>
             <div className="rig-plan-grid">
                 {plan.map((entry) => {
                     const [primary, ...backups] = entry.items || [];
+                    const sizeWindow = formatSizeWindow(entry.size_window_arcmin);
                     return (
                         <div key={entry.rig.id} className="rig-plan-column">
                             <h3 className="rig-plan-rig">{entry.rig.name}</h3>
+                            <div className="rig-plan-meta">
+                                {entry.verdict && <VerdictPill level={entry.verdict.level} />}
+                                {sizeWindow && <span className="muted small">targets {sizeWindow}</span>}
+                            </div>
                             {primary ? (
                                 <PickCard pick={primary} laneId="rig_plan" rank={1} onAction={onAction} />
                             ) : (
-                                <p className="muted small">Nothing feasible for this rig tonight.</p>
+                                <p className="rig-plan-note">
+                                    <strong>Nothing good tonight.</strong>{' '}
+                                    <span className="muted">{entry.note || 'Nothing feasible for this rig tonight.'}</span>
+                                </p>
                             )}
                             {backups.length > 0 && (
                                 <ul className="rig-plan-backups">
                                     {backups.map((p) => (
                                         <li key={p.target_key}>
                                             <span className="muted small">Backup</span>{' '}
-                                            <Link to={`/targets/${encodeURIComponent(p.target_key)}`}>{p.name || p.target_key}</Link>
+                                            <TargetName pick={p} />
                                             <span className="muted small"> · {p.mode} · {p.score?.toFixed(2)}</span>
                                         </li>
                                     ))}

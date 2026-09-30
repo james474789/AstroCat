@@ -65,6 +65,24 @@ function formatArcsec(v) {
     return v == null ? '—' : `${v.toFixed(2)}″`;
 }
 
+const arcminToDeg = (arcmin) => Math.round((arcmin / 60) * 100) / 100;
+
+function degToArcmin(text) {
+    const v = parseFloat(text);
+    return Number.isFinite(v) && v > 0 ? Math.round(v * 60 * 10) / 10 : null;
+}
+
+// Mirrors backend utils/optics.target_size_window: 22% of the FOV short side .. 80% of the long side.
+function defaultTargetWindowArcmin(fov) {
+    return [0.22 * Math.min(fov[0], fov[1]) * 60, 0.8 * Math.max(fov[0], fov[1]) * 60];
+}
+
+function formatTargetWindow(w) {
+    if (!w) return null;
+    const f = (v) => (v < 60 ? `${Math.round(v)}′` : `${String(Math.round((v / 60) * 10) / 10)}°`);
+    return `${f(w[0])}–${f(w[1])}`;
+}
+
 function formatFov(fov) {
     if (!fov) return '—';
     return `${fov[0].toFixed(2)}° × ${fov[1].toFixed(2)}°`;
@@ -194,6 +212,13 @@ function RigRow({ rig, isAdmin, mountLimit, expanded, onToggleExpand, onEdit, on
                     <div className="rig-line muted">
                         <span className="rig-detail-narrow">{formatArcsec(rig.scale)} /px · </span>
                         {formatFov(rig.fov_deg)} · f/{rig.focal_ratio != null ? rig.focal_ratio.toFixed(1) : '—'}
+                        {rig.target_window_arcmin && (
+                            <span title={rig.min_target_arcmin != null || rig.max_target_arcmin != null
+                                ? 'Target-size window for Tonight picks (edited)'
+                                : 'Target-size window for Tonight picks (default from the field of view)'}>
+                                {' · '}targets {formatTargetWindow(rig.target_window_arcmin)}
+                            </span>
+                        )}
                     </div>
                     {rig.filters && rig.filters.length > 0 && (
                         <div className="chip-row">
@@ -260,6 +285,9 @@ function RigModal({ rig, cameras, optics, filters, onClose, onSave }) {
         is_active: rig?.is_active ?? true,
         mount_name: rig?.mount_name || '',
         filter_ids: rig?.filter_ids || [],
+        // Target-size window, edited in degrees, stored as arcmin. Empty = the default from the FOV.
+        min_target_deg: rig?.min_target_arcmin != null ? String(arcminToDeg(rig.min_target_arcmin)) : '',
+        max_target_deg: rig?.max_target_arcmin != null ? String(arcminToDeg(rig.max_target_arcmin)) : '',
     }));
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
@@ -273,6 +301,8 @@ function RigModal({ rig, cameras, optics, filters, onClose, onSave }) {
         const focalRatio = computeFocalRatio(optic?.focal_length_mm, optic?.aperture_mm, Number(form.modifier_factor) || 1);
         return { scale, fov, focalRatio };
     }, [camera, optic, form.binning, form.modifier_factor]);
+
+    const defaultWindow = preview.fov ? defaultTargetWindowArcmin(preview.fov) : null;
 
     function toggleFilter(id) {
         setForm((prev) => ({
@@ -298,6 +328,8 @@ function RigModal({ rig, cameras, optics, filters, onClose, onSave }) {
                 is_active: form.is_active,
                 mount_name: form.mount_name || null,
                 filter_ids: form.filter_ids,
+                min_target_arcmin: degToArcmin(form.min_target_deg),
+                max_target_arcmin: degToArcmin(form.max_target_deg),
             };
             const saved = rig ? await updateRig(rig.id, payload) : await createRig(payload);
             onSave(saved);
@@ -341,6 +373,23 @@ function RigModal({ rig, cameras, optics, filters, onClose, onSave }) {
                 <label>Mount name
                     <input className="input" placeholder="e.g. EQ6-R Pro" value={form.mount_name} onChange={(e) => setForm({ ...form, mount_name: e.target.value })} />
                 </label>
+                <div className="form-group-label">Target size</div>
+                <div className="form-row">
+                    <label>Smallest (°)
+                        <input className="input" type="number" min="0" step="0.1" value={form.min_target_deg}
+                            placeholder={defaultWindow ? String(arcminToDeg(defaultWindow[0])) : 'default'}
+                            onChange={(e) => setForm({ ...form, min_target_deg: e.target.value })} />
+                    </label>
+                    <label>Largest (°)
+                        <input className="input" type="number" min="0" step="0.1" value={form.max_target_deg}
+                            placeholder={defaultWindow ? String(arcminToDeg(defaultWindow[1])) : 'default'}
+                            onChange={(e) => setForm({ ...form, max_target_deg: e.target.value })} />
+                    </label>
+                </div>
+                <div className="muted small">
+                    Tonight only suggests targets in this size range for the rig (unless you have already imaged
+                    them with it). Clear a box to use the default: 22% of the short side up to 80% of the long side.
+                </div>
                 <div className="form-group-label">Filters</div>
                 <div className="chip-row selectable">
                     {filters.map((f) => (

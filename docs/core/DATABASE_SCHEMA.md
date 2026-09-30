@@ -89,7 +89,7 @@ See `docs/features/EQUIPMENT.md` and `backend/app/models/equipment.py` (Alembic 
 | `cameras` | `name` (unique), `maker`, `sensor_width_px`/`sensor_height_px`, `pixel_size_um` (unbinned), `is_color`, `is_cooled`, `match_patterns` (JSONB, lowercase keys matched against `images.camera_name`), `source` (`DETECTED`/`TELESCOPIUS`/`MANUAL`/`SEED`), `external_ref` (e.g. `telescopius:<id>`), `notes` |
 | `optics` | `name` (unique), `kind` (`TELESCOPE`/`LENS`), `aperture_mm`, `focal_length_mm`, `source`, `external_ref`, `notes` |
 | `filters` | `name` (unique), `band` (`normalize_filter` bucket or `Other`), `bandwidth_nm`, `match_patterns`, `source`, `external_ref` |
-| `rigs` | `name` (unique), `camera_id` -> cameras, `optic_id` -> optics, `modifier_name`/`modifier_factor` (0.8 reducer, 2.0 Barlow), `binning`, `is_active`, `is_mounted`, `mount_name`, `measured_scale_arcsec`/`measured_count` (cached by the assignment task) |
+| `rigs` | `name` (unique), `camera_id` -> cameras, `optic_id` -> optics, `modifier_name`/`modifier_factor` (0.8 reducer, 2.0 Barlow), `binning`, `is_active`, `is_mounted`, `mount_name`, `min_target_arcmin`/`max_target_arcmin` (nullable; the rig's target-size window for recommendations, NULL = default from the FOV, Alembic `d3f5b9e06013`), `measured_scale_arcsec`/`measured_count` (cached by the assignment task) |
 | `rig_filters` | (`rig_id`, `filter_id`) primary key, both `ON DELETE CASCADE` |
 | `sites` | `name` (unique), `latitude`/`longitude` (east-positive), `elevation_m`, `timezone` (IANA), `bortle`, `sqm`, `typical_seeing_arcsec` (default 2.5), `is_default`, `horizon` (JSONB `[[az, alt], ...]`), `horizon_source` (`LEARNED`/`IMPORTED`/`MANUAL`) |
 

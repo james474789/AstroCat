@@ -12,6 +12,13 @@ AstroCat knows **which rig** took each frame and **where** it was taken:
   binning and a filter set. Up to five rigs can be marked **mounted** at once (several
   mounts imaging concurrently). The R1 recommender defaults to the mounted rigs and, with
   more than one, plans a separate target for each.
+  **Target size.** Each rig also has an editable target-size window (Equipment > rig form >
+  "Target size", entered in degrees, stored as `rigs.min_target_arcmin` / `max_target_arcmin`).
+  Tonight only suggests targets inside it. Leave a box empty for the default: 22% of the field's
+  short side up to 80% of its long side (the form shows the default as the placeholder and the
+  rig row shows the effective window). The API returns the stored values plus
+  `target_window_arcmin` (the effective `[min, max]`); a bound must be positive, at most 3600 and
+  the minimum must be below the maximum (400 otherwise); `null` on a PUT clears it.
   Each rig card's "N subs" count and its **View images** button open Search with
   `?rig_id=<id>&frame_type=LIGHT`: all light frames on the rig, subs and masters (R0c).
   The count itself still counts subs only. Anyone can use these links.

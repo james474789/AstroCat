@@ -116,6 +116,9 @@ class Rig(Base):
     is_active = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     is_mounted = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     mount_name = Column(String(100), nullable=True)
+    # Target-size window for recommendations (arcmin). NULL = the default from the field of view.
+    min_target_arcmin = Column(Float, nullable=True)
+    max_target_arcmin = Column(Float, nullable=True)
     # Cached by the assignment task: median solved scale of assigned light subs.
     measured_scale_arcsec = Column(Float, nullable=True)
     measured_count = Column(Integer, nullable=False, default=0, server_default=text("0"))

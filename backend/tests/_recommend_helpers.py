@@ -1,5 +1,6 @@
 """Shared synthetic fixtures for the R1 recommendation tests (generic site, no real coordinates)."""
 
+from dataclasses import replace
 from datetime import date
 
 from app.services.recommend import EngineInputs, Params
@@ -34,14 +35,20 @@ def standard_pool():
     ])
 
 
-NB_RIG = RigSpec(id=1, name="Mono 200mm", scale_arcsec=2.46, fov_w_deg=5.66, fov_h_deg=3.86,
-                 classes=frozenset({"HA", "OIII", "SII", "BB"}))
-OSC_RIG = RigSpec(id=2, name="OSC 105mm", scale_arcsec=6.5, fov_w_deg=12.6, fov_h_deg=8.4,
-                  classes=frozenset({"OSC"}), is_color=True)
-LONG_RIG = RigSpec(id=3, name="Long focus", scale_arcsec=0.34, fov_w_deg=0.39, fov_h_deg=0.27,
-                   classes=frozenset({"HA", "OIII", "SII", "BB"}))
-BB_RIG = RigSpec(id=4, name="Mono 346mm BB", scale_arcsec=2.27, fov_w_deg=2.94, fov_h_deg=2.22,
-                 classes=frozenset({"BB"}))
+def _wide_window(rig):
+    """Fixture rigs keep the pre-R1b size rules (nothing under 0.1', up to 4 x the short side), so the shared
+    fixtures (M81, M57, NGC7635 ...) stay feasible; the default window is tested explicitly in test_recommend_scoring."""
+    return replace(rig, min_target_arcmin=0.1, max_target_arcmin=4.0 * rig.short_side_arcmin)
+
+
+NB_RIG = _wide_window(RigSpec(id=1, name="Mono 200mm", scale_arcsec=2.46, fov_w_deg=5.66, fov_h_deg=3.86,
+                 classes=frozenset({"HA", "OIII", "SII", "BB"})))
+OSC_RIG = _wide_window(RigSpec(id=2, name="OSC 105mm", scale_arcsec=6.5, fov_w_deg=12.6, fov_h_deg=8.4,
+                  classes=frozenset({"OSC"}), is_color=True))
+LONG_RIG = _wide_window(RigSpec(id=3, name="Long focus", scale_arcsec=0.34, fov_w_deg=0.39, fov_h_deg=0.27,
+                   classes=frozenset({"HA", "OIII", "SII", "BB"})))
+BB_RIG = _wide_window(RigSpec(id=4, name="Mono 346mm BB", scale_arcsec=2.27, fov_w_deg=2.94, fov_h_deg=2.22,
+                 classes=frozenset({"BB"})))
 
 
 def make_inputs(pool=None, rows=(), rigs=(NB_RIG,), night=FULL_MOON_NIGHT, as_of=None, masters=None,

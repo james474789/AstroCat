@@ -17,6 +17,7 @@ from typing import Callable, Dict, FrozenSet, Iterable, List, Mapping, Optional,
 
 import numpy as np
 
+from app.services.recommend.widefield import WIDE_FIELDS
 from app.services.targets import AliasIndex, normalize_designation
 
 KIND_EMISSION = "EMISSION"
@@ -32,7 +33,8 @@ _ROW_EMISSION = "EMISSION"
 _ROW_NEB = "NEB?"
 
 # Catalog familiarity (the `prior` score component).
-CATALOG_PRIOR = {"M": 1.0, "C": 0.9, "SH2": 0.6, "NGC": 0.55, "IC": 0.55}
+CATALOG_PRIOR = {"M": 1.0, "C": 0.9, "SH2": 0.6, "NGC": 0.55, "IC": 0.55, "WF": 0.7}
+WF_CATALOG = "WF"     # curated wide-field regions (widefield.py)
 
 # Curated reflection / broadband nebulae whose catalog type makes them look
 # moon-proof (Maia is typed HII). Canonicalised through the alias index at
@@ -61,10 +63,11 @@ class Candidate:
     dec_deg: float
     size_arcmin: Optional[float]
     kind: str
-    catalog: str            # M | C | NGC | IC | SH2 (the catalog the key comes from)
+    catalog: str            # M | C | NGC | IC | SH2 | WF (the catalog the key comes from)
     magnitude: Optional[float]
     aliases: FrozenSet[str]
     prior: float = 0.55     # best catalog familiarity across aliases (additive)
+    members: Tuple[str, ...] = ()   # WF regions: pool keys of the objects inside (they carry their own history)
 
 
 class CandidatePool:
@@ -348,7 +351,17 @@ def build_pool_parts(messier: Iterable, caldwell: Iterable, ngc: Iterable, sh2: 
                     KIND_OTHER, _first_name(getattr(row, "common_name", None)))
             if acc.ra is not None:
                 emit(acc)
+    # Wide-field regions last: they are not catalog rows, so they must not be the
+    # nearest candidate a Dup row folds into, and no history folds into them.
+    out.extend(wide_field_candidates())
     return out, dup_map
+
+
+def wide_field_candidates() -> List[Candidate]:
+    return [Candidate(key=w.key, name=w.name, ra_deg=w.ra_deg, dec_deg=w.dec_deg, size_arcmin=w.size_arcmin,
+                      kind=w.kind, catalog=WF_CATALOG, magnitude=None, aliases=frozenset(),
+                      prior=CATALOG_PRIOR[WF_CATALOG], members=w.members)
+            for w in WIDE_FIELDS]
 
 
 # ---------------------------------------------------------------------------
