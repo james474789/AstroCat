@@ -55,7 +55,14 @@ export default function QualityStatsSection() {
               ? `Focus drifts noticeably with temperature: refocus after a ${Math.max(1, Math.round(0.3 / Math.abs(temp.slope_px_per_degc)))} °C change, or use temperature compensation.`
               : 'Focus is stable with temperature.')
         : 'Needs focuser temperatures (FOCTEMP header or N.I.N.A. FTemp filename token) spanning at least 2 °C.';
-    const worstFilter = filters.filter((f) => !f.reference).sort((a, b) => Math.abs(b.offset_pct) - Math.abs(a.offset_pct))[0];
+    // Rig dropdown: sharpest (lowest median FWHM) first; rigs without a median go last.
+    const fwhmByRig = new Map((d?.by_rig || []).map((r) => [r.rig_id, r.fwhm_median]));
+    const rigsByFwhm = [...(d?.rigs || [])].sort((a, b) => {
+        const fa = fwhmByRig.get(a.rig_id), fb = fwhmByRig.get(b.rig_id);
+        if (fa == null || fb == null) return (fa == null) - (fb == null);
+        return fa - fb;
+    });
+    const worstFilter =filters.filter((f) => !f.reference).sort((a, b) => Math.abs(b.offset_pct) - Math.abs(a.offset_pct))[0];
 
     return (
         <section className="quality-stats">
@@ -69,7 +76,7 @@ export default function QualityStatsSection() {
                 </div>
                 <div className="quality-stats-controls">
                     <select className="input select" value={rigId || (d ? String(d.rig_id) : '')} onChange={(e) => setRigId(e.target.value)} aria-label="Rig">
-                        {(d?.rigs || []).map((r) => (
+                        {rigsByFwhm.map((r) => (
                             <option key={r.rig_id} value={String(r.rig_id)}>{r.rig_name || `Rig ${r.rig_id}`} ({r.measured})</option>
                         ))}
                         <option value="ALL">All rigs (distribution only)</option>
