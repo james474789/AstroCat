@@ -7,7 +7,7 @@ match the R0 API contract exactly (nullable fields are null, never omitted).
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 OpticKind = Literal["TELESCOPE", "LENS"]
 Band = Literal["L", "R", "G", "B", "Ha", "OIII", "SII", "Hb", "Duo", "None", "Other"]
@@ -27,6 +27,11 @@ def _clean_patterns(v):
     if v is None:
         return v
     return [str(p).strip().lower() for p in v if str(p).strip()]
+
+
+def _check_window(lo, hi):
+    if lo is not None and hi is not None and lo >= hi:
+        raise ValueError("min_target_arcmin must be smaller than max_target_arcmin")
 
 
 class _Body(BaseModel):
@@ -95,8 +100,16 @@ class RigCreate(_Body):
     is_active: bool = True
     mount_name: Optional[str] = Field(None, max_length=100)
     filter_ids: List[int] = []
+    # Target-size window for recommendations, arcmin; None = the default from the FOV.
+    min_target_arcmin: Optional[float] = Field(None, gt=0, le=3600)
+    max_target_arcmin: Optional[float] = Field(None, gt=0, le=3600)
 
     _name = field_validator("name")(_clean_name)
+
+    @model_validator(mode="after")
+    def _window_ordered(self):
+        _check_window(self.min_target_arcmin, self.max_target_arcmin)
+        return self
 
 
 class RigUpdate(_Body):
@@ -109,8 +122,15 @@ class RigUpdate(_Body):
     is_active: Optional[bool] = None
     mount_name: Optional[str] = Field(None, max_length=100)
     filter_ids: Optional[List[int]] = None
+    min_target_arcmin: Optional[float] = Field(None, gt=0, le=3600)   # explicit null clears it
+    max_target_arcmin: Optional[float] = Field(None, gt=0, le=3600)
 
     _name = field_validator("name")(_clean_name)
+
+    @model_validator(mode="after")
+    def _window_ordered(self):
+        _check_window(self.min_target_arcmin, self.max_target_arcmin)
+        return self
 
 
 class SiteCreate(_Body):

@@ -35,7 +35,8 @@ RIG_KEYS = {"id", "name", "camera_id", "optic_id", "camera_name", "optic_name", 
             "modifier_factor", "binning", "is_active", "is_mounted", "mount_name", "filter_ids", "filters",
             "measured_scale_arcsec", "measured_count", "scale", "fov_deg", "focal_ratio", "effective_focal_mm",
             "sampling", "scale_check", "image_count", "last_used", "created_at", "updated_at",
-            "sampling_seeing_source", "delivered_fwhm"}  # Q1d
+            "sampling_seeing_source", "delivered_fwhm",  # Q1d
+            "min_target_arcmin", "max_target_arcmin", "target_window_arcmin"}  # R1b
 SITE_KEYS = {"id", "name", "latitude", "longitude", "elevation_m", "timezone", "bortle", "sqm",
              "typical_seeing_arcsec", "is_default", "horizon", "horizon_source", "image_count", "created_at",
              "updated_at", "measured_seeing"}  # Q1d
@@ -75,7 +76,7 @@ def test_rig_shape_and_computed_fields():
     rig = SimpleNamespace(id=7, name="C11 + ASI294", camera_id=1, optic_id=2, camera=_camera(), optic=_optic(),
                           modifier_name=None, modifier_factor=1.0, binning=1, is_active=True, is_mounted=True,
                           mount_name="EQMod", filters=[flt], measured_scale_arcsec=0.34, measured_count=850,
-                          created_at=NOW, updated_at=NOW)
+                          min_target_arcmin=None, max_target_arcmin=None, created_at=NOW, updated_at=NOW)
     d = api.rig_dict(rig, (850, NOW), 2.5)
     assert set(d) == RIG_KEYS
     assert d["filter_ids"] == [5] and d["filters"] == [{"id": 5, "name": "Ha 7nm", "band": "Ha"}]
@@ -97,7 +98,7 @@ def test_rig_sampling_uses_measured_fwhm_with_enough_subs():
     rig = SimpleNamespace(id=7, name="C11", camera_id=1, optic_id=2, camera=_camera(), optic=_optic(),
                           modifier_name=None, modifier_factor=1.0, binning=1, is_active=True, is_mounted=True,
                           mount_name=None, filters=[], measured_scale_arcsec=0.34, measured_count=850,
-                          created_at=NOW, updated_at=NOW)
+                          min_target_arcmin=None, max_target_arcmin=None, created_at=NOW, updated_at=NOW)
     few = api.rig_dict(rig, None, 2.5, {"n": 10, "median_arcsec": 1.8})
     assert few["sampling_seeing_source"] == "SITE" and few["sampling"]["seeing_arcsec"] == 2.5
     many = api.rig_dict(rig, None, 2.5, {"n": 386, "median_arcsec": 2.63})
@@ -206,3 +207,35 @@ def test_unassigned_routes_are_registered():
     paths = {(r.path, m) for r in api.router.routes for m in r.methods}
     assert ("/unassigned", "GET") in paths
     assert ("/unassigned/assign", "POST") in paths
+
+
+# --- R1b: per-rig target-size window ---------------------------------------------------
+
+def test_rig_target_window_fields_and_effective_window():
+    flt = SimpleNamespace(id=5, name="Ha 7nm", band="Ha")
+    base = dict(id=7, name="DSLR + 105", camera_id=1, optic_id=2, camera=_camera(), optic=_optic(),
+                modifier_name=None, modifier_factor=1.0, binning=1, is_active=True, is_mounted=True,
+                mount_name=None, filters=[flt], measured_scale_arcsec=None, measured_count=0,
+                created_at=NOW, updated_at=NOW)
+    default = api.rig_dict(SimpleNamespace(**base, min_target_arcmin=None, max_target_arcmin=None), None, 2.5)
+    fov = default["fov_deg"]
+    assert default["min_target_arcmin"] is None
+    assert default["target_window_arcmin"] == [pytest.approx(0.22 * min(fov) * 60, abs=0.1),
+                                               pytest.approx(0.80 * max(fov) * 60, abs=0.1)]
+    declared = api.rig_dict(SimpleNamespace(**base, min_target_arcmin=180.0, max_target_arcmin=None), None, 2.5)
+    assert declared["min_target_arcmin"] == 180.0 and declared["target_window_arcmin"][0] == 180.0
+    assert declared["target_window_arcmin"][1] == default["target_window_arcmin"][1]
+
+
+def test_rig_schemas_validate_the_window():
+    from pydantic import ValidationError
+    from app.schemas.equipment import RigCreate, RigUpdate
+
+    ok = RigCreate(name="r", camera_id=1, optic_id=2, min_target_arcmin=180, max_target_arcmin=960)
+    assert (ok.min_target_arcmin, ok.max_target_arcmin) == (180, 960)
+    assert RigCreate(name="r", camera_id=1, optic_id=2).min_target_arcmin is None
+    for bad in ({"min_target_arcmin": 0}, {"max_target_arcmin": 3601}, {"min_target_arcmin": 960, "max_target_arcmin": 180}):
+        with pytest.raises(ValidationError):
+            RigUpdate(**bad)
+    clear = RigUpdate.model_validate({"min_target_arcmin": None})
+    assert "min_target_arcmin" in clear.model_fields_set and clear.min_target_arcmin is None

@@ -303,3 +303,76 @@ def test_momentum_tau_param_and_recency_rank_weight():
     comps = {p.key: p.components["recency_rank"] for p in ranked}
     assert comps["NGC7000"] == 1.0 and comps.get("M31", 0.5) == 0.5
     assert all(v == 0.0 for k, v in comps.items() if k not in ("NGC7000", "M31"))
+
+
+# --- R1b: per-rig size window and the imaged-on-rig exemption --------------------------
+
+# Wide rig of the motivating case: 13.4"/px, 20.4 x 13.6 deg.
+WIDE = RigSpec(id=9, name="105mm DSLR", scale_arcsec=13.4, fov_w_deg=20.4, fov_h_deg=13.6, classes=frozenset({"HA"}))
+NIGHT = date(2026, 10, 10)
+
+
+def _window_pool():
+    return CandidatePool([cand("M92LIKE", 314.7, 44.3, 14.4, "EMISSION"), cand("SIX", 314.7, 44.3, 360.0, "EMISSION"),
+                          cand("BIG25", 314.7, 44.3, 1500.0, "EMISSION"), cand("NOSIZE", 314.7, 44.3, None, "EMISSION")])
+
+
+def test_size_window_defaults_from_the_fov_and_declared_values_win():
+    lo, hi = WIDE.size_window()
+    assert lo == pytest.approx(0.22 * 13.6 * 60) and hi == pytest.approx(0.80 * 20.4 * 60)     # ~3 deg .. ~16 deg
+    assert NB_RIG.size_window() == (0.1, pytest.approx(4 * NB_RIG.short_side_arcmin))
+    declared = RigSpec(**{**WIDE.__dict__, "min_target_arcmin": 180.0, "max_target_arcmin": 960.0})
+    assert declared.size_window() == (180.0, 960.0)
+    half = RigSpec(**{**WIDE.__dict__, "min_target_arcmin": 30.0})
+    assert half.size_window() == (30.0, pytest.approx(hi))
+
+
+def test_size_window_excludes_small_and_big_targets_but_not_unknown_size():
+    res = recommend(make_inputs(pool=_window_pool(), rigs=[WIDE], night=NIGHT), Params())
+    assert res.excluded == {"M92LIKE": "TOO_SMALL", "BIG25": "TOO_BIG"}
+    assert {p.key for p in res.ranked} == {"SIX", "NOSIZE"}
+    from app.services.recommend import explain_target
+    why = explain_target(make_inputs(pool=_window_pool(), rigs=[WIDE], night=NIGHT), Params(), "M92LIKE")
+    d = why["results"][0]["details"]
+    assert d["size_window_arcmin"] == [pytest.approx(179.5, abs=0.1), pytest.approx(979.2, abs=0.1)]
+    assert d["imaged_on_rig"] is False
+
+
+def _imaged_rows(rig_id, scale):
+    return [HistoryRow("M92LIKE", NIGHT - timedelta(days=30), "Ha", 3600.0, rig_id, False, 1, scale)]
+
+
+@pytest.mark.parametrize("rig_id,scale,exempt", [
+    (9, 2.0, True),        # imaged on this very rig
+    (5, 13.0, True),       # another rig within 25% of the pixel scale
+    (5, 16.7, True),       # +24.6%
+    (5, 17.0, False),      # +26.9%
+    (5, 2.46, False),      # a much finer rig does not count
+    (5, None, False),      # no solved scale and a different rig
+])
+def test_imaged_target_is_exempt_on_the_same_or_a_similar_scale_rig(rig_id, scale, exempt):
+    inputs = make_inputs(pool=_window_pool(), rows=_imaged_rows(rig_id, scale), rigs=[WIDE], night=NIGHT)
+    res = recommend(inputs, Params())
+    assert ("M92LIKE" not in res.excluded) is exempt
+    if exempt:
+        assert res.evals[0].imaged[res.prepared and inputs.pool.index["M92LIKE"]]
+    assert res.excluded.get("BIG25") == "TOO_BIG"      # the exemption is per target
+
+
+def test_exemption_also_lifts_the_pixel_floor_and_respects_the_as_of_night():
+    tiny = CandidatePool([cand("TINY", 314.7, 44.3, 0.3, "EMISSION")])
+    rows = [HistoryRow("TINY", NIGHT - timedelta(days=3), "L", 3600.0, 9, False, 1, 13.4)]
+    assert recommend(make_inputs(pool=tiny, rows=rows, rigs=[WIDE], night=NIGHT), Params()).excluded == {}
+    # Replay: history strictly before the night only.
+    late = [HistoryRow("TINY", NIGHT + timedelta(days=3), "L", 3600.0, 9, False, 1, 13.4)]
+    res = recommend(make_inputs(pool=tiny, rows=late, rigs=[WIDE], night=NIGHT, as_of=NIGHT), Params())
+    assert res.excluded == {"TINY": "TOO_SMALL"}
+
+
+def test_rig_summary_counts_exclusions_and_the_quality_bar():
+    res = recommend(make_inputs(pool=_window_pool(), rigs=[WIDE], night=NIGHT), Params())
+    s = res.rig_summary[0]
+    assert s["rig_id"] == WIDE.id and s["feasible"] == 2 and s["in_window"] == 2
+    assert s["excluded"]["TOO_SMALL"] == 1 and s["excluded"]["TOO_BIG"] == 1
+    assert s["in_window_excluded"]["TOO_SMALL"] == 0
+    assert s["best_hours"] >= 0 and s["short"] <= s["feasible"]

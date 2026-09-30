@@ -11,9 +11,13 @@ Per rig, per candidate:
   framing    ratio = size / short side of the FOV, px = size*60/scale;
   feasibility (first failure recorded), generous so only clear-cut cases go:
              BELOW_HORIZON (< 0.5 h above max(15, limit - 10)), TOO_SMALL
-             (< 15 px), TOO_BIG (> 4 x the short side), TIER (no usable
-             class; only the NONE tier removes classes), MOON (< 0.5 h clear
-             of half the required distance);
+             (below the rig's size window, or < 15 px), TOO_BIG (above the
+             window), TIER (no usable class; only the NONE tier removes
+             classes), MOON (< 0.5 h clear of half the required distance).
+             The window is the rig's declared min/max target size, else 22% of
+             the FOV short side up to 80% of the long side (R1b). A target the
+             user already imaged on the rig (or on one with a pixel scale
+             within 25%) is exempt from both size rules there;
   components observability, framing, project, momentum, urgency, prior,
              recency_rank; the full rules (real limit, full Moon distance,
              BRIGHT broadband x 0.3) drive them;
@@ -37,6 +41,7 @@ from app.services.recommend.context import (
 )
 from app.services.recommend.ephemeris import SYNODIC_DAYS, _LRU, compute_night_ephemeris
 from app.utils.horizon import alt_az
+from app.utils.optics import target_size_window
 from app.services.recommend.history import (
     BROADBAND, CLASS_BB, CLASS_HA, CLASS_OIII, CLASS_OSC, CLASS_SII, CLASSES, NARROWBAND, GoalModel,
     TargetHistory,
@@ -78,7 +83,7 @@ FRAMING_BEST_RATIO = 0.5
 FRAMING_SIGMA = 0.7
 FRAMING_UNKNOWN_FIT = 0.4
 MIN_TARGET_PX = 15.0
-MAX_FILL_RATIO = 4.0
+SIMILAR_SCALE_TOLERANCE = 0.25      # a rig within +/-25% of the pixel scale counts as "the same rig" for history
 
 EXCL_NONE = 0
 EXCL_BELOW_HORIZON = 1
@@ -130,10 +135,16 @@ class RigSpec:
     fov_h_deg: float
     classes: FrozenSet[str]
     is_color: bool = False
+    min_target_arcmin: Optional[float] = None    # declared size window; None = default from the FOV
+    max_target_arcmin: Optional[float] = None
 
     @property
     def short_side_arcmin(self) -> float:
         return min(self.fov_w_deg, self.fov_h_deg) * 60.0
+
+    def size_window(self) -> Tuple[float, float]:
+        """(min, max) target size in arcmin: declared, else 22% of the short side / 80% of the long side."""
+        return target_size_window((self.fov_w_deg, self.fov_h_deg), self.min_target_arcmin, self.max_target_arcmin)
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +292,8 @@ class HistoryArrays:
     goal_h: np.ndarray        # N
     goal_source: List[str]    # N
     recency_rank: np.ndarray = None   # N: 1 / (1 + rank by last night among targets with history)
+    rig_ids: List[frozenset] = None   # N: rigs the target was imaged on (R1b size-window exemption)
+    scales: List[frozenset] = None    # N: pixel scales (arcsec/px) it was imaged at
 
 
 def momentum_score(days_since, tau_days: float = MOMENTUM_TAU_DAYS) -> np.ndarray:
@@ -315,6 +328,8 @@ def history_arrays(pool: CandidatePool, history: Mapping[str, TargetHistory], go
     days = np.full(n, np.nan)
     goal_h = np.zeros(n)
     goal_src: List[str] = [""] * n
+    rig_ids: List[frozenset] = [frozenset()] * n
+    scales: List[frozenset] = [frozenset()] * n
     for i, c in enumerate(pool.candidates):
         g, src = goals.goal_for(c.key, c.kind)
         goal_h[i], goal_src[i] = g, src
@@ -327,13 +342,14 @@ def history_arrays(pool: CandidatePool, history: Mapping[str, TargetHistory], go
         for cls, ci in CLASS_INDEX.items():
             class_h[i, ci] = h.seconds_by_class.get(cls, 0.0) / 3600.0
         nights[i] = len(h.nights)
+        rig_ids[i], scales[i] = frozenset(h.rig_ids), frozenset(h.scales)
         if h.last_night is not None:
             days[i] = (night - h.last_night).days
     mom = momentum_score(days, tau_days)
     committed = has & ((nights >= 2) | (total >= 2.0) | (mom > 0))
     return HistoryArrays(has=has, total_h=total, class_h=class_h, nights=nights, days_since=days, momentum=mom,
                          committed=committed, goal_h=goal_h, goal_source=goal_src,
-                         recency_rank=recency_rank_score(days))
+                         recency_rank=recency_rank_score(days), rig_ids=rig_ids, scales=scales)
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +390,18 @@ def tier_class_mask(tier: str) -> np.ndarray:
     return ok
 
 
+def imaged_on_rig(rig: RigSpec, hist: HistoryArrays, n: int) -> np.ndarray:
+    """N bool: already imaged on this rig, or on one whose pixel scale is within SIMILAR_SCALE_TOLERANCE of it."""
+    out = np.zeros(n, dtype=bool)
+    if hist.rig_ids is None or hist.scales is None:
+        return out
+    for i in np.flatnonzero(hist.has):
+        if rig.id in hist.rig_ids[i] or any(abs(s / rig.scale_arcsec - 1.0) <= SIMILAR_SCALE_TOLERANCE
+                                            for s in hist.scales[i]):
+            out[i] = True
+    return out
+
+
 BROADBAND_INDEX = np.asarray([CLASS_INDEX[c] for c in sorted(BROADBAND)])
 
 
@@ -391,6 +419,8 @@ class RigEval:
     have_h: np.ndarray           # N hours in the classes usable tonight (fallback: all)
     components: Dict[str, np.ndarray]
     avail_hard_h: np.ndarray = None   # N best hard-rule Moon-clear hours over the pair's classes
+    size_ok: np.ndarray = None        # N bool: inside the rig's size window (or exempt, or size unknown)
+    imaged: np.ndarray = None         # N bool: already imaged on this rig / a similar-scale rig
 
 
 def evaluate_rig(rig: RigSpec, pool: CandidatePool, feats: NightFeatures, hist: HistoryArrays,
@@ -413,11 +443,16 @@ def evaluate_rig(rig: RigSpec, pool: CandidatePool, feats: NightFeatures, hist: 
     usable_hard = feats.usable_hard_h if feats.usable_hard_h is not None else feats.usable_h
 
     fit, ratio, px = framing(pool.size, rig)
+    w_min, w_max = rig.size_window()
+    size = np.nan_to_num(np.where(pool.size > 0, pool.size, np.nan), nan=-1.0)      # -1: size unknown
+    imaged = imaged_on_rig(rig, hist, n)
+    too_small = ((size >= 0) & (size < w_min)) | (np.nan_to_num(px, nan=np.inf) < MIN_TARGET_PX)
+    too_big = size > w_max
     excluded = np.zeros(n, dtype=np.int8)
     rules = (
         (EXCL_BELOW_HORIZON, usable_hard < min_usable_h),
-        (EXCL_TOO_SMALL, np.nan_to_num(px, nan=np.inf) < MIN_TARGET_PX),
-        (EXCL_TOO_BIG, np.nan_to_num(ratio, nan=0.0) > MAX_FILL_RATIO),
+        (EXCL_TOO_SMALL, too_small & ~imaged),
+        (EXCL_TOO_BIG, too_big & ~imaged),
         (EXCL_TIER, ~has_class),
         (EXCL_MOON, avail_hard < MIN_AVAILABLE_H),
     )
@@ -454,7 +489,8 @@ def evaluate_rig(rig: RigSpec, pool: CandidatePool, feats: NightFeatures, hist: 
     score = sum(w[k] * comps[k] for k in COMPONENTS)
     score = np.where(excluded == 0, score, np.nan)
     return RigEval(rig=rig, score=score, excluded=excluded, mode=mode, avail_h=avail, pair_mask=pair, fit=fit,
-                   ratio=ratio, px=px, have_h=have, components=comps, avail_hard_h=avail_hard)
+                   ratio=ratio, px=px, have_h=have, components=comps, avail_hard_h=avail_hard,
+                   size_ok=~((too_small | too_big) & ~imaged), imaged=imaged)
 
 
 def best_rigs(evals: Sequence[RigEval]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

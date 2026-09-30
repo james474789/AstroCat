@@ -194,3 +194,25 @@ def test_build_pool_data_remaps_history():
     assert data.pool.get("IC1318").kind == KIND_EMISSION
     stats = data.fold_stats(rows)
     assert stats["keys"] == 2 and stats["rows"] == 2 and stats["hours"] == 1.5
+
+
+# --- R1b: curated wide-field candidates ------------------------------------------------
+
+def test_wide_field_regions_join_the_pool_and_fold_no_history():
+    from app.services.recommend.candidates import KINDS, WF_CATALOG
+    from app.services.recommend.widefield import WF_PREFIX, WIDE_FIELDS
+
+    keys = [w.key for w in WIDE_FIELDS]
+    assert len(keys) == len(set(keys)) >= 20 and all(k.startswith(WF_PREFIX) for k in keys)
+    assert all(w.kind in KINDS for w in WIDE_FIELDS)
+    assert all(-90 <= w.dec_deg <= 90 and 0 <= w.ra_deg < 360 and w.size_arcmin >= 60 for w in WIDE_FIELDS)
+    pool, dup_map, index = build_extra(imaged={"NGC281"})
+    for w in WIDE_FIELDS:
+        c = pool[w.key]
+        assert c.catalog == WF_CATALOG == "WF" and c.prior == 0.7 and c.aliases == frozenset()
+        assert c.members == w.members and c.size_arcmin == w.size_arcmin
+    # No Dup row folds into a WF region, and stray history keys never resolve to one.
+    assert not any(v.startswith("WF_") for v in dup_map.values())
+    idx = {k: i for i, k in enumerate(pool)}
+    assert fold_key("OBJ:NGC78222", idx, index.resolve, dup_map) == "NGC7822"
+    assert not any(v.startswith("WF_") for v in fold_map(["OBJ:NGC78222", "IC11", "OBJ:M81LUM"], idx, index.resolve, dup_map).values())
