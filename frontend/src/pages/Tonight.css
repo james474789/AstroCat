@@ -433,6 +433,30 @@
     margin: 0;
 }
 
+.rig-plan-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.rig-plan-note {
+    margin: 0;
+    padding: 0.75rem;
+    border: 1px dashed var(--color-warning);
+    border-radius: var(--radius-md, 8px);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.pick-members {
+    line-height: 1.4;
+}
+
+.pick-members a {
+    color: var(--color-primary);
+}
+
 .rig-plan-backups {
     list-style: none;
     margin: 0;

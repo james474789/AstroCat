@@ -7,6 +7,7 @@ import asyncio
 import json
 import sys
 import types
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -28,7 +29,10 @@ from app.services.recommend import loader  # noqa: E402
 
 from app.services.recommend import assign_rig_plan  # noqa: E402
 
-from _recommend_helpers import BB_RIG, NB_RIG, OSC_RIG, SITE, make_inputs, ngc7000_rows  # noqa: E402
+from app.services.recommend.candidates import CandidatePool  # noqa: E402
+from _recommend_helpers import (  # noqa: E402
+    BB_RIG, FULL_MOON_NIGHT, NB_RIG, OSC_RIG, SITE, cand, make_inputs, ngc7000_rows,
+)
 
 PICK_KEYS = {"target_key", "name", "kind", "ra_deg", "dec_deg", "size_arcmin", "rig", "alternatives", "mode", "score",
              "components", "usable_hours", "available_hours", "best_time_utc", "max_alt_deg", "moon_sep_min_deg",
@@ -89,7 +93,8 @@ def test_response_shape_matches_contract():
             assert PICK_KEYS <= set(p)
             assert all(set(r) == {"code", "text"} for r in p["reasons"])
     assert body["context"]["rig_mode"] == "ALL_FALLBACK"
-    assert body["context"]["rigs"][0] == {"id": 1, "name": "Mono 200mm", "classes": ["HA", "SII", "OIII", "BB"]}
+    assert body["context"]["rigs"][0] == {"id": 1, "name": "Mono 200mm", "classes": ["HA", "SII", "OIII", "BB"],
+                                          "size_window_arcmin": [0.1, 926.4]}
     json.dumps(body)
 
 
@@ -135,10 +140,13 @@ def test_rig_plan_only_for_several_mounted_rigs():
 
 
 class _P:
-    def __init__(self, key, rig, score, alts=()):
-        self.key, self.score = key, score
-        self.data = {"rig": {"id": rig}, "alternatives": [{"rig_id": r, "rig_name": str(r), "score": s}
-                                                           for r, s in alts]}
+    """A cached pick for assign_rig_plan: alts are (rig, score[, hours]); hours default to `hours`."""
+
+    def __init__(self, key, rig, score, alts=(), hours=5.0):
+        self.key, self.score, self.available_hours = key, score, hours
+        self.data = {"rig": {"id": rig}, "alternatives": [
+            {"rig_id": a[0], "rig_name": str(a[0]), "score": a[1], "available_hours": a[2] if len(a) > 2 else hours}
+            for a in alts]}
 
 
 def test_assign_rig_plan_primaries_first_then_backups_and_pins_first():
@@ -149,6 +157,50 @@ def test_assign_rig_plan_primaries_first_then_backups_and_pins_first():
     assert [(p.key, alt["rig_id"]) for p, alt in plan[2]] == [("B", 2)]
     plan = assign_rig_plan(picks, [1, 2], pinned=frozenset({"C"}), per_rig=1)
     assert [p.key for p, _ in plan[1]] == ["C"] and [p.key for p, _ in plan[2]] == ["B"]
+
+
+def test_assign_rig_plan_leaves_a_rig_empty_when_no_pair_has_1_5_hours():
+    # Rig 2 only offers 0.8 h pairs: it gets nothing, and rig 1 is unaffected.
+    picks = [_P("A", 1, 0.9, [(2, 0.8, 0.8)]), _P("B", 1, 0.8, [(2, 0.7, 0.8)])]
+    plan = assign_rig_plan(picks, [1, 2], per_rig=2)
+    assert [p.key for p, _ in plan[1]] == ["A", "B"] and plan[2] == []
+    # A target that is short on its best rig can still be planned on the other rig.
+    plan = assign_rig_plan([_P("A", 1, 0.9, [(2, 0.5, 4.0)], hours=0.6)], [1, 2])
+    assert plan[1] == [] and [(p.key, a["rig_id"]) for p, a in plan[2]] == [("A", 2)]
+
+
+def test_rig_plan_entries_carry_window_verdict_and_note():
+    from app.services.recommend import PAYLOAD_FORMAT
+
+    assert PAYLOAD_FORMAT == 4
+    inputs = make_inputs(rigs=[NB_RIG, OSC_RIG], night=date(2026, 10, 10))
+    body = result_to_dict(recommend(inputs, Params(rig_mode="MOUNTED")))
+    RecommendationsResponse.model_validate(body)
+    for entry in body["rig_plan"]:
+        assert entry["verdict"]["level"] in ("GO", "MARGINAL", "DONT_BOTHER")
+        assert len(entry["size_window_arcmin"]) == 2
+        assert (entry["note"] is None) == bool(entry["items"])
+
+
+def test_empty_rig_gets_a_note_naming_the_moon():
+    # The full-Moon night: a OSC rig whose window holds only WF-like big targets has no 1.5 h pair.
+    big = [cand("BIGMW", 314.7, 44.3, 600.0, "EMISSION", "Wide field"), cand("BIGM31", 10.7, 41.3, 500.0, "GALAXY")]
+    inputs = make_inputs(pool=CandidatePool(big), rigs=[NB_RIG, OSC_RIG], night=FULL_MOON_NIGHT)
+    body = result_to_dict(recommend(inputs, Params(rig_mode="MOUNTED")))
+    osc = next(e for e in body["rig_plan"] if e["rig"]["id"] == OSC_RIG.id)
+    assert not osc["items"]
+    assert "Moon" in osc["note"] and "broadband/OSC needs 120°" in osc["note"]
+    assert osc["verdict"] == {"level": "DONT_BOTHER", "reasons": [{"code": "NOTHING_GOOD", "text": osc["note"]}]}
+
+
+def test_empty_rig_note_for_a_size_window_with_nothing_in_it():
+    tiny = [cand("SMALL", 314.7, 44.3, 4.0, "GALAXY")]
+    rig = replace(OSC_RIG, min_target_arcmin=180.0, max_target_arcmin=960.0)
+    inputs = make_inputs(pool=CandidatePool(tiny), rigs=[NB_RIG, rig], night=date(2026, 10, 10))
+    body = result_to_dict(recommend(inputs, Params(rig_mode="MOUNTED")))
+    entry = next(e for e in body["rig_plan"] if e["rig"]["id"] == rig.id)
+    assert entry["items"] == [] and entry["note"] == "No target between 3°–16° is in the candidate list"
+    assert entry["size_window_arcmin"] == [180.0, 960.0]
 
 
 # --- service with a fake DB layer ---------------------------------------------------

@@ -42,7 +42,7 @@ from app.schemas.equipment import (
 )
 from app.services.site_horizon import HORIZON_CACHE_KEY, HORIZON_CACHE_TTL  # shared with the recommender
 from app.utils.filter_names import normalize_filter
-from app.utils.optics import DEFAULT_SEEING_ARCSEC, pixel_scale, rig_optics_summary
+from app.utils.optics import DEFAULT_SEEING_ARCSEC, pixel_scale, rig_optics_summary, target_size_window
 from app.utils.star_quality import SCALE_SQL
 
 logger = logging.getLogger(__name__)
@@ -247,12 +247,16 @@ def rig_dict(rig: Rig, usage: Optional[tuple] = None, seeing: float = DEFAULT_SE
         measured_scale=rig.measured_scale_arcsec, seeing_arcsec=seeing,
     )
     count, last = usage or (0, None)
+    fov = computed.get("fov_deg")
+    window = target_size_window(tuple(fov) if fov else None, rig.min_target_arcmin, rig.max_target_arcmin)
     return {
         "id": rig.id, "name": rig.name, "camera_id": rig.camera_id, "optic_id": rig.optic_id,
         "camera_name": cam.name if cam else None, "optic_name": opt.name if opt else None,
         "modifier_name": rig.modifier_name, "modifier_factor": rig.modifier_factor or 1.0,
         "binning": rig.binning or 1, "is_active": bool(rig.is_active), "is_mounted": bool(rig.is_mounted),
         "mount_name": rig.mount_name,
+        "min_target_arcmin": rig.min_target_arcmin, "max_target_arcmin": rig.max_target_arcmin,
+        "target_window_arcmin": [round(v, 1) for v in window] if window else None,
         "filter_ids": [f.id for f in rig.filters],
         "filters": [{"id": f.id, "name": f.name, "band": f.band} for f in rig.filters],
         "measured_scale_arcsec": rig.measured_scale_arcsec, "measured_count": rig.measured_count or 0,
@@ -599,6 +603,10 @@ async def update_rig(rig_id: int, body: RigUpdate, db: AsyncSession = Depends(ge
     if "name" in data:
         await _ensure_name_free(db, Rig, data["name"], exclude_id=rig_id)
     await _check_rig_refs(db, data.get("camera_id"), data.get("optic_id"))
+    lo = data["min_target_arcmin"] if "min_target_arcmin" in data else rig.min_target_arcmin
+    hi = data["max_target_arcmin"] if "max_target_arcmin" in data else rig.max_target_arcmin
+    if lo is not None and hi is not None and lo >= hi:
+        raise HTTPException(status_code=400, detail="min_target_arcmin must be smaller than max_target_arcmin")
     for k, v in data.items():
         setattr(rig, k, v)
     rig.updated_at = datetime.utcnow()

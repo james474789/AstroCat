@@ -13,20 +13,20 @@ seasonal usable hours) is done once per (site, night) by `prepare_night` and
 shared by every rig and by weight re-scoring (replay --grid).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-from app.services.recommend.candidates import Candidate, CandidatePool
+from app.services.recommend.candidates import WF_CATALOG, Candidate, CandidatePool
 from app.services.recommend.context import (
     TIER_NONE, HorizonSpec, NightContext, SiteSpec, build_context,
 )
 from app.services.recommend.ephemeris import night_sky
 from app.services.recommend.history import CLASSES, GoalModel, TargetHistory
 from app.services.recommend.lanes import (
-    DEFAULT_PER_LANE, Pick, build_lanes, pick_reasons, verdict,
+    DEFAULT_PER_LANE, MARGINAL_MIN_HOURS, Pick, build_lanes, pick_reasons, verdict,
 )
 from app.services.recommend.scoring import (
     BRIGHT_BROADBAND_FACTOR, CLASS_INDEX, DEFAULT_MIN_USABLE_H, EXCL_NONE, EXCLUDED_CODES, EXCLUDED_REASONS,
@@ -117,6 +117,7 @@ class Result:
     prepared: PreparedNight = field(repr=False, default=None)
     evals: List[RigEval] = field(repr=False, default_factory=list)
     excluded_names: Dict[str, str] = field(repr=False, default_factory=dict)   # R2a: names for `excluded` keys
+    rig_summary: List[Dict[str, Any]] = field(default_factory=list)            # R1b: per-rig feasibility counts
 
 
 def _moon_key(rules: Mapping[str, Tuple[float, float]], hard_fraction: float = MOON_HARD_FRACTION) -> tuple:
@@ -247,6 +248,7 @@ def recommend(inputs: EngineInputs, params: Optional[Params] = None,
                 counts[reason] += 1
                 excluded[pool.candidates[i].key] = reason
     excluded_names = {} if params.light else {k: pool.get(k).name for k in excluded}
+    rig_summary = [] if params.light else [_rig_summary(ev) for ev in evals]
 
     lanes: List[Dict[str, Any]] = []
     hero = ranked[0] if ranked else None
@@ -265,7 +267,28 @@ def recommend(inputs: EngineInputs, params: Optional[Params] = None,
         v = verdict(hero, ctx.tier)
     return Result(context=ctx, hero=hero, verdict=v, lanes=lanes, excluded_counts=counts, ranked=ranked,
                   excluded=excluded, rigs=list(inputs.rigs), skipped_rigs=list(inputs.skipped_rigs),
-                  params=params, prepared=prep, evals=evals, excluded_names=excluded_names)
+                  params=params, prepared=prep, evals=evals, excluded_names=excluded_names,
+                  rig_summary=rig_summary)
+
+
+def _rig_summary(ev: RigEval) -> Dict[str, Any]:
+    """
+    What one rig can do tonight (R1b): exclusion counts over the whole pool, and over the targets
+    inside its size window (where the horizon / Moon / tier codes are the real story), plus how
+    many feasible targets fall short of the rig-plan quality bar.
+    """
+    def counts(mask) -> Dict[str, int]:
+        return {name: int(((ev.excluded == code) & mask).sum()) for code, name in EXCLUDED_CODES.items()}
+
+    everything = np.ones(len(ev.excluded), dtype=bool)
+    ok = ev.excluded == EXCL_NONE
+    in_window = ev.size_ok if ev.size_ok is not None else everything
+    return {
+        "rig_id": ev.rig.id, "feasible": int(ok.sum()), "in_window": int(in_window.sum()),
+        "excluded": counts(everything), "in_window_excluded": counts(in_window),
+        "short": int((ok & (ev.avail_h < MARGINAL_MIN_HOURS)).sum()),
+        "best_hours": round(float(ev.avail_h[ok].max()), 1) if ok.any() else 0.0,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +323,8 @@ def pair_details(prep: PreparedNight, ev: RigEval, i: int, params: Params) -> Di
         "required_moon_sep_deg": {c: round(float(v), 1) for c, v in feats.required.items()},
         "rig_classes": sorted(ev.rig.classes),
         "min_usable_hours": params.min_usable_h,
+        "size_window_arcmin": [round(v, 1) for v in ev.rig.size_window()],
+        "imaged_on_rig": bool(ev.imaged[i]) if ev.imaged is not None else False,
     }
 
 
@@ -388,7 +413,7 @@ def curve_for(prep: PreparedNight, i: int) -> Dict[str, list]:
 
 def pick_to_dict(p: Pick, prep: Optional[PreparedNight] = None) -> Dict[str, Any]:
     c = p.candidate
-    return {
+    d = {
         "target_key": c.key, "name": c.name, "kind": c.kind,
         "ra_deg": round(c.ra_deg, 4), "dec_deg": round(c.dec_deg, 4), "size_arcmin": c.size_arcmin,
         "rig": {"id": p.rig_id, "name": p.rig_name}, "alternatives": p.alternatives,
@@ -409,6 +434,9 @@ def pick_to_dict(p: Pick, prep: Optional[PreparedNight] = None) -> Dict[str, Any
         # Additive (not in the §7 example): lane id, and the candidate's catalog/magnitude.
         "lane": p.lane, "catalog": c.catalog, "magnitude": c.magnitude,
     }
+    if c.catalog == WF_CATALOG:
+        d["members"] = list(c.members)       # a WF region has no images of its own: the UI links its members
+    return d
 
 
 def _context_dict(result: Result) -> Dict[str, Any]:
@@ -422,7 +450,8 @@ def _context_dict(result: Result) -> Dict[str, Any]:
                  "up_fraction": round(ctx.moon_up_dark_frac, 2)},
         "horizon_source": ctx.horizon_source, "floor_deg": round(ctx.floor_deg, 1),
         "rig_mode": result.params.rig_mode,
-        "rigs": [{"id": r.id, "name": r.name, "classes": [c for c in CLASSES if c in r.classes]}
+        "rigs": [{"id": r.id, "name": r.name, "classes": [c for c in CLASSES if c in r.classes],
+                  "size_window_arcmin": [round(v, 1) for v in r.size_window()]}
                  for r in result.rigs],
         "weights": result.params.weights.as_dict(),
         # Additive: tier thresholds, dark hours and the Moon rules in force.
@@ -441,7 +470,7 @@ def _context_dict(result: Result) -> Dict[str, Any]:
 # rebuild needs. Each request renders it with that user's FeedbackState, so
 # feedback never invalidates or fragments the cache.
 
-PAYLOAD_FORMAT = 3     # 3: richer alternatives for the multi-mounted rig plan
+PAYLOAD_FORMAT = 4     # 4: rig_summary, per-rig size window (R1b); 3: richer alternatives for the rig plan
 
 
 def result_payload(result: Result, generated_at: Optional[datetime] = None) -> Dict[str, Any]:
@@ -469,6 +498,7 @@ def result_payload(result: Result, generated_at: Optional[datetime] = None) -> D
         "verdict": {"level": result.verdict[0], "reasons": result.verdict[1]},
         "excluded_counts": dict(result.excluded_counts),
         "skipped_rigs": list(result.skipped_rigs),
+        "rig_summary": list(result.rig_summary),
         "curve_common": _curve_common(prep) if has_curves else None,
         "ranked": ranked,
         "excluded": {k: [v, result.excluded_names.get(k, k)] for k, v in result.excluded.items()},
@@ -507,10 +537,20 @@ def _cached_pick(d: Mapping[str, Any]) -> CachedPick:
 RIG_PLAN_PER_RIG = 3   # a primary target + backups for each concurrently mounted rig
 
 
+def _pair_hours(p: Any, alt: Optional[Mapping[str, Any]]) -> float:
+    """Moon-clear hours of a (pick, alt) pair on the rig it would be planned on."""
+    h = alt.get("available_hours") if alt is not None else getattr(p, "available_hours", None)
+    return float(h) if h is not None else 0.0
+
+
 def assign_rig_plan(picks: Sequence[Any], rig_ids: Sequence[int], pinned: frozenset = frozenset(),
-                    per_rig: int = RIG_PLAN_PER_RIG) -> Dict[int, List[Tuple[Any, Optional[Dict[str, Any]]]]]:
+                    per_rig: int = RIG_PLAN_PER_RIG,
+                    min_hours: float = MARGINAL_MIN_HOURS) -> Dict[int, List[Tuple[Any, Optional[Dict[str, Any]]]]]:
     """
     Distinct targets for rigs imaging at the same time: {rig_id: [(pick, alt)]}.
+
+    A pair with fewer than `min_hours` Moon-clear hours on its rig is not eligible (R1b): a rig
+    with no eligible pair gets nothing rather than the least-bad option.
 
     Every (target, rig) pair a pick offers (its best rig, alt None, plus its
     `alternatives`) competes by that rig's score, pinned targets first. Rounds
@@ -521,9 +561,10 @@ def assign_rig_plan(picks: Sequence[Any], rig_ids: Sequence[int], pinned: frozen
     pairs = []
     for p in picks:
         pin = p.key in pinned
-        pairs.append((pin, float(p.score), p, None))
+        if _pair_hours(p, None) >= min_hours:
+            pairs.append((pin, float(p.score), p, None))
         for a in p.data.get("alternatives") or []:
-            if a.get("rig_id") in plan and a.get("score") is not None:
+            if a.get("rig_id") in plan and a.get("score") is not None and _pair_hours(p, a) >= min_hours:
                 pairs.append((pin, float(a["score"]), p, a))
     pairs.sort(key=lambda t: (not t[0], -t[1]))
     used = set()
@@ -556,6 +597,66 @@ def _as_rig_pick(d: Dict[str, Any], alt: Mapping[str, Any]) -> Dict[str, Any]:
     d["reasons"] = [{"code": "FRAMING", "text": framing} if r.get("code") == "FRAMING" else r
                     for r in d.get("reasons") or []]
     return d
+
+
+def fmt_arcmin(v: float) -> str:
+    """'14′' under a degree, else '3°' / '16.5°'."""
+    if v < 60.0:
+        return f"{v:.0f}′"
+    deg = f"{v / 60.0:.1f}".rstrip("0").rstrip(".")
+    return f"{deg}°"
+
+
+def _offered_pairs(picks: Sequence[Any], rig_id: int, pinned: frozenset = frozenset()) -> List[float]:
+    """Moon-clear hours of every feasible (target, rig) pair the picks offer on this rig."""
+    hours = []
+    for p in picks:
+        if p.data["rig"]["id"] == rig_id:
+            hours.append(_pair_hours(p, None))
+        for a in p.data.get("alternatives") or []:
+            if a.get("rig_id") == rig_id:
+                hours.append(_pair_hours(p, a))
+    return hours
+
+
+def _moon_phrase(ctx: Mapping[str, Any], classes: Sequence[str], illum: float, up_frac: float) -> Optional[str]:
+    """'Moon 78% lit and up all night: broadband/OSC needs 120°', or None when the Moon isn't the story."""
+    if illum < 0.4 or up_frac < 0.3:
+        return None
+    rules = ctx.get("moon_rules") or {}
+    broad = [c for c in classes if c in ("BB", "OSC")]
+    if broad and len(broad) == len(classes):
+        label, dist = "broadband/OSC", rules.get(broad[0], {}).get("D")
+    else:
+        best = min((c for c in classes if c in rules), key=lambda c: rules[c]["D"], default=None)
+        label, dist = (best, rules[best]["D"]) if best else ("the rig's filters", None)
+    up = "up all night" if up_frac >= 0.9 else f"up {up_frac * 100:.0f}% of the night"
+    need = f" needs {dist:.0f}°" if dist else " is limited"
+    return f"Moon {illum * 100:.0f}% lit and {up}: {label}{need}"
+
+
+def rig_note(rig: Mapping[str, Any], window: Optional[Sequence[float]], offered_hours: Sequence[float],
+             summary: Optional[Mapping[str, Any]], payload: Mapping[str, Any], ctx: Mapping[str, Any]) -> str:
+    """Why a mounted rig has no target tonight (R1b): names the main reason in one line."""
+    bar = f"{MARGINAL_MIN_HOURS:g} h"
+    span = f"{fmt_arcmin(window[0])}–{fmt_arcmin(window[1])}" if window else "its size window"
+    moon = _moon_phrase(ctx, rig.get("classes") or [], float(payload.get("moon_illum") or 0.0),
+                        float(payload.get("moon_up_dark_frac") or 0.0))
+    if any(h >= MARGINAL_MIN_HOURS for h in offered_hours):
+        return "Every target that suits this rig is already planned on another rig"
+    if offered_hours:
+        return f"{moon}; nothing clears it for {bar}" if moon else f"Nothing between {span} has {bar} of usable sky tonight"
+    if ctx.get("tier") == "NONE":
+        return "Too bright tonight: the Sun never gets below -9°"
+    inside = (summary or {}).get("in_window_excluded") or {}
+    if summary is not None and not summary.get("in_window"):
+        return f"No target between {span} is in the candidate list"
+    main = max(inside, key=lambda k: inside[k], default=None) if any(inside.values()) else None
+    if main == "MOON" and moon:
+        return f"{moon}; nothing between {span} clears it for {bar}"
+    if main == "TIER":
+        return f"Too bright tonight for this rig's filters between {span}"
+    return f"Nothing between {span} is well placed tonight"
 
 
 def render_payload(payload: Mapping[str, Any], feedback=None, per_lane: int = DEFAULT_PER_LANE,
@@ -599,6 +700,7 @@ def render_payload(payload: Mapping[str, Any], feedback=None, per_lane: int = DE
     plan = []
     if ctx.get("rig_mode") == RIG_MODE_MOUNTED and len(ctx.get("rigs") or []) > 1:
         assigned = assign_rig_plan(kept, [r["id"] for r in ctx["rigs"]], feedback.pinned)
+        summaries = {s["rig_id"]: s for s in payload.get("rig_summary") or []}
         for r in ctx["rigs"]:
             items = []
             for p, alt in assigned[r["id"]]:
@@ -606,7 +708,21 @@ def render_payload(payload: Mapping[str, Any], feedback=None, per_lane: int = DE
                 d = _as_rig_pick(d, alt) if alt is not None else d
                 d["best_rig"] = alt is None
                 items.append(d)
-            plan.append({"rig": {"id": r["id"], "name": r["name"]}, "items": items})
+            window = r.get("size_window_arcmin")
+            note = None
+            if items:
+                primary, alt = assigned[r["id"]][0]
+                if alt is not None:
+                    primary = replace(primary, available_hours=_pair_hours(primary, alt),
+                                      mode=alt.get("mode") or primary.mode)
+                v_level, v_reasons = verdict(primary, ctx["tier"])
+            else:
+                note = rig_note(r, window, _offered_pairs(kept, r["id"], pinned=feedback.pinned),
+                                summaries.get(r["id"]), payload, ctx)
+                v_level, v_reasons = "DONT_BOTHER", [{"code": "NOTHING_GOOD", "text": note}]
+            plan.append({"rig": {"id": r["id"], "name": r["name"]}, "items": items,
+                         "verdict": {"level": v_level, "reasons": v_reasons}, "note": note,
+                         "size_window_arcmin": window})
 
     counts = dict(payload["excluded_counts"])
     counts[EXCL_SNOOZED] = hidden[EXCL_SNOOZED]

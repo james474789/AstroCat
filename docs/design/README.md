@@ -12,6 +12,7 @@ before starting any of the four.
 | F16 | Mosaic detection & coverage map | [F16-mosaics.md](F16-mosaics.md) | F1 (schema only) | yes |
 | R0b | Find & allocate images with no rig (subs + masters) | `R0b-rig-allocation.md` | R0 (shipped) | no |
 | R0c | Click through from Equipment (rigs, unassigned buckets) to Search | `R0c-equipment-click-through.md` | R0b | no |
+| R1b | Rig-aware target picking: per-rig size window, wide-field candidates, "nothing good" rigs | [R1b-rig-aware-picking.md](R1b-rig-aware-picking.md) | R1 (shipped) | yes |
 | E1 | Compact Equipment rig list (rows + expand, search/filter) | [E1-equipment-rig-list.md](E1-equipment-rig-list.md) | none | no |
 | Q2 | Per-rig median FWHM/HFR chart on the FITS page | [Q2-per-rig-star-size.md](Q2-per-rig-star-size.md) | Q1 | no |
 
