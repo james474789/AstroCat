@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.services.quality_stats import (
-    build_stats, by_altitude, filter_offsets, histogram, hfr_vs_temperature, monthly, use_arcsec_for,
+    build_stats, by_altitude, by_rig, filter_offsets, histogram, hfr_vs_temperature, monthly, use_arcsec_for,
     values,
 )
 
@@ -65,3 +65,21 @@ def test_hfr_temperature_slope():
 def test_hfr_temperature_needs_a_range():
     rows = [_r(i, temp=5.0 + (i % 2) * 0.5) for i in range(40)]
     assert hfr_vs_temperature(rows)["slope_px_per_degc"] is None
+
+
+def _agg(rig_id, n=10, n_scaled=10, f_px=3.0, h_px=1.8, f_as=3.0, h_as=1.8):
+    return {"rig_id": rig_id, "n": n, "n_scaled": n_scaled, "fwhm_px": f_px, "hfr_px": h_px,
+            "fwhm_arcsec": f_as, "hfr_arcsec": h_as}
+
+
+def test_by_rig_sorted_units_and_min_bin():
+    rows = [_agg(1, f_as=2.5), _agg(2, n=4), _agg(3, n_scaled=2, f_px=4.0, f_as=None, h_as=None),
+            _agg(None), _agg(4, f_as=1.5)]
+    out = by_rig(rows, {1: "A", 2: "B", 3: "C", 4: "D"})
+    assert [o["rig_id"] for o in out] == [4, 1, 3]            # sorted by FWHM; rig 2 (<MIN_BIN) and None dropped
+    assert out[0]["units"] == "ARCSEC" and out[0]["rig_name"] == "D"
+    assert out[2]["units"] == "PX" and out[2]["fwhm_median"] == 4.0 and out[2]["hfr_median"] == 1.8
+
+
+def test_by_rig_px_preference():
+    assert by_rig([_agg(1)], {1: "A"}, prefer_arcsec=False)[0]["units"] == "PX"

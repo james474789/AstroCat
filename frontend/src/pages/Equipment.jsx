@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Camera as CameraIcon, Aperture, SlidersHorizontal, MapPin,
-    Plus, Pencil, Trash2, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon,
+    Plus, Pencil, Trash2, ChevronDown, ChevronRight, MoreVertical, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon,
 } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -125,104 +125,126 @@ function useToast() {
     return [toast, showToast];
 }
 
-// ============ Rig card ============
+// ============ Rig row ============
 
 const rigSearchLink = (rig) => `/search?rig_id=${rig.id}&frame_type=LIGHT`;
 
-function RigCard({ rig, isAdmin, mountLimit, onEdit, onDelete, onMountToggle, onActiveToggle, onAssign }) {
+function RigRow({ rig, isAdmin, mountLimit, expanded, onToggleExpand, onEdit, onDelete, onMountToggle, onActiveToggle }) {
+    const [menuOpen, setMenuOpen] = useState(false);
     const scaleCheckMsg = scaleCheckText(rig.scale_check);
+    const ChevronIcon = expanded ? ChevronDown : ChevronRight;
+    const gear = `${rig.camera_name} · ${rig.optic_name}${rig.modifier_name ? ` · ${rig.modifier_name}` : ''}`;
     return (
-        <div className={`equip-card rig-card${rig.is_active ? '' : ' inactive'}`}>
-            <div className="rig-card-header">
-                <div className="rig-card-title">
-                    <span className="rig-name">{rig.name}</span>
-                    <button
-                        className={`pill-toggle${rig.is_mounted ? ' active' : ''}`}
-                        onClick={() => onMountToggle(rig)}
-                        disabled={!isAdmin || (!rig.is_mounted && mountLimit != null)}
-                        title={rig.is_mounted
-                            ? 'Mounted (click to unmount)'
-                            : mountLimit != null
-                                ? `${mountLimit} rigs already mounted: unmount one first`
-                                : 'Click to mount (other mounted rigs stay mounted)'}
-                    >
-                        {rig.is_mounted ? `Mounted${rig.mount_name ? ` · ${rig.mount_name}` : ''}` : 'Not mounted'}
-                    </button>
-                </div>
+        <div className={`rig-row${rig.is_active ? '' : ' inactive'}${expanded ? ' expanded' : ''}`}>
+            <div className="rig-row-main">
+                <button className="rig-row-chevron" onClick={() => onToggleExpand(rig.id)}
+                    aria-expanded={expanded} aria-label={expanded ? 'Collapse details' : 'Expand details'}>
+                    <ChevronIcon size={16} />
+                </button>
+                <span className="rig-name rig-row-name" title={rig.name}>{rig.name}</span>
+                <span className="rig-row-gear rig-row-secondary" title={gear}>{gear}</span>
+                <span className="rig-row-scale rig-row-secondary muted">{formatArcsec(rig.scale)} /px</span>
+                <span className="rig-row-fwhm small"
+                    title={rig.delivered_fwhm
+                        ? `Median FWHM over all of this rig's measured subs (${rig.delivered_fwhm.n}). Includes seeing, optics, focus and guiding.`
+                        : 'No measured subs yet'}>
+                    {rig.delivered_fwhm
+                        ? <QualityValue px={rig.delivered_fwhm.median_px} arcsec={rig.delivered_fwhm.median_arcsec} />
+                        : <span className="muted">—</span>}
+                </span>
+                <Link className="rig-row-subs rig-row-secondary small" to={rigSearchLink(rig)}
+                    title="Open in Search: all light frames on this rig (subs and masters)">
+                    {rig.image_count} subs
+                </Link>
+                <button
+                    className={`pill-toggle${rig.is_mounted ? ' active' : ''}`}
+                    onClick={() => onMountToggle(rig)}
+                    disabled={!isAdmin || (!rig.is_mounted && mountLimit != null)}
+                    title={rig.is_mounted
+                        ? 'Mounted (click to unmount)'
+                        : mountLimit != null
+                            ? `${mountLimit} rigs already mounted: unmount one first`
+                            : 'Click to mount (other mounted rigs stay mounted)'}
+                >
+                    {rig.is_mounted ? `Mounted${rig.mount_name ? ` · ${rig.mount_name}` : ''}` : 'Not mounted'}
+                </button>
                 <label className="active-toggle" title="Active">
-                    <input
-                        type="checkbox"
-                        checked={rig.is_active}
-                        onChange={() => onActiveToggle(rig)}
-                        disabled={!isAdmin}
-                    />
+                    <input type="checkbox" checked={rig.is_active} onChange={() => onActiveToggle(rig)} disabled={!isAdmin} />
                     Active
                 </label>
-            </div>
-
-            <div className="rig-card-body">
-                <div className="rig-line">
-                    {rig.camera_name} · {rig.optic_name}
-                    {rig.modifier_name ? ` · ${rig.modifier_name}` : ''}
-                </div>
-                <div className="rig-line muted">
-                    {formatArcsec(rig.scale)} /px · {formatFov(rig.fov_deg)} · f/{rig.focal_ratio != null ? rig.focal_ratio.toFixed(1) : '—'}
-                </div>
-                {rig.filters && rig.filters.length > 0 && (
-                    <div className="chip-row">
-                        {rig.filters.map((f) => (
-                            <span key={f.id} className="chip">{f.name}</span>
-                        ))}
-                    </div>
-                )}
-                <div className="badge-row">
-                    {rig.sampling && (
-                        <span className={`badge ${samplingClass(rig.sampling.verdict)}`}
-                            title={rig.sampling_seeing_source === 'MEASURED'
-                                ? `${rig.sampling.ratio} px per FWHM, using this rig's measured delivered FWHM (${rig.sampling.seeing_arcsec}″)`
-                                : `${rig.sampling.ratio} px per FWHM, using the site's typical seeing (${rig.sampling.seeing_arcsec}″)`}>
-                            {samplingLabel(rig.sampling.verdict)}
-                            {rig.sampling_seeing_source === 'MEASURED' ? ' (measured)' : ''}
-                        </span>
+                <div className="rig-row-menu">
+                    <button className="btn btn-ghost btn-sm" onClick={() => setMenuOpen((o) => !o)}
+                        onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
+                        aria-label="Rig actions" aria-haspopup="menu" aria-expanded={menuOpen}>
+                        <MoreVertical size={16} />
+                    </button>
+                    {menuOpen && (
+                        <div className="rig-row-menu-list" role="menu">
+                            <button role="menuitem" onClick={() => onEdit(rig)} disabled={!isAdmin}><Pencil size={14} /> Edit</button>
+                            <Link role="menuitem" to={rigSearchLink(rig)}><SearchIcon size={14} /> View images</Link>
+                            <button role="menuitem" className="danger" onClick={() => onDelete(rig)} disabled={!isAdmin}><Trash2 size={14} /> Delete</button>
+                        </div>
                     )}
-                    {scaleCheckMsg && (
-                        <span className={`badge ${rig.scale_check.verdict === 'ok' ? 'badge-success' : 'badge-warning'}`}>
-                            {scaleCheckMsg}
-                        </span>
-                    )}
-                </div>
-                {rig.delivered_fwhm && (
-                    <div className="rig-line small"
-                        title={`Median FWHM over this rig's last ${rig.delivered_fwhm.window_days} days of use (${rig.delivered_fwhm.n} measured subs). Includes seeing, optics, focus and guiding.`}>
-                        Delivered FWHM <QualityValue px={rig.delivered_fwhm.median_px} arcsec={rig.delivered_fwhm.median_arcsec} />
-                        {' · best '}<QualityValue px={rig.delivered_fwhm.best_px} arcsec={rig.delivered_fwhm.best_arcsec} />
-                        <span className="muted"> · {rig.delivered_fwhm.n} subs</span>
-                    </div>
-                )}
-                <div className="rig-line muted small">
-                    <Link to={rigSearchLink(rig)} title="Open in Search: all light frames on this rig (subs and masters)">
-                        {rig.image_count} subs
-                    </Link>
-                    {' · last used'} {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
                 </div>
             </div>
 
-            <div className="equip-card-actions">
-                <Link className="btn btn-ghost btn-sm" to={rigSearchLink(rig)}>
-                    <SearchIcon size={14} /> View images
-                </Link>
-                <button className="btn btn-ghost btn-sm" onClick={() => onAssign(rig)} disabled={!isAdmin} title="Assign images now">
-                    <RefreshCw size={14} /> Assign images
-                </button>
-                <button className="btn btn-ghost btn-sm" onClick={() => onEdit(rig)} disabled={!isAdmin}>
-                    <Pencil size={14} /> Edit
-                </button>
-                <button className="btn btn-ghost btn-sm danger" onClick={() => onDelete(rig)} disabled={!isAdmin}>
-                    <Trash2 size={14} /> Delete
-                </button>
-            </div>
+            {expanded && (
+                <div className="rig-row-detail">
+                    <div className="rig-line rig-detail-narrow">{gear}</div>
+                    <div className="rig-line muted">
+                        <span className="rig-detail-narrow">{formatArcsec(rig.scale)} /px · </span>
+                        {formatFov(rig.fov_deg)} · f/{rig.focal_ratio != null ? rig.focal_ratio.toFixed(1) : '—'}
+                    </div>
+                    {rig.filters && rig.filters.length > 0 && (
+                        <div className="chip-row">
+                            {rig.filters.map((f) => (
+                                <span key={f.id} className="chip">{f.name}</span>
+                            ))}
+                        </div>
+                    )}
+                    <div className="badge-row">
+                        {rig.sampling && (
+                            <span className={`badge ${samplingClass(rig.sampling.verdict)}`}
+                                title={rig.sampling_seeing_source === 'MEASURED'
+                                    ? `${rig.sampling.ratio} px per FWHM, using this rig's measured delivered FWHM (${rig.sampling.seeing_arcsec}″)`
+                                    : `${rig.sampling.ratio} px per FWHM, using the site's typical seeing (${rig.sampling.seeing_arcsec}″)`}>
+                                {samplingLabel(rig.sampling.verdict)}
+                                {rig.sampling_seeing_source === 'MEASURED' ? ' (measured)' : ''}
+                            </span>
+                        )}
+                        {scaleCheckMsg && (
+                            <span className={`badge ${rig.scale_check.verdict === 'ok' ? 'badge-success' : 'badge-warning'}`}>
+                                {scaleCheckMsg}
+                            </span>
+                        )}
+                    </div>
+                    {rig.delivered_fwhm && (
+                        <div className="rig-line small">
+                            Best FWHM <QualityValue px={rig.delivered_fwhm.best_px} arcsec={rig.delivered_fwhm.best_arcsec} />
+                            <span className="muted"> · median over {rig.delivered_fwhm.n} subs</span>
+                        </div>
+                    )}
+                    <div className="rig-line muted small">
+                        Last used {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
+                        {' · '}
+                        <Link to={rigSearchLink(rig)}>View images</Link>
+                    </div>
+                </div>
+            )}
         </div>
     );
+}
+
+const RIG_FILTERS = [
+    { key: 'all', label: 'All', test: () => true },
+    { key: 'mounted', label: 'Mounted', test: (r) => r.is_mounted },
+    { key: 'active', label: 'Active', test: (r) => r.is_active },
+    { key: 'inactive', label: 'Inactive', test: (r) => !r.is_active },
+];
+
+function sortRigs(rigs) {
+    return [...rigs].sort((a, b) =>
+        (b.is_mounted - a.is_mounted) || (b.is_active - a.is_active) || a.name.localeCompare(b.name));
 }
 
 // ============ Rig form modal ============
@@ -1310,6 +1332,9 @@ export default function Equipment() {
     const isAdmin = !!user?.is_admin;
     const queryClient = useQueryClient();
     const [activeTab, setActiveTab] = useState('rigs');
+    const [expandedRigId, setExpandedRigId] = useState(null);
+    const [rigSearch, setRigSearch] = useState('');
+    const [rigFilter, setRigFilter] = useState('all');
     const [toast, showToast] = useToast();
 
     const [rigModal, setRigModal] = useState(null); // { rig: null|Rig }
@@ -1460,6 +1485,10 @@ export default function Equipment() {
     const rigs = data?.rigs || [];
     const maxMounted = data?.max_mounted_rigs ?? 5;
     const mountedCount = rigs.filter((r) => r.is_mounted).length;
+    const rigQuery = rigSearch.trim().toLowerCase();
+    const rigFilterTest = RIG_FILTERS.find((f) => f.key === rigFilter).test;
+    const visibleRigs = sortRigs(rigs.filter((r) => rigFilterTest(r) && (!rigQuery
+        || [r.name, r.camera_name, r.optic_name].some((v) => (v || '').toLowerCase().includes(rigQuery)))));
 
     return (
         <div className="equipment-page">
@@ -1515,23 +1544,45 @@ export default function Equipment() {
                     <p className="muted small mount-summary">
                         {mountedCount} of {maxMounted} rigs mounted. Tonight plans a separate target for each mounted rig.
                     </p>
-                    <div className="equip-grid">
-                        {rigs.map((rig) => (
-                            <RigCard
+                    <div className="rigs-toolbar">
+                        <input
+                            type="search"
+                            className="rigs-search"
+                            placeholder="Search rig, camera or optic"
+                            value={rigSearch}
+                            onChange={(e) => setRigSearch(e.target.value)}
+                        />
+                        <div className="rigs-filter-chips">
+                            {RIG_FILTERS.map((f) => (
+                                <button
+                                    key={f.key}
+                                    className={`chip selectable-chip${rigFilter === f.key ? ' selected' : ''}`}
+                                    onClick={() => setRigFilter(f.key)}
+                                >
+                                    {f.label} {rigs.filter(f.test).length}
+                                </button>
+                            ))}
+                        </div>
+                        <button className="btn btn-secondary btn-sm rigs-add-btn" onClick={() => setRigModal({ rig: null })} disabled={!isAdmin}>
+                            <Plus size={14} /> Add rig
+                        </button>
+                    </div>
+                    <div className="rig-list">
+                        {visibleRigs.length === 0 && <p className="muted small rig-list-empty">No rigs match.</p>}
+                        {visibleRigs.map((rig) => (
+                            <RigRow
                                 key={rig.id}
                                 rig={rig}
                                 isAdmin={isAdmin}
                                 mountLimit={mountedCount >= maxMounted ? maxMounted : null}
+                                expanded={expandedRigId === rig.id}
+                                onToggleExpand={(id) => setExpandedRigId((cur) => (cur === id ? null : id))}
                                 onEdit={(r) => setRigModal({ rig: r })}
                                 onDelete={handleDeleteRig}
                                 onMountToggle={handleMountToggle}
                                 onActiveToggle={handleActiveToggle}
-                                onAssign={handleAssignImages}
                             />
                         ))}
-                        <button className="btn btn-secondary add-card-btn" onClick={() => setRigModal({ rig: null })} disabled={!isAdmin}>
-                            <Plus size={16} /> Add rig
-                        </button>
                     </div>
                     <UnassignedImagesSection rigs={rigs} isAdmin={isAdmin} showToast={showToast} />
                     </>

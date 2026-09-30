@@ -164,7 +164,7 @@ so hold novelty/revisit lanes out of the metric and judge them by feedback inste
 ## 7. Suggested phasing
 | Phase | Scope | Value |
 |-------|-------|-------|
-| **P0** | Data foundations: canonical target keys, `NONE` sentinel, capture-time provenance + UTC, site persistence. Spec: [P0-R0-equipment-sites.md](P0-R0-equipment-sites.md) | Correct inputs; also fixes Targets totals today |
+| **P0** | Data foundations: canonical target keys, `NONE` sentinel, capture-time provenance + UTC, site persistence. Spec: `P0-R0-equipment-sites.md` | Correct inputs; also fixes Targets totals today |
 | **R0** | Equipment & Sites page (§8a); spec as above: cameras/optics/filters/rigs/sites, detected from history and user-confirmed, `images.rig_id` | Declared gear the recommender (and Targets/Stats) can rely on |
 | **R1** | Site + dark window + learned floor/horizon + moon Lorentzian + framing fit + "Continue a project" and "Last chance" lanes, with reasons. Backtest harness. | Already beats every generic tool for this user |
 | **R2** | Affinity/novelty/revisit lanes, inferred goals, palette completeness, feedback table, Dashboard tile | Personal discovery |

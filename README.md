@@ -13,14 +13,15 @@
 - **Frame Types**: Classifies every image as Light/Dark/Flat/Bias/Dark-Flat from header/filename/path data, with a dashboard tile, Search filter, and admin reclassify tool
 - **Targets**: Groups images by resolved target (canonicalized catalog key), with per-target goal tracking and a Targets/Target Detail page
 - **Equipment & Sites**: Tracks cameras, optics, filters, and up to 5 concurrently mounted rigs per site, with auto-detection from headers, Telescopius import, and pixel-scale/focal-length display in By Filter & Rig
+- **Compact Rig List**: Equipment > Rigs shows one line per rig (name, gear, scale, delivered FWHM, sub count, mount/active toggles) with an expandable detail panel, search, and All/Mounted/Active/Inactive filters
 - **Rig Allocation**: Finds light subs and masters that couldn't be matched to a rig (e.g. cropped or drizzled masters), buckets them by camera, binning and calculated focal length with a suggested rig, and lets you allocate many buckets at once from Equipment or Search
 - **Imaging Sessions & Night Report**: Groups images into observing nights with a per-session timeline view
 - **Target Recommendations ("Tonight")**: Local recommendation engine that scores targets for tonight's session per rig, with feedback/outcomes tracking and a dashboard tile
-- **Star Quality Metrics**: Measures HFR/FWHM/eccentricity for every Light frame, surfaced as a Star Quality card (with arcsec/px toggle) on Targets, session timeline, search, equipment, stats, and the dashboard
+- **Star Quality Metrics**: Measures HFR/FWHM/eccentricity for every Light frame, surfaced as a Star Quality card (with arcsec/px toggle) on Targets, session timeline, search, equipment, stats, and the dashboard, plus a FITS Analytics chart comparing median FWHM/HFR across rigs (click a bar to open that rig's images)
 - **Advanced Search**: Search by object name, filename, coordinates, exposure time, frame type, and more
 - **Keyboard Navigation**: Use arrow keys to navigate between images in detail view
 - **Thumbnail Generation**: On-demand thumbnail generation with adjustable size slider
-- **Modern UI**: Responsive React frontend with dark theme
+- **Modern UI**: Responsive React frontend (desktop, tablet and mobile layouts) with dark theme
 
 ## 🏗️ Architecture
 
@@ -273,6 +274,8 @@ Detailed documentation is available in the `docs/` directory:
 - [**Equipment & Sites**](docs/features/EQUIPMENT.md): Cameras, optics, filters, rigs, and sites.
 - [**Recommendations**](docs/features/RECOMMENDATIONS.md): The Tonight page recommendation engine, feedback, and outcomes.
 - [**Star Quality**](docs/design/Q1-star-quality.md): HFR/FWHM/eccentricity measurement and the Star Quality UI.
+- [**Compact Rig List**](docs/design/E1-equipment-rig-list.md): Design for the Equipment rig rows, search, and filters.
+- [**Per-Rig Star Size**](docs/design/Q2-per-rig-star-size.md): Design for the cross-rig median FWHM/HFR chart on the FITS page.
 
 ## 🗄️ Database Schema
 
@@ -325,7 +328,7 @@ Detailed documentation is available in the `docs/` directory:
 | `GET /api/recommendations/outcomes` | Get recommendation outcome stats |
 | `GET /api/quality/nights` | Per-night star quality summary |
 | `GET /api/quality/timeline` | Session timeline with quality metrics |
-| `GET /api/quality/stats` | Aggregate HFR/FWHM/eccentricity stats |
+| `GET /api/quality/stats` | Aggregate HFR/FWHM/eccentricity stats, plus `by_rig` median FWHM/HFR per rig |
 
 ## 📊 Supported File Formats
 

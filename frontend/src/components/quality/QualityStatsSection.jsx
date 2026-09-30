@@ -5,15 +5,13 @@ import {
 import { fetchQualityStats } from '../../api/client';
 import { useQualityUnits } from '../../context/QualityUnitsContext';
 import { filterColor } from '../../utils/filterColors';
+import { TOOLTIP_STYLE, AXIS, BAR } from './chartStyle';
 import QualityUnitsToggle from './QualityUnitsToggle';
 import './Quality.css';
 
 // Q1d "Star Quality" section of FITS Analytics (docs/design/Q1-star-quality.md §8.5).
 // One rig at a time (FWHM only compares within a rig); every chart has one y-axis.
 
-const TOOLTIP_STYLE = { background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', borderRadius: 8, color: 'var(--color-text-primary)' };
-const AXIS = { stroke: 'var(--color-text-muted)', fontSize: 11, tickLine: false, axisLine: false };
-const BAR = 'var(--color-primary)';
 
 function Card({ title, note, children, empty }) {
     return (

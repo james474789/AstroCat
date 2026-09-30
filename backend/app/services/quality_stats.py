@@ -110,6 +110,28 @@ def hfr_vs_temperature(rows, step: float = 1.0) -> Dict[str, Any]:
     return {"bins": bins, "slope_px_per_degc": slope, "n": len(pts)}
 
 
+def by_rig(rows: List[Dict[str, Any]], names: Dict[Any, Optional[str]], prefer_arcsec: bool = True) -> List[Dict[str, Any]]:
+    """
+    Q2: median FWHM and HFR per rig, for cross-rig comparison. `rows` are the
+    per-rig SQL aggregates (rig_id, n, n_scaled, fwhm_px/hfr_px medians and the
+    same in arcsec). A rig reports arcsec when at least half its subs have a
+    scale (same rule as use_arcsec_for), else px. Rigs under MIN_BIN are left out.
+    """
+    out = []
+    for r in rows:
+        if r["rig_id"] is None or r["n"] < MIN_BIN:
+            continue
+        arc = prefer_arcsec and r["n_scaled"] >= 0.5 * r["n"] and r.get("fwhm_arcsec") is not None
+        f, h = (r["fwhm_arcsec"], r["hfr_arcsec"]) if arc else (r["fwhm_px"], r["hfr_px"])
+        out.append({
+            "rig_id": r["rig_id"], "rig_name": names.get(r["rig_id"]), "n": int(r["n"]),
+            "units": "ARCSEC" if arc else "PX",
+            "fwhm_median": round(float(f), 3) if f is not None else None,
+            "hfr_median": round(float(h), 3) if h is not None else None,
+        })
+    return sorted(out, key=lambda x: (x["fwhm_median"] is None, x["fwhm_median"] or 0))
+
+
 def build_stats(rows: List[Dict[str, Any]], prefer_arcsec: bool = True) -> Dict[str, Any]:
     use_arcsec = prefer_arcsec and use_arcsec_for(rows)
     vals = values(rows, use_arcsec)

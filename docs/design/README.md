@@ -8,12 +8,12 @@ before starting any of the four.
 
 | ID | Feature | Doc | Depends on | New migration |
 |----|---------|-----|-----------|---------------|
-| F1 | Frame-type classification (Light/Dark/Flat/Bias) | [F1-frame-types.md](F1-frame-types.md) | none | yes |
-| F2 | Target integration dashboard ("Targets") | [F2-target-integration.md](F2-target-integration.md) | F1 (schema only) | yes |
 | F7 | Imaging sessions (group by observing night) | [F7-imaging-sessions.md](F7-imaging-sessions.md) | F1 (schema only) | yes |
 | F16 | Mosaic detection & coverage map | [F16-mosaics.md](F16-mosaics.md) | F1 (schema only) | yes |
-| R0b | Find & allocate images with no rig (subs + masters) | [R0b-rig-allocation.md](R0b-rig-allocation.md) | R0 (shipped) | no |
-| R0c | Click through from Equipment (rigs, unassigned buckets) to Search | [R0c-equipment-click-through.md](R0c-equipment-click-through.md) | R0b | no |
+| R0b | Find & allocate images with no rig (subs + masters) | `R0b-rig-allocation.md` | R0 (shipped) | no |
+| R0c | Click through from Equipment (rigs, unassigned buckets) to Search | `R0c-equipment-click-through.md` | R0b | no |
+| E1 | Compact Equipment rig list (rows + expand, search/filter) | [E1-equipment-rig-list.md](E1-equipment-rig-list.md) | none | no |
+| Q2 | Per-rig median FWHM/HFR chart on the FITS page | [Q2-per-rig-star-size.md](Q2-per-rig-star-size.md) | Q1 | no |
 
 ## 1. Recommended execution plan
 

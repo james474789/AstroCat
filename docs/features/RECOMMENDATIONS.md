@@ -2,7 +2,7 @@
 
 AstroCat answers "what should I image tonight, with the rig that's mounted?" with a local
 engine that uses the user's own history, rigs, sites and learned horizon. Design:
-[R1-recommendation-engine.md](../design/R1-recommendation-engine.md). No external service is
+`R1-recommendation-engine.md`. No external service is
 called; Telescopius is not a candidate source.
 
 ## Observing night
