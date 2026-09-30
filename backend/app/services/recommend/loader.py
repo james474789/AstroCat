@@ -375,7 +375,9 @@ class RigRecord:
 def rig_spec(rig_id: int, name: str, *, pixel_um: Optional[float], width_px: Optional[int],
              height_px: Optional[int], focal_mm: Optional[float], modifier_factor: Optional[float] = 1.0,
              binning: Optional[int] = 1, measured_scale: Optional[float] = None, is_color: Optional[bool] = None,
-             filter_bands: Sequence[str] = (), seen_classes: Sequence[str] = ()) -> Tuple[Optional[RigSpec], Optional[str]]:
+             filter_bands: Sequence[str] = (), seen_classes: Sequence[str] = (),
+             min_target_arcmin: Optional[float] = None,
+             max_target_arcmin: Optional[float] = None) -> Tuple[Optional[RigSpec], Optional[str]]:
     """
     RigSpec for the engine, or (None, reason). Scale: declared, else measured.
     Classes: from the rig's filters; none + colour camera -> OSC; none + mono ->
@@ -399,7 +401,8 @@ def rig_spec(rig_id: int, name: str, *, pixel_um: Optional[float], width_px: Opt
         else:
             classes = set(seen_classes) or {CLASS_BB}
     return RigSpec(id=rig_id, name=name, scale_arcsec=float(scale), fov_w_deg=fov[0], fov_h_deg=fov[1],
-                   classes=frozenset(classes), is_color=bool(is_color)), None
+                   classes=frozenset(classes), is_color=bool(is_color),
+                   min_target_arcmin=min_target_arcmin, max_target_arcmin=max_target_arcmin), None
 
 
 def load_rigs(session, history_rows: Sequence[HistoryRow] = ()) -> List[RigRecord]:
@@ -420,7 +423,8 @@ def load_rigs(session, history_rows: Sequence[HistoryRow] = ()) -> List[RigRecor
             focal_mm=opt.focal_length_mm if opt else None, modifier_factor=rig.modifier_factor,
             binning=rig.binning, measured_scale=rig.measured_scale_arcsec,
             is_color=cam.is_color if cam else None, filter_bands=[f.band for f in rig.filters],
-            seen_classes=sorted(seen.get(rig.id, ())))
+            seen_classes=sorted(seen.get(rig.id, ())),
+            min_target_arcmin=rig.min_target_arcmin, max_target_arcmin=rig.max_target_arcmin)
         out.append(RigRecord(id=rig.id, name=rig.name, is_active=bool(rig.is_active),
                              is_mounted=bool(rig.is_mounted), spec=spec, skip_reason=reason))
     return out

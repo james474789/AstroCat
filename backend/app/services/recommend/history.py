@@ -78,6 +78,7 @@ class TargetHistory:
     rig_ids: Set[int] = field(default_factory=set)
     has_master: bool = False
     best_scale: Optional[float] = None
+    scales: Set[float] = field(default_factory=set)   # every per-row solved scale (R1b size-window exemption)
 
     @property
     def total_seconds(self) -> float:
@@ -129,6 +130,7 @@ def build_history(rows: Sequence[HistoryRow], as_of: Optional[date] = None,
         if r.rig_id is not None:
             h.rig_ids.add(r.rig_id)
         if r.best_scale:
+            h.scales.add(float(r.best_scale))
             h.best_scale = r.best_scale if h.best_scale is None else min(h.best_scale, r.best_scale)
     for key, first in (masters or {}).items():
         h = out.get(key)

@@ -55,6 +55,29 @@ def fov_deg(width_px: Optional[int], height_px: Optional[int],
     return (w * s / 3600.0, h * s / 3600.0)
 
 
+WINDOW_MIN_SHORT_FRACTION = 0.22    # default smallest target: 22% of the FOV short side
+WINDOW_MAX_LONG_FRACTION = 0.80     # default largest target: 80% of the FOV long side
+
+
+def target_size_window(fov: Optional[Tuple[float, float]], min_arcmin: Optional[float] = None,
+                       max_arcmin: Optional[float] = None) -> Optional[Tuple[float, float]]:
+    """
+    (min, max) target size in arcmin a rig frames well. A declared value wins;
+    otherwise 22% of the FOV short side up to 80% of the long side. None when
+    a bound is neither declared nor derivable (no FOV).
+    """
+    lo, hi = _positive(min_arcmin), _positive(max_arcmin)
+    if fov is not None:
+        short, long_ = sorted(fov)
+        if lo is None:
+            lo = WINDOW_MIN_SHORT_FRACTION * short * 60.0
+        if hi is None:
+            hi = WINDOW_MAX_LONG_FRACTION * long_ * 60.0
+    if lo is None or hi is None:
+        return None
+    return lo, hi
+
+
 def focal_ratio(focal_mm: Optional[float], aperture_mm: Optional[float],
                 modifier_factor: Optional[float] = 1.0) -> Optional[float]:
     fl = effective_focal_mm(focal_mm, modifier_factor)

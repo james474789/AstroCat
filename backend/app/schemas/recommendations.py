@@ -152,6 +152,9 @@ class RigPlanPick(Pick):
 class RigPlan(_Model):
     rig: RigRef
     items: List[RigPlanPick]    # first = primary target, the rest backups; no target on two rigs
+    verdict: Optional[Verdict] = None                   # R1b: the primary's verdict on this rig
+    note: Optional[str] = None                          # R1b: why the rig has no target tonight (items empty)
+    size_window_arcmin: Optional[List[float]] = None    # R1b: [min, max] target size this rig plans for
 
 
 class RecommendationsResponse(_Model):
