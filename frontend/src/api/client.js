@@ -346,24 +346,6 @@ export async function fetchTopObjects() {
     return handleResponse(await fetch(`${API_BASE_URL}/stats/top-objects`, { credentials: 'include' }));
 }
 
-export async function fetchAllStats() {
-    const [overview, by_month, by_subtype, by_format, top_objects] = await Promise.all([
-        fetchStatsOverview(),
-        fetchStatsByMonth(),
-        fetchStatsBySubtype(),
-        fetchStatsByFormat(),
-        fetchTopObjects()
-    ]);
-
-    return {
-        overview,
-        by_subtype,
-        by_format,
-        by_month: by_month.map(m => ({ ...m, exposure_hours: m.exposure_hours || 0 })),
-        top_objects
-    };
-}
-
 export async function fetchAdminStats() {
     return handleResponse(await fetch(`${API_BASE_URL}/admin/stats`, { credentials: 'include' }));
 }

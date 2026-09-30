@@ -34,12 +34,6 @@ const CatalogIcon = () => (
     </svg>
 );
 
-const StatsIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M18 20V10M12 20V4M6 20v-6" strokeLinecap="round" />
-    </svg>
-);
-
 
 const FileTextIcon = () => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -91,8 +85,7 @@ const navItems = [
     { path: '/nights', label: 'Nights', icon: NightsIcon },
     // R0: Equipment goes after Targets (docs/design/P0-R0-equipment-sites.md §4.9)
     { path: '/equipment', label: 'Equipment', icon: EquipmentIcon },
-    { path: '/stats', label: 'Statistics', icon: StatsIcon, end: true },
-    { path: '/stats/fits', label: 'FITS Analytics', icon: AnalyticsIcon },
+    { path: '/stats', label: 'Statistics', icon: AnalyticsIcon },
     { path: '/admin', label: 'Admin', icon: AdminIcon },
 ];
 

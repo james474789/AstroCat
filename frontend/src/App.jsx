@@ -10,7 +10,6 @@ import Catalogs from './pages/Catalogs';
 import Tonight from './pages/Tonight';
 import Targets from './pages/Targets';
 import TargetDetail from './pages/TargetDetail';
-import Stats from './pages/Stats';
 import FitsStats from './pages/FitsStats';
 import Admin from './pages/Admin';
 import Equipment from './pages/Equipment';
@@ -116,8 +115,8 @@ const AppRoutes = () => {
                   <Route path="/nights/:night" element={<ErrorBoundary><NightReport /></ErrorBoundary>} />
                   {/* R0: inserted after Targets per docs/design/README.md §4 */}
                   <Route path="/equipment" element={<ErrorBoundary><Equipment /></ErrorBoundary>} />
-                  <Route path="/stats" element={<Stats />} />
-                  <Route path="/stats/fits" element={<FitsStats />} />
+                  <Route path="/stats" element={<FitsStats />} />
+                  <Route path="/stats/fits" element={<Navigate to="/stats" replace />} />
                   <Route path="/admin" element={<ErrorBoundary><Admin /></ErrorBoundary>} />
                 </Routes>
               </Layout>

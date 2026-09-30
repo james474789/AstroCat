@@ -60,7 +60,7 @@ For long-running processes like Astrometry.net plate solving, the frontend imple
 3. **Image Detail (`/images/:id`)**: Full metadata view, pan/zoom image preview, and catalog matches.
 4. **Catalogs (`/catalogs`)**: Browsing interface for Messier and NGC objects.
 5. **Stats (`/stats`)**: Visualizations of exposure time and sky coverage.
-6. **FITS Analytics (`/stats/fits`)**: In-depth FITS metadata analytics with equipment and sky coverage charts.
+6. **Statistics (`/stats`)**: In-depth FITS metadata analytics with equipment and sky coverage charts.
 7. **Admin (`/admin`)**: System administration dashboard with astrometry stats, indexing controls, and job queue management.
 8. **Metadata Search (`/metadata`)**: Advanced metadata search with field-specific filters and operators.
 9. **FITS Explorer (`/fits/:id`)**: Detailed FITS header viewer and analyzer.
