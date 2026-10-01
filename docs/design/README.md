@@ -18,6 +18,7 @@ before starting any of the four.
 | S1 | Planetary seeing forecast on Tonight (Open-Meteo models + optional meteoblue, per-planet windows) | [20261001-S1-planetary-seeing-forecast.md](20261001-S1-planetary-seeing-forecast.md) | none | yes |
 
 | T1 | Link masters to every central target in their field (fixes "no masters" on e.g. SH2159) | [20261001-T1-target-master-linking.md](20261001-T1-target-master-linking.md) | F2 (shipped) | no (optional data migration) |
+| V1 | Full-resolution deep-zoom viewer (on-demand DZI tiles, debayer, STF presets, LRU cache) — **Implemented (uncommitted; VERSION 20261001.03)** | [20261001-V1-full-resolution-viewer.md](20261001-V1-full-resolution-viewer.md) | none | no |
 
 ## 1. Recommended execution plan
 

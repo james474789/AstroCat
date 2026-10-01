@@ -15,10 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     libffi-dev \
     libraw-dev \
+    libvips42t64 \
     postgresql-client \
     supervisor \
-    && mkdir -p /data/thumbnails /data/images /data/mount2 /data/mount3 \
-    && chown -R 1000:1000 /data/thumbnails /data/images /data/mount2 /data/mount3 \
+    && mkdir -p /data/thumbnails /data/fullres /data/images /data/mount2 /data/mount3 \
+    && chown -R 1000:1000 /data/thumbnails /data/fullres /data/images /data/mount2 /data/mount3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -46,6 +47,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    libvips42t64 \
     postgresql-client \
     supervisor \
     && rm -rf /var/lib/apt/lists/*
@@ -54,8 +56,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd --create-home --shell /bin/bash AstroCat
 
 # Create required directories and set permissions
-RUN mkdir -p /data/thumbnails /data/images /data/mount2 /data/mount3 \
-    && chown -R AstroCat:AstroCat /data/thumbnails /data/images /data/mount2 /data/mount3
+RUN mkdir -p /data/thumbnails /data/fullres /data/images /data/mount2 /data/mount3 \
+    && chown -R AstroCat:AstroCat /data/thumbnails /data/fullres /data/images /data/mount2 /data/mount3
 
 # Install Python dependencies
 COPY requirements.txt .

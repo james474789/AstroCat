@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     thumbnail_cache_path: str = "/data/thumbnails"
     thumbnail_max_size: int = 1024
 
+    # Full-resolution deep-zoom viewer (V1, docs/design/20261001-V1-full-resolution-viewer.md §6)
+    fullres_cache_path: str = "/data/fullres"
+    fullres_cache_max_gb: float = 20
+    fullres_max_megapixels: int = 250   # downsample guard for a single render
+    fullres_workers: int = 1            # concurrency of the "fullres" queue (read by supervisord)
+    fullres_debayer: bool = True        # kill switch for CFA debayering of FITS/XISF
+
     # Star quality metrics (Q1, docs/design/20260927-Q1-star-quality.md §5)
     star_metrics_enabled: bool = True      # measure new Light frames as they are indexed
     star_metrics_backfill: bool = True     # sweeper measures the existing library in the background

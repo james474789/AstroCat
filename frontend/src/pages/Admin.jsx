@@ -8,6 +8,8 @@ import {
     triggerScan,
     fetchThumbnailStats,
     clearThumbnailCache,
+    fetchFullResCacheStats,
+    clearFullResCache,
     regenerateThumbnails,
     fetchSettings,
     updateSettings,
@@ -46,6 +48,7 @@ function Admin() {
     // Settings State
     const [scanning, setScanning] = useState(false);
     const [cacheStats, setCacheStats] = useState(null);
+    const [fullResStats, setFullResStats] = useState(null);
     const [cacheActionLoading, setCacheActionLoading] = useState(false);
     const [reclassifyLoading, setReclassifyLoading] = useState(false);
     const [backfillTargetsLoading, setBackfillTargetsLoading] = useState(false);
@@ -158,6 +161,24 @@ function Admin() {
             setCacheStats(stats);
         } catch (err) {
             console.error('Failed to load cache stats:', err);
+        }
+        try {
+            setFullResStats(await fetchFullResCacheStats());
+        } catch (err) {
+            console.error('Failed to load full-resolution cache stats:', err);
+        }
+    }
+
+    async function handleClearFullResCache() {
+        if (!confirm('Delete all cached full-resolution views? They are rebuilt on demand when an image is opened at full resolution.')) return;
+        setCacheActionLoading(true);
+        try {
+            await clearFullResCache();
+            await loadCacheStats();
+        } catch (err) {
+            alert('Failed to clear the full-resolution cache: ' + err.message);
+        } finally {
+            setCacheActionLoading(false);
         }
     }
 
@@ -1020,6 +1041,15 @@ function Admin() {
                             <div className="cache-info">
                                 <div className="cache-stat">{cacheStats ? <span className="cache-value">{cacheStats.count.toLocaleString()}</span> : <span className="cache-value">--</span>}<span className="cache-label">Cached Thumbnails</span></div>
                                 <div className="cache-stat">{cacheStats ? <span className="cache-value">{cacheStats.size_mb} MB</span> : <span className="cache-value">--</span>}<span className="cache-label">Cache Size</span></div>
+                            </div>
+                            <div className="cache-info">
+                                <div className="cache-stat">
+                                    <span className="cache-value">{fullResStats ? `${(fullResStats.bytes / 1024 ** 3).toFixed(1)} / ${(fullResStats.max_bytes / 1024 ** 3).toFixed(0)} GB` : '--'}</span>
+                                    <span className="cache-label">Full-res cache{fullResStats ? ` · ${fullResStats.count.toLocaleString()} images` : ''}</span>
+                                </div>
+                                <div className="cache-stat">
+                                    <button className="btn btn-secondary" onClick={handleClearFullResCache} disabled={cacheActionLoading || !fullResStats?.count}>Clear</button>
+                                </div>
                             </div>
                             <div className="cache-actions"><button className="btn btn-secondary" onClick={handleClearCache} disabled={cacheActionLoading}>{cacheActionLoading ? 'Processing...' : 'Clear Cache'}</button><button className="btn btn-primary" onClick={handleRegenerateThumbnails} disabled={cacheActionLoading} style={{ marginLeft: '1rem' }}>Regenerate All</button></div>
                         </div>

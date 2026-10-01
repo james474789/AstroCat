@@ -120,6 +120,7 @@ library/backups/**
 library/temp/*
 !library/temp/.gitkeep
 library/thumbnails/*
+library/fullres/*
 !library/thumbnails/.gitkeep
 postgres/
 /docs/reports/performance/perfcon_*.md

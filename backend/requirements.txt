@@ -37,6 +37,8 @@ tifffile==2023.12.9
 sep==1.4.1        # star detection / HFR (Q1 star quality metrics)
 scipy==1.13.1     # PSF fitting (Q1); supports numpy 1.26 / Python 3.12
 tzdata==2025.2  # zoneinfo database for site timezones (R0); the slim image has none
+pyvips==2.2.3   # deep-zoom tile pyramids (V1); needs the libvips system library
+opencv-python-headless==4.10.0.84  # Bayer demosaic for OSC FITS/XISF (V1)
 
 # -------------------------------------------
 # Logging (multi-process safe rotation)

@@ -1,5 +1,7 @@
 import logging
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi.concurrency import run_in_threadpool
+from app.api.dependencies import require_admin
 from app.tasks.indexer import reindex_all
 from app.config import settings
 
@@ -493,3 +495,17 @@ async def regenerate_thumbnails_endpoint():
     task = regenerate_thumbnails.delay()
     
     return {"message": "Regeneration and stats refresh started", "task_id": task.id}
+
+
+@router.get("/fullres-cache", dependencies=[Depends(require_admin)])
+async def get_fullres_cache_stats():
+    """Full-resolution viewer cache: pyramid count, bytes used and the cap (V1)."""
+    from app.services.fullres import cache
+    return await run_in_threadpool(cache.stats)
+
+
+@router.delete("/fullres-cache", dependencies=[Depends(require_admin)])
+async def clear_fullres_cache():
+    """Delete every cached full-resolution pyramid (V1). They are rebuilt on demand."""
+    from app.services.fullres import cache
+    return await run_in_threadpool(cache.clear)

@@ -29,6 +29,7 @@ celery_app = Celery(
         "app.tasks.recommend",
         "app.tasks.quality",
         "app.tasks.seeing",
+        "app.tasks.fullres",
     ]
 )
 
@@ -80,6 +81,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.seeing.refresh_forecasts",
         "schedule": crontab(minute=10, hour="*/3"),
     },
+    "evict-fullres-cache": {  # V1: keep the full-resolution pyramid cache under its cap
+        "task": "app.tasks.fullres.evict",
+        "schedule": 30 * 60.0,
+    },
 }
 
 
@@ -96,12 +101,19 @@ celery_app.conf.task_routes = {
     # indexing; the sweeper itself stays on the default queue.
     "app.tasks.quality.sweep": {"queue": "celery"},
     "app.tasks.quality.*": {"queue": "quality"},
+    # V1: pyramid builds can need several GB of RAM, so they run on a dedicated worker
+    # (supervisord's celery_fullres) that the main worker's -Q list does not include.
+    "app.tasks.fullres.*": {"queue": "fullres"},
 }
 
 
 
 @worker_ready.connect
-def on_worker_ready(**kwargs):
+def on_worker_ready(sender=None, **kwargs):
+    # The dedicated full-resolution worker (V1) must not re-trigger this, or it would
+    # clear the lock of a repair the main worker is already running.
+    if str(getattr(sender, "hostname", "")).startswith("fullres@"):
+        return
     # Apply any pending one-off data repairs in the background, so startup
     # isn't blocked and each repair runs once per install (see
     # app/services/data_migrations.py).

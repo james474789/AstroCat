@@ -53,12 +53,17 @@ class ThumbnailGenerator:
         return data
 
     @staticmethod
-    def apply_stf_stretch(data, target_bg=0.25, shadows_clip=-1.25):
+    def stf_params(data, target_bg=0.25, shadows_clip=-1.25, bounds=None):
+        """Fit the STF curve to `data` (a whole frame or a representative sample).
+
+        Returns the parameters `stf_curve` applies, or None for a flat frame.
+        `bounds` = (min, max) overrides the data range when `data` is only a sample
+        of a larger frame, so every tile/row of that frame maps through one curve.
+        """
         data = np.nan_to_num(data.astype(np.float32, copy=False))
-        d_min = np.min(data)
-        d_max = np.max(data)
+        d_min, d_max = (np.min(data), np.max(data)) if bounds is None else bounds
         if d_max <= d_min:
-            return np.zeros_like(data, dtype=np.uint8)
+            return None
         data = (data - d_min) / (d_max - d_min)
         median = np.median(data)
         mad = np.median(np.abs(data - median))
@@ -68,10 +73,26 @@ class ThumbnailGenerator:
         denominator = median_new + target_bg - 2 * median_new * target_bg
         midpoint = (median_new * (1 - target_bg) / denominator
                     if denominator and 0 < median_new < 1 and median_new != target_bg else 0.5)
+        return {"d_min": d_min, "d_max": d_max, "c0": c0, "midpoint": midpoint}
+
+    @staticmethod
+    def stf_curve(data, params):
+        """Apply fitted STF parameters to `data`, returning uint8 of the same shape."""
+        data = np.nan_to_num(data.astype(np.float32, copy=False))
+        if params is None:
+            return np.zeros_like(data, dtype=np.uint8)
+        d_min, d_max, c0, midpoint = params["d_min"], params["d_max"], params["c0"], params["midpoint"]
+        data = (data - d_min) / (d_max - d_min)
+        data = (np.clip(data, c0, 1.0) - c0) / (1.0 - c0)
         if midpoint != 0.5:
             with np.errstate(divide="ignore", invalid="ignore"):
                 data = ((midpoint - 1) * data) / ((2 * midpoint - 1) * data - midpoint)
         return (np.clip(data, 0, 1) * 255).astype(np.uint8)
+
+    @staticmethod
+    def apply_stf_stretch(data, target_bg=0.25, shadows_clip=-1.25):
+        params = ThumbnailGenerator.stf_params(data, target_bg, shadows_clip)
+        return ThumbnailGenerator.stf_curve(data, params)
 
     @staticmethod
     def _normalize(data, apply_stf):

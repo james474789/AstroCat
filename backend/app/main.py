@@ -264,6 +264,8 @@ from app.api import seeing as seeing_api  # noqa: E402  (S1)
 app.include_router(seeing_api.router, prefix="/api/seeing", tags=["Seeing"], dependencies=[Depends(get_current_user)])
 from app.api import quality  # noqa: E402  (Q1c)
 app.include_router(quality.router, prefix="/api/quality", tags=["Quality"], dependencies=[Depends(get_current_user)])
+from app.api import fullres  # noqa: E402  (V1)
+app.include_router(fullres.router, prefix="/api/images", tags=["Full resolution"], dependencies=[Depends(get_current_user)])
 
 
 
