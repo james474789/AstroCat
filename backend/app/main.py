@@ -3,6 +3,7 @@ AstroCat FastAPI Application
 Main entry point for the backend API server.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, Request
 from fastapi.responses import JSONResponse
@@ -37,6 +38,13 @@ async def lifespan(app: FastAPI):
         await init_db()
         print("✅ Database initialized (debug mode)")
     
+    # Re-warm the Redis settings cache from Postgres (Redis may have been wiped)
+    try:
+        from app.api.settings import restore_settings_cache
+        await asyncio.to_thread(restore_settings_cache)
+    except Exception as e:
+        print(f"⚠️ Could not restore system settings: {e}")
+
     print(f"📁 Watching image paths: {settings.image_paths_list}")
     print("✅ AstroCat Backend ready!")
     

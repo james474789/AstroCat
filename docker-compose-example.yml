@@ -40,6 +40,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # AOF so writes survive a hard kill/reboot (default RDB snapshots can lag up to an hour)
+    command: [ "redis-server", "--appendonly", "yes", "--appendfsync", "everysec" ]
     # Ports removed for security (only accessible within docker network)
     volumes:
       - redis_data:/data

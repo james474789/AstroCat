@@ -32,16 +32,74 @@ def get_redis_client():
 
 SETTINGS_KEY = "system_settings"
 
+
+def _db_load() -> Optional[str]:
+    from app.database import SessionLocal
+    from app.models.system_setting import SystemSetting
+    with SessionLocal() as session:
+        row = session.get(SystemSetting, SETTINGS_KEY)
+        return row.value if row else None
+
+
+def _db_save(raw: str) -> None:
+    from app.database import SessionLocal
+    from app.models.system_setting import SystemSetting
+    with SessionLocal() as session:
+        row = session.get(SystemSetting, SETTINGS_KEY)
+        if row:
+            row.value = raw
+        else:
+            session.add(SystemSetting(key=SETTINGS_KEY, value=raw))
+        session.commit()
+
+
+def restore_settings_cache() -> Optional[str]:
+    """Reconcile Postgres (source of truth) and the Redis cache.
+
+    Postgres wins: its value is copied into Redis if Redis is empty. If only
+    Redis has a value (install that predates the table), it is imported into
+    Postgres. Returns the effective JSON document, or None if neither has one.
+    Never raises: a down store just leaves things as they were.
+    """
+    try:
+        r = get_redis_client()
+        cached = r.get(SETTINGS_KEY)
+    except Exception:
+        r, cached = None, None
+    try:
+        stored = _db_load()
+    except Exception:
+        return cached
+    if stored:
+        if r is not None and not cached:
+            try:
+                r.set(SETTINGS_KEY, stored)
+            except Exception:
+                pass
+        return cached or stored
+    if cached:
+        try:
+            _db_save(cached)
+        except Exception:
+            pass
+    return cached
+
+
 @router.get("/", response_model=SystemSettings)
 def get_settings():
     """Get current system settings."""
-    r = get_redis_client()
-    data = r.get(SETTINGS_KEY)
-    
+    data = None
+    try:
+        data = get_redis_client().get(SETTINGS_KEY)
+    except Exception:
+        pass
+    if not data:
+        data = restore_settings_cache()
+
     if not data:
         # Default settings
         return SystemSettings(astrometry_provider="nova")
-    
+
     return SystemSettings(**json.loads(data))
 
 @router.post("/", response_model=SystemSettings)
@@ -55,8 +113,13 @@ def update_settings(new_settings: SystemSettings):
                 detail="Cannot switch to Local Astrometry: Configuration (URL/Key) is missing."
             )
 
-    r = get_redis_client()
-    r.set(SETTINGS_KEY, new_settings.model_dump_json())
+    raw = new_settings.model_dump_json()
+    # Postgres first: it is the durable copy, so a failure here must surface.
+    try:
+        _db_save(raw)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to persist settings: {e}")
+    get_redis_client().set(SETTINGS_KEY, raw)
     from app.services.quality_settings import clear_cache
     clear_cache()
     return new_settings

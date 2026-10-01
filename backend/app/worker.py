@@ -118,6 +118,11 @@ def on_worker_ready(sender=None, **kwargs):
     # isn't blocked and each repair runs once per install (see
     # app/services/data_migrations.py).
     try:
+        from app.api.settings import restore_settings_cache
+        restore_settings_cache()
+    except Exception:
+        pass
+    try:
         # A lock left by a run that died with the previous worker would
         # otherwise block this start's run until it expires.
         from app.services.data_migrations import LOCK_KEY, redis_client
