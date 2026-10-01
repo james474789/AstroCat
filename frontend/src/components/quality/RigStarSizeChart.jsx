@@ -7,7 +7,7 @@ import { useQualityUnits } from '../../context/QualityUnitsContext';
 import { TOOLTIP_STYLE, AXIS, BAR } from './chartStyle';
 import './Quality.css';
 
-// Q2: median star size per rig (docs/design/Q2-per-rig-star-size.md). Independent of the
+// Q2: median star size per rig (docs/design/20260930-Q2-per-rig-star-size.md). Independent of the
 // rig picked in the Star Quality section; reads `by_rig` from /quality/stats.
 
 const unitLabel = (u) => (u === 'PX' ? 'px' : '″');

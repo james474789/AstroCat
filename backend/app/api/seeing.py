@@ -1,5 +1,5 @@
 """
-Planetary seeing forecast API (S1, docs/design/S1-planetary-seeing-forecast.md §7.1).
+Planetary seeing forecast API (S1, docs/design/20261001-S1-planetary-seeing-forecast.md §7.1).
 
 - GET /api/seeing/forecast?site_id=&date=   hourly score, per-planet windows, verdict and source status
 

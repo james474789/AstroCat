@@ -1,5 +1,5 @@
 """
-Planetary seeing forecast (S1, docs/design/S1-planetary-seeing-forecast.md).
+Planetary seeing forecast (S1, docs/design/20261001-S1-planetary-seeing-forecast.md).
 
 build_forecast() is pure orchestration: weather frames + planet tracks in, the §7.1 payload out. It does no
 I/O and keeps no coordinates in the payload (the site is referenced by id only). Fetching and caching live in

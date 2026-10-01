@@ -185,7 +185,7 @@ class Image(Base):
     # How capture_date_utc of a FITS_LOCAL / EXIF_LOCAL row was derived (R1 §3.2).
     capture_utc_basis = Column(String(20), nullable=True)            # SITE_TZ | DEFAULT_SITE_TZ | CAMERA_UTC
 
-    # Star quality (Q1, docs/design/Q1-star-quality.md). Written by
+    # Star quality (Q1, docs/design/20260927-Q1-star-quality.md). Written by
     # app.tasks.quality; sizes are in native (as-captured, binned) pixels, and
     # arcsec is derived at query time from the plate scale. Only OK rows are
     # AstroCat-measured: HINT rows carry a value read from the capture

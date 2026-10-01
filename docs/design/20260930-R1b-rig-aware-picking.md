@@ -140,7 +140,7 @@ User decisions:
 
 ## 6. Verification
 
-1. Run the backend tests on the host with the dummy env vars from HANDOVER-recommendations §5. The known
+1. Run the backend tests on the host with the dummy env vars from 20260926-HANDOVER-recommendations §5. The known
    pre-existing failure in `test_reindex_backfill` is expected.
 2. Run `npm run build` and `npm run lint` in `frontend/`.
 3. **Replay check** (inside the backend container), before and after:

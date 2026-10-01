@@ -1097,7 +1097,7 @@ export async function fetchRecommendationOutcomes({ days } = {}) {
 }
 
 // ============ Planetary seeing forecast (S1) ============
-// Contract: docs/design/S1-planetary-seeing-forecast.md §7.1. The response never contains coordinates.
+// Contract: docs/design/20261001-S1-planetary-seeing-forecast.md §7.1. The response never contains coordinates.
 
 export async function getSeeingForecast(siteId, date) {
     const queryString = buildQueryString({ site_id: siteId || undefined, date: date || undefined });

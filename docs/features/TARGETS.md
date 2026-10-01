@@ -146,6 +146,16 @@ All of the above skip images whose `target_source == 'MANUAL'`.
 - `Search.jsx` / `FilterChips.jsx` honor and display the `target_key` URL
   param (including `__none__` for unassigned).
 
+## Master linking (T1)
+
+A target's masters are not just images whose primary `target_key` equals it: a master is also linked
+to every canonicalised *central* catalog match (in field, not a named star, within
+`MATCH_CENTRAL_FRACTION` x field radius; `services/targets.py::linked_target_keys`). This keeps
+near-tied fields (e.g. Sh2-159 vs NGC7635) from hiding a master. Links are computed at query time in
+`api/targets.py::_compute_master_links`. Incidental links never create a target; a target with masters
+but no subs appears only if a master's own primary key is that target. See
+`docs/design/20261001-T1-target-master-linking.md`.
+
 ## Known limitations / follow-ups
 
 - "Nights" (the list count and `nights_detail`) use the shared observing-night

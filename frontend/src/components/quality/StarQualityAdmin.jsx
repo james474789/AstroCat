@@ -3,7 +3,7 @@ import { fetchStarMetricsStatus, requestStarMetricsRemeasure, updateSettings } f
 import './Quality.css';
 
 // Q1 Admin section: star-quality settings, backfill progress, re-measure actions
-// (docs/design/Q1-star-quality.md §7.8, §7.9).
+// (docs/design/20260927-Q1-star-quality.md §7.8, §7.9).
 
 const COUNT_LABELS = [
     ['ok', 'measured'], ['no_stars', 'no stars'], ['skipped', 'not measurable'], ['hint', 'from capture software'],

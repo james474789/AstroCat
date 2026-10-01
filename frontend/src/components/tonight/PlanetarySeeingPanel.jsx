@@ -5,7 +5,7 @@ import { ChevronDown, Orbit, Check, X, Minus, AlertTriangle } from 'lucide-react
 import { getSeeingForecast } from '../../api/client';
 import './PlanetarySeeingPanel.css';
 
-// Design: docs/design/S1-planetary-seeing-forecast.md §7.2. The panel owns its query and its error
+// Design: docs/design/20261001-S1-planetary-seeing-forecast.md §7.2. The panel owns its query and its error
 // boundary, so a failing forecast never affects the rest of the Tonight page.
 
 const COLLAPSE_KEY = 'astrocat.tonight.seeing.collapsed';

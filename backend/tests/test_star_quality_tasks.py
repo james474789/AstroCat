@@ -1,5 +1,5 @@
 """
-Q1 star quality pipeline (docs/design/Q1-star-quality.md §5): eligibility,
+Q1 star quality pipeline (docs/design/20260927-Q1-star-quality.md §5): eligibility,
 re-measure rules, applying results (incl. the capture-software hint
 fallback), the sweeper's throttling, and hint parsing.
 """

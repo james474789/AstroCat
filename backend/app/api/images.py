@@ -285,7 +285,7 @@ async def _attach_equipment_names(db: AsyncSession, image: Image) -> Image:
 
 async def _attach_quality(db: AsyncSession, image: Image) -> Image:
     """
-    Q1: the ImageDetail `quality` block (docs/design/Q1-star-quality.md §7.1):
+    Q1: the ImageDetail `quality` block (docs/design/20260927-Q1-star-quality.md §7.1):
     both units, sampling, and how the sub compares with the other measured
     subs of its night on the same rig (or camera, without a rig) and filter.
     Call after _attach_equipment_names (the image is already detached).

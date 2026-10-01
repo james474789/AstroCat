@@ -1,5 +1,5 @@
 """
-Planetary seeing forecast tasks (S1, docs/design/S1-planetary-seeing-forecast.md §4).
+Planetary seeing forecast tasks (S1, docs/design/20261001-S1-planetary-seeing-forecast.md §4).
 
 `refresh_forecasts` runs every 3 h at minute 10 (Celery beat, default queue): it refreshes the default site
 plus any site viewed in the last 7 days. Idempotent. Results and logs carry site ids only, never coordinates.

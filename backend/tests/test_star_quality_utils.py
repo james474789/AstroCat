@@ -1,4 +1,4 @@
-"""Q1 star quality presentation helpers and runtime settings (docs/design/Q1-star-quality.md §7)."""
+"""Q1 star quality presentation helpers and runtime settings (docs/design/20260927-Q1-star-quality.md §7)."""
 
 from datetime import datetime
 from types import SimpleNamespace

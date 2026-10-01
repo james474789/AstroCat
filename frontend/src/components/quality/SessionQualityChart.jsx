@@ -8,7 +8,7 @@ import { useQualityUnits } from '../../context/QualityUnitsContext';
 import { filterColor } from '../../utils/filterColors';
 import './Quality.css';
 
-// Q1c session timeline (docs/design/Q1-star-quality.md §8.2): FWHM/HFR over a
+// Q1c session timeline (docs/design/20260927-Q1-star-quality.md §8.2): FWHM/HFR over a
 // night with synced small panels (altitude, stars, eccentricity) sharing one
 // time axis. Each panel has one y-axis; filters are colour AND marker shape.
 

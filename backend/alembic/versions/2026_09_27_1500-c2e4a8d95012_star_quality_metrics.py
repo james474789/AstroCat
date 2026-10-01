@@ -4,7 +4,7 @@ Revision ID: c2e4a8d95012
 Revises: b1d3f7c84011
 Create Date: 2026-09-27 15:00:00.000000
 
-Q1 (docs/design/Q1-star-quality.md §5.1): per-image star quality columns
+Q1 (docs/design/20260927-Q1-star-quality.md §5.1): per-image star quality columns
 (hfr_px, fwhm_px, eccentricity, star_count), measurement status/version/time
 and a star_metrics JSONB of details.
 

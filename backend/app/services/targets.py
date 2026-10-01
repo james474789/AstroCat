@@ -415,6 +415,49 @@ def _as_str(value) -> str:
     return getattr(value, "value", value)
 
 
+def _central_candidates(matches: Sequence, field_radius: Optional[float]) -> List[tuple]:
+    """
+    In-field, non-star matches within MATCH_CENTRAL_FRACTION of the field
+    radius, as (catalog_type, designation, separation_deg, magnitude) tuples.
+    Shared by resolve_target (picks one) and linked_target_keys (keeps all).
+    """
+    if not matches or not field_radius:
+        return []
+    threshold = MATCH_CENTRAL_FRACTION * field_radius
+    candidates = []
+    for m in matches:
+        catalog_type, designation, separation_deg, is_in_field, magnitude = m
+        if not is_in_field:
+            continue
+        if _as_str(catalog_type) == "NAMED_STAR":
+            continue
+        if separation_deg is None or separation_deg > threshold:
+            continue
+        candidates.append((catalog_type, designation, separation_deg, magnitude))
+    return candidates
+
+
+def linked_target_keys(
+    *,
+    matches: Sequence,
+    field_radius: Optional[float],
+    alias_index: AliasIndex,
+    primary_key: Optional[str] = None,
+) -> set:
+    """
+    Every target an image is "of": the canonical keys of all central catalog
+    matches (see _central_candidates) plus the image's own primary key.
+    Used to attach masters to each target they show, not just the single
+    nearest-to-centre one.
+    """
+    keys = set()
+    if primary_key:
+        keys.add(primary_key)
+    for _type, designation, _sep, _mag in _central_candidates(matches, field_radius):
+        keys.add(alias_index.resolve(designation) or normalize_designation(designation))
+    return keys
+
+
 def resolve_target(
     *,
     frame_type,
@@ -452,17 +495,7 @@ def resolve_target(
 
     # 3. MATCH — central object among plate-solved catalog matches.
     if matches and field_radius:
-        threshold = MATCH_CENTRAL_FRACTION * field_radius
-        candidates = []
-        for m in matches:
-            catalog_type, designation, separation_deg, is_in_field, magnitude = m
-            if not is_in_field:
-                continue
-            if _as_str(catalog_type) == "NAMED_STAR":
-                continue
-            if separation_deg is None or separation_deg > threshold:
-                continue
-            candidates.append((catalog_type, designation, separation_deg, magnitude))
+        candidates = _central_candidates(matches, field_radius)
 
         if candidates:
             def sort_key(item):

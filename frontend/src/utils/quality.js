@@ -1,4 +1,4 @@
-// Q1 star quality formatting (docs/design/Q1-star-quality.md §8).
+// Q1 star quality formatting (docs/design/20260927-Q1-star-quality.md §8).
 // Values arrive in native pixels plus, when a plate/rig scale is known, arcsec.
 
 export const STATUS_LABELS = {

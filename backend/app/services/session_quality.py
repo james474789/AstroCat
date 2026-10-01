@@ -1,5 +1,5 @@
 """
-Session quality timeline (Q1c, docs/design/Q1-star-quality.md §6, §7.4).
+Session quality timeline (Q1c, docs/design/20260927-Q1-star-quality.md §6, §7.4).
 
 Pure functions over one night's Light subs (plain dicts, ordered by time):
 altitude/airmass, inferred events (autofocus, filter/target change, meridian

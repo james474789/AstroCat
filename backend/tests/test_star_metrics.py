@@ -1,5 +1,5 @@
 """
-Q1 star metrics (docs/design/Q1-star-quality.md §4, §9): accuracy on
+Q1 star metrics (docs/design/20260927-Q1-star-quality.md §4, §9): accuracy on
 synthetic star fields with a known PSF, rejection rules, CFA handling and
 file loading.
 """

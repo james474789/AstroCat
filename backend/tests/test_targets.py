@@ -16,6 +16,7 @@ from app.services.targets import (
     AliasIndex,
     MatchInfo,
     resolve_target,
+    linked_target_keys,
 )
 
 
@@ -522,3 +523,55 @@ def test_sh2_cross_id_default_overrides_suppress_barnards_loop():
     barnards_loop = Sh2Row("Sh2-276", "Sh 2-276", None, 83.9, -4.4, 600.0)  # even if centred on it
     ngc1981 = _ngc("NGC1981", "Cl+N", 83.79, -4.43, 25.0)
     assert sh2_cross_ids([barnards_loop], [ngc1981]) == {}
+
+
+# ---------------------------------------------------------------------------
+# linked_target_keys (T1: masters link to every central target)
+# ---------------------------------------------------------------------------
+
+def _bubble_index():
+    index = AliasIndex()
+    index.add_alias("NGC7635", "NGC7635")
+    index.add_alias("C11", "NGC7635")
+    index.add_alias("Sh2-162", "NGC7635")
+    index.add_alias("Sh2-159", "SH2159")
+    index.add_alias("Sh2-157", "SH2157")
+    index.add_alias("M52", "M52")
+    return index
+
+
+# Image 387: radius 1.7756 -> central threshold 0.8878 deg.
+_IMG387 = [
+    ("MESSIER", "M52", 1.19, True, None),
+    ("NGC", "NGC7510", 0.94, True, None),
+    ("NGC", "NGC7635", 0.6115, True, None),
+    ("CALDWELL", "C11", 0.6115, True, None),
+    ("SH2", "Sh2-157", 0.692, True, None),
+    ("SH2", "Sh2-158", 1.047, True, None),
+    ("SH2", "Sh2-159", 0.606, True, None),
+    ("SH2", "Sh2-162", 0.595, True, None),
+]
+
+
+def test_linked_target_keys_includes_all_central_objects():
+    keys = linked_target_keys(
+        matches=_IMG387, field_radius=1.7756, alias_index=_bubble_index(), primary_key="NGC7635")
+    assert keys == {"NGC7635", "SH2159", "SH2157"}
+
+
+def test_linked_target_keys_skips_stars_out_of_field_and_no_radius():
+    matches = [
+        ("NAMED_STAR", "Sheliak", 0.1, True, None),
+        ("NGC", "NGC7635", 0.1, False, None),
+    ]
+    assert linked_target_keys(
+        matches=matches, field_radius=1.0, alias_index=_bubble_index(), primary_key=None) == set()
+    # No usable radius: only the primary key survives.
+    assert linked_target_keys(
+        matches=_IMG387, field_radius=None, alias_index=_bubble_index(), primary_key="M52") == {"M52"}
+
+
+def test_linked_target_keys_keeps_manual_primary_key():
+    keys = linked_target_keys(
+        matches=_IMG387, field_radius=1.7756, alias_index=_bubble_index(), primary_key="OBJ:CUSTOM")
+    assert "OBJ:CUSTOM" in keys and "SH2159" in keys

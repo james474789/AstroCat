@@ -1,5 +1,5 @@
 """
-Privacy guards for the seeing forecast (docs/design/S1-planetary-seeing-forecast.md §8).
+Privacy guards for the seeing forecast (docs/design/20261001-S1-planetary-seeing-forecast.md §8).
 
 Coordinates only ever flow Site row -> SiteSpec (memory) -> round_coords -> HTTP query. They are never
 returned, cached, stored or logged. Anything that can echo a URL or a provider response passes through

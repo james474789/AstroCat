@@ -2,7 +2,7 @@
 
 A **Planetary seeing** panel on the Tonight page (below the context strip, above the hero pick) answers two
 questions: is tonight worth setting up for high-resolution planetary or lunar imaging, and if so, which body
-and between what hours. Design: [S1](../design/S1-planetary-seeing-forecast.md). This page describes the
+and between what hours. Design: [S1](../design/20261001-S1-planetary-seeing-forecast.md). This page describes the
 shipped behaviour (phases 1 and 2).
 
 ## What it combines

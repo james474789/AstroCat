@@ -1,5 +1,5 @@
 """
-Star quality tasks (Q1, docs/design/Q1-star-quality.md §5).
+Star quality tasks (Q1, docs/design/20260927-Q1-star-quality.md §5).
 
 - measure_star_metrics(image_id): measure one image (queue "quality"). Queued
   by the indexer right after an eligible image is saved, and by the sweeper.

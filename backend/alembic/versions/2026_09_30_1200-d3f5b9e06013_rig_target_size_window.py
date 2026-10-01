@@ -4,7 +4,7 @@ Revision ID: d3f5b9e06013
 Revises: c2e4a8d95012
 Create Date: 2026-09-30 12:00:00.000000
 
-R1b (docs/design/R1b-rig-aware-picking.md §1): per-rig target-size window for
+R1b (docs/design/20260930-R1b-rig-aware-picking.md §1): per-rig target-size window for
 recommendations, rigs.min_target_arcmin / max_target_arcmin. NULL means "use
 the default from the field of view".
 
