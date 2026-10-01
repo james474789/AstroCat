@@ -68,6 +68,11 @@ services:
       - IMAGE_PATHS=${IMAGE_PATHS:-/data/images}
       - THUMBNAIL_CACHE_PATH=/data/thumbnails
       - THUMBNAIL_MAX_SIZE=${THUMBNAIL_MAX_SIZE:-1024}
+      - FULLRES_CACHE_PATH=/data/fullres
+      - FULLRES_CACHE_MAX_GB=${FULLRES_CACHE_MAX_GB:-20}
+      - FULLRES_MAX_MEGAPIXELS=${FULLRES_MAX_MEGAPIXELS:-250}
+      - FULLRES_WORKERS=${FULLRES_WORKERS:-1}
+      - FULLRES_DEBAYER=${FULLRES_DEBAYER:-true}
       - ASTROMETRY_API_KEY=${ASTROMETRY_API_KEY}
       - LOCAL_ASTROMETRY_URL=${LOCAL_ASTROMETRY_URL}
       - LOCAL_ASTROMETRY_API_KEY=${LOCAL_ASTROMETRY_API_KEY}
@@ -84,6 +89,7 @@ services:
       - ${IMAGE_PATH_1}:/data/images
       - ${IMAGE_PATH_2}:/data/mount2
       - ${THUMBNAIL_CACHE_PATH_HOST}:/data/thumbnails
+      - ${FULLRES_CACHE_PATH_HOST:-./library/fullres}:/data/fullres
     healthcheck:
       test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8089/api/health\")'" ]
       interval: 10s

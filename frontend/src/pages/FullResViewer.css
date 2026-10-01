@@ -1,0 +1,150 @@
+/* V1 full-resolution deep-zoom viewer: a black full-viewport stage with an auto-hiding top bar. */
+.fullres-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: #000;
+    color: var(--color-text-primary, #f1f5f9);
+    overflow: hidden;
+    user-select: none;
+}
+
+.fullres-stage,
+.fullres-osd {
+    position: absolute;
+    inset: 0;
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.fullres-osd { background: #000; }
+
+.fullres-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: calc(0.5rem + var(--safe-top, 0px)) 0.75rem 0.5rem;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.45));
+    transition: opacity 0.25s ease;
+}
+
+.fullres-bar.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.fr-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.fr-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.fr-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--color-border, #2d3a4f);
+    border-radius: 6px;
+    background: rgba(20, 27, 45, 0.85);
+    color: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.fr-btn.icon { padding: 0.35rem; }
+.fr-btn:hover:not(:disabled) { background: var(--color-surface-hover, #232d42); }
+.fr-btn:disabled { opacity: 0.4; cursor: default; }
+
+.fr-select {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--color-border, #2d3a4f);
+    border-radius: 6px;
+    background: rgba(20, 27, 45, 0.9);
+    color: inherit;
+    font-size: 0.85rem;
+}
+
+.fr-zoom {
+    min-width: 3.2rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary, #94a3b8);
+}
+
+/* Thin lines drawn in CSS (not OSD overlays) so they stay 1 px at any zoom */
+.fr-crosshair {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(34, 211, 238, 0.55);
+    z-index: 10;
+}
+.fr-crosshair.horizontal { left: 0; right: 0; height: 1px; }
+.fr-crosshair.vertical { top: 0; bottom: 0; width: 1px; }
+
+.fullres-readout {
+    position: absolute;
+    left: 0.75rem;
+    bottom: calc(0.75rem + var(--safe-bottom, 0px));
+    z-index: 20;
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.7);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+
+.fullres-chip {
+    position: absolute;
+    top: 3.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(20, 27, 45, 0.92);
+    border: 1px solid var(--color-border, #2d3a4f);
+    font-size: 0.85rem;
+    pointer-events: auto;
+}
+.fullres-chip.error { border-color: var(--color-error, #ef4444); }
+.fullres-chip.subtle { color: var(--color-text-secondary, #94a3b8); }
+.fullres-chip .spin { animation: fr-spin 1s linear infinite; }
+
+@keyframes fr-spin { to { transform: rotate(360deg); } }
+
+.fullres-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    text-align: center;
+    padding: 1rem;
+}
+
+@media (max-width: 720px) {
+    .fullres-bar { flex-wrap: wrap; gap: 0.4rem; }
+    .fr-title { flex-basis: 100%; order: -1; }
+}

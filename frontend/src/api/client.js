@@ -1103,3 +1103,46 @@ export async function getSeeingForecast(siteId, date) {
     const queryString = buildQueryString({ site_id: siteId || undefined, date: date || undefined });
     return handleResponse(await fetch(`${API_BASE_URL}/seeing/forecast?${queryString}`, { credentials: 'include' }));
 }
+
+// ---------------------------------------------------------------------------
+// Full-resolution viewer (V1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Status of the full-resolution view of an image.
+ * Resolves { httpStatus, ...body }: 200 -> state 'ready' (manifest, key, dzi_url | source_url);
+ * 202 -> state queued/loading/debayering/stretching/tiling/error (pct, error).
+ */
+export async function fetchFullRes(id, preset, { retry = false, signal } = {}) {
+    const params = new URLSearchParams();
+    if (preset) params.set('preset', preset);
+    if (retry) params.set('retry', 'true');
+    const qs = params.toString();
+    const response = await fetch(`${API_BASE_URL}/images/${id}/fullres${qs ? `?${qs}` : ''}`, {
+        credentials: 'include',
+        signal,
+    });
+    const body = await handleResponse(response);
+    return { httpStatus: response.status, ...body };
+}
+
+export function getFullResSourceUrl(id) {
+    return `${API_BASE_URL}/images/${id}/fullres/source`;
+}
+
+export function getFullResDziUrl(id, key) {
+    return `${API_BASE_URL}/images/${id}/fullres/${key}/image.dzi`;
+}
+
+export async function fetchFullResCacheStats() {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/fullres-cache`, { credentials: 'include' }));
+}
+
+export async function clearFullResCache() {
+    return handleResponse(await fetch(`${API_BASE_URL}/indexer/fullres-cache`, {
+        method: 'DELETE',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+

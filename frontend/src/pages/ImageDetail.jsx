@@ -3,6 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchImage, updateImage, rescanImage, fetchAnnotation, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
+import useImageNav from '../hooks/useImageNav';
+import { Maximize2 } from 'lucide-react';
 import StarQualityCard from '../components/quality/StarQualityCard';
 import './ImageDetail.css';
 
@@ -15,8 +17,8 @@ export default function ImageDetail() {
     const [error, setError] = useState(null);
     const [imgError, setImgError] = useState(false);
     const [annotatedImageError, setAnnotatedImageError] = useState(false);
-    // Navigation state
-    const [navInfo, setNavInfo] = useState({ prevId: null, nextId: null, currentIndex: -1, total: 0 });
+    // Navigation through the search results this image was opened from
+    const { navInfo, goToImage, goPrev, goNext, returnToSearch } = useImageNav(id);
     // Touch zoom/pan: view = {s: scale, x, y translate in px, origin top-left of the preview}
     const [view, setView] = useState({ s: 1, x: 0, y: 0 });
     const viewRef = useRef(view);
@@ -74,31 +76,6 @@ export default function ImageDetail() {
             setLoading(false);
         }
     }
-
-    // Load search context for navigation
-    useEffect(() => {
-        const contextStr = sessionStorage.getItem('currentSearchContext');
-        if (contextStr) {
-            try {
-                const context = JSON.parse(contextStr);
-                const currentIdNum = parseInt(id);
-                const index = context.ids.indexOf(currentIdNum);
-
-                if (index !== -1) {
-                    setNavInfo({
-                        prevId: index > 0 ? context.ids[index - 1] : null,
-                        nextId: index < context.ids.length - 1 ? context.ids[index + 1] : null,
-                        currentIndex: (context.page - 1) * context.pageSize + index + 1,
-                        total: context.total
-                    });
-                } else {
-                    setNavInfo({ prevId: null, nextId: null, currentIndex: -1, total: 0 });
-                }
-            } catch (e) {
-                console.error("Failed to parse search context", e);
-            }
-        }
-    }, [id]);
 
     async function handleSubtypeChange(newSubtype) {
         setSaving(true);
@@ -261,45 +238,22 @@ export default function ImageDetail() {
             // Navigation
             if (e.key === 'ArrowLeft' && navInfo.prevId) {
                 e.preventDefault();
-                sessionStorage.setItem('lastClickedImageId', navInfo.prevId);
-                navigate(`/images/${navInfo.prevId}`);
+                goPrev();
             } else if (e.key === 'ArrowRight' && navInfo.nextId) {
                 e.preventDefault();
-                sessionStorage.setItem('lastClickedImageId', navInfo.nextId);
-                navigate(`/images/${navInfo.nextId}`);
+                goNext();
             } else if (e.key.toLowerCase() === 'g') {
                 e.preventDefault();
-                sessionStorage.setItem('lastClickedImageId', id);
-
-                // RESTORE SEARCH CONTEXT
-                // Try to reconstruct the search URL from the stored context
-                const contextStr = sessionStorage.getItem('currentSearchContext');
-                if (contextStr) {
-                    try {
-                        const context = JSON.parse(contextStr);
-                        if (context.params) {
-                            const searchParams = new URLSearchParams();
-                            Object.entries(context.params).forEach(([key, value]) => {
-                                // Exclude internal or default parameters that shouldn't clutter the URL
-                                if (key !== 'page_size' && value !== undefined && value !== null && value !== '') {
-                                    searchParams.set(key, value);
-                                }
-                            });
-                            navigate(`/search?${searchParams.toString()}`);
-                            return;
-                        }
-                    } catch (e) {
-                        console.error("Failed to parse search context for return", e);
-                    }
-                }
-
-                navigate('/search');
+                returnToSearch();
+            } else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                e.preventDefault();
+                navigate(`/images/${id}/view`);
             }
         };
 
         window.addEventListener('keydown', handleKeyPress);
         return () => window.removeEventListener('keydown', handleKeyPress);
-    }, [image, id, navInfo, navigate]);
+    }, [image, id, navInfo, navigate, goPrev, goNext, returnToSearch]);
 
     // Generate placeholder background
     const getPlaceholderStyle = () => {
@@ -438,11 +392,7 @@ export default function ImageDetail() {
                 }
             } else if (e.type === 'pointerup' && !g.multi && g.startView.s === 1 && Math.abs(dx) > 70 && Math.abs(dy) < 50) {
                 // swipe (not zoomed) navigates prev/next
-                const target = dx < 0 ? navInfo.nextId : navInfo.prevId;
-                if (target) {
-                    sessionStorage.setItem('lastClickedImageId', target);
-                    navigate(`/images/${target}`);
-                }
+                goToImage(dx < 0 ? navInfo.nextId : navInfo.prevId);
             }
             gestureRef.current = null;
         }
@@ -482,12 +432,7 @@ export default function ImageDetail() {
                     <div className="image-navigation">
                         <button
                             className="nav-btn"
-                            onClick={() => {
-                                if (navInfo.prevId) {
-                                    sessionStorage.setItem('lastClickedImageId', navInfo.prevId);
-                                    navigate(`/images/${navInfo.prevId}`);
-                                }
-                            }}
+                            onClick={goPrev}
                             disabled={!navInfo.prevId}
                             title="Previous Image (Left Arrow)"
                         >
@@ -498,12 +443,7 @@ export default function ImageDetail() {
                         </span>
                         <button
                             className="nav-btn"
-                            onClick={() => {
-                                if (navInfo.nextId) {
-                                    sessionStorage.setItem('lastClickedImageId', navInfo.nextId);
-                                    navigate(`/images/${navInfo.nextId}`);
-                                }
-                            }}
+                            onClick={goNext}
                             disabled={!navInfo.nextId}
                             title="Next Image (Right Arrow)"
                         >
@@ -653,6 +593,10 @@ export default function ImageDetail() {
 
                         {/* Quick Actions */}
                         <div className="image-actions">
+                            <Link to={`/images/${id}/view`} className="btn btn-secondary" title="Open at full resolution (F)">
+                                <Maximize2 size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                                Full resolution
+                            </Link>
                             <a
                                 href={getDownloadUrl(id, 'jpg')}
                                 className="btn btn-secondary"

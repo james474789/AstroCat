@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
@@ -23,6 +24,9 @@ import { useAuth } from './context/AuthContext';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 import './index.css';
+
+// V1: OpenSeadragon (~200 KB) is only downloaded when the full-resolution viewer is opened
+const FullResViewer = lazy(() => import('./pages/FullResViewer'));
 
 
 const queryClient = new QueryClient({
@@ -89,6 +93,20 @@ const AppRoutes = () => {
           !setupComplete ? <Navigate to="/setup" replace /> :
             isAuthenticated ? <Navigate to="/" replace /> :
               <Login />
+        }
+      />
+      {/* V1: full-screen viewer, outside Layout so it owns the whole viewport */}
+      <Route
+        path="/images/:id/view"
+        element={
+          !setupComplete ? <Navigate to="/setup" replace /> :
+            <ProtectedRoute>
+              <ErrorBoundary>
+                <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="spinner" size={48} color="#58a6ff" /></div>}>
+                  <FullResViewer />
+                </Suspense>
+              </ErrorBoundary>
+            </ProtectedRoute>
         }
       />
       <Route

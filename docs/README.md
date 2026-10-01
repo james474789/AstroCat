@@ -33,6 +33,7 @@ Detailed technical analysis and specifications for specific features.
 - [Frame Types](features/FRAME_TYPES.md)
 - [Targets](features/TARGETS.md)
 - [Recommendations](features/RECOMMENDATIONS.md)
+- [Full-resolution Viewer](features/FULLRES_VIEWER.md)
 
 ### [Feature Designs](design/)
 Proposed designs for upcoming features. Start with the coordination contract in [design/README.md](design/README.md).
