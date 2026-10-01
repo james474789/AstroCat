@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # returned by the API, or logged.
     telescopius_api_key: Optional[str] = None
 
+    # Planetary seeing forecast (S1). Env only: never stored, returned or logged.
+    meteoblue_api_key: Optional[str] = None
+    meteoblue_min_interval_h: int = 6
+    seeing_coord_decimals: int = 2
+    seeing_enabled: bool = True
+
     # API Settings
     api_prefix: str = "/api"
     

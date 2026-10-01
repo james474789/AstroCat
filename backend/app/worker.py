@@ -28,6 +28,7 @@ celery_app = Celery(
         "app.tasks.equipment",
         "app.tasks.recommend",
         "app.tasks.quality",
+        "app.tasks.seeing",
     ]
 )
 
@@ -75,6 +76,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.quality.sweep",
         "schedule": 60.0,  # checks the queue often so it stays topped off; cheap no-op when queue is long
     },
+    "refresh-seeing-forecasts": {  # S1: planetary seeing forecast, every 3 h at minute 10
+        "task": "app.tasks.seeing.refresh_forecasts",
+        "schedule": crontab(minute=10, hour="*/3"),
+    },
 }
 
 
@@ -86,6 +91,7 @@ celery_app.conf.task_routes = {
     "app.tasks.maintenance.*": {"queue": "indexer"},
     "app.tasks.equipment.*": {"queue": "celery"},  # R0: the default queue
     "app.tasks.recommend.*": {"queue": "celery"},  # R1: the default queue
+    "app.tasks.seeing.*": {"queue": "celery"},  # S1: the default queue
     # Q1: measurements get their own queue so a library backfill never delays
     # indexing; the sweeper itself stays on the default queue.
     "app.tasks.quality.sweep": {"queue": "celery"},

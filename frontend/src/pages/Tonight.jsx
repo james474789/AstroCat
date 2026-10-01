@@ -12,6 +12,7 @@ import {
     postRecommendationFeedback, fetchRecommendationFeedback, fetchRecommendationOutcomes,
     formatDateTime,
 } from '../api/client';
+import PlanetarySeeingPanel from '../components/tonight/PlanetarySeeingPanel';
 import './Tonight.css';
 
 // Binding contract: docs/design/R1-recommendation-engine.md §7 (API) and §8 (this page), and
@@ -1088,6 +1089,8 @@ export default function Tonight() {
             {data && (
                 <>
                     <ContextStrip context={context} onOpenHidden={() => setHiddenModalOpen(true)} />
+
+                    <PlanetarySeeingPanel siteId={siteId} date={selectedDate || undefined} />
 
                     {context?.rig_mode === 'ALL_FALLBACK' && (
                         <div className="all-fallback-banner">

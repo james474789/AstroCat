@@ -1095,3 +1095,11 @@ export async function fetchRecommendationOutcomes({ days } = {}) {
     const queryString = buildQueryString({ days: days || undefined });
     return handleResponse(await fetch(`${API_BASE_URL}/recommendations/outcomes?${queryString}`, { credentials: 'include' }));
 }
+
+// ============ Planetary seeing forecast (S1) ============
+// Contract: docs/design/S1-planetary-seeing-forecast.md §7.1. The response never contains coordinates.
+
+export async function getSeeingForecast(siteId, date) {
+    const queryString = buildQueryString({ site_id: siteId || undefined, date: date || undefined });
+    return handleResponse(await fetch(`${API_BASE_URL}/seeing/forecast?${queryString}`, { credentials: 'include' }));
+}
