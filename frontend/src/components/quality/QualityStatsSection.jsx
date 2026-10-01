@@ -9,7 +9,7 @@ import { TOOLTIP_STYLE, AXIS, BAR } from './chartStyle';
 import QualityUnitsToggle from './QualityUnitsToggle';
 import './Quality.css';
 
-// Q1d "Star Quality" section of FITS Analytics (docs/design/Q1-star-quality.md §8.5).
+// Q1d "Star Quality" section of FITS Analytics (docs/design/20260927-Q1-star-quality.md §8.5).
 // One rig at a time (FWHM only compares within a rig); every chart has one y-axis.
 
 

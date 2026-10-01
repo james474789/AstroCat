@@ -1,6 +1,6 @@
 """
 Star quality metrics: HFR, FWHM, eccentricity, star count (Q1,
-docs/design/Q1-star-quality.md §4).
+docs/design/20260927-Q1-star-quality.md §4).
 
 Pure functions over a file path (or a numpy array) and its stored header:
 no database access, so the maths is testable on synthetic star fields.

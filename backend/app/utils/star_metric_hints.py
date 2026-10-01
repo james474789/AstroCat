@@ -1,5 +1,5 @@
 """
-Star-quality hints left by capture software (Q1, docs/design/Q1-star-quality.md §4.7).
+Star-quality hints left by capture software (Q1, docs/design/20260927-Q1-star-quality.md §4.7).
 
 Reads values the capture software wrote into the FITS/XISF header or the file
 name (N.I.N.A. $$HFR$$ / $$STARCOUNT$$ / $$FWHM$$ tokens), at no extra IO:

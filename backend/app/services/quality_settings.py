@@ -1,5 +1,5 @@
 """
-Effective star-quality settings (Q1, docs/design/Q1-star-quality.md §7.9).
+Effective star-quality settings (Q1, docs/design/20260927-Q1-star-quality.md §7.9).
 
 Env settings (app.config) are the install-level switch; the Settings page
 stores runtime overrides in the Redis "system_settings" document

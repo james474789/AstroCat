@@ -36,7 +36,7 @@ Detailed technical analysis and specifications for specific features.
 
 ### [Feature Designs](design/)
 Proposed designs for upcoming features. Start with the coordination contract in [design/README.md](design/README.md).
-- [F7 Sessions](design/F7-imaging-sessions.md) · [F16 Mosaics](design/F16-mosaics.md)
+- [F7 Sessions](design/20260925-F7-imaging-sessions.md) · [F16 Mosaics](design/20260925-F16-mosaics.md)
 
 ### [Infrastructure](infrastructure/)
 Documentation related to deployment, security, and data integrity.

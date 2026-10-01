@@ -1,5 +1,5 @@
 """
-Star quality search filters (Q1d, docs/design/Q1-star-quality.md §6, §7.1).
+Star quality search filters (Q1d, docs/design/20260927-Q1-star-quality.md §6, §7.1).
 
 QualityFilters is a FastAPI dependency shared by every endpoint built on
 _build_image_query (list, CSV export, bulk actions), so a quality selection

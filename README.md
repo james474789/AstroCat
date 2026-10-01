@@ -273,9 +273,9 @@ Detailed documentation is available in the `docs/` directory:
 - [**Targets**](docs/features/TARGETS.md): Target resolution, canonicalisation, and goals.
 - [**Equipment & Sites**](docs/features/EQUIPMENT.md): Cameras, optics, filters, rigs, and sites.
 - [**Recommendations**](docs/features/RECOMMENDATIONS.md): The Tonight page recommendation engine, feedback, and outcomes.
-- [**Star Quality**](docs/design/Q1-star-quality.md): HFR/FWHM/eccentricity measurement and the Star Quality UI.
-- [**Compact Rig List**](docs/design/E1-equipment-rig-list.md): Design for the Equipment rig rows, search, and filters.
-- [**Per-Rig Star Size**](docs/design/Q2-per-rig-star-size.md): Design for the cross-rig median FWHM/HFR chart on the FITS page.
+- [**Star Quality**](docs/design/20260927-Q1-star-quality.md): HFR/FWHM/eccentricity measurement and the Star Quality UI.
+- [**Compact Rig List**](docs/design/20260930-E1-equipment-rig-list.md): Design for the Equipment rig rows, search, and filters.
+- [**Per-Rig Star Size**](docs/design/20260930-Q2-per-rig-star-size.md): Design for the cross-rig median FWHM/HFR chart on the FITS page.
 
 ## 🗄️ Database Schema
 

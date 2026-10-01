@@ -8,7 +8,7 @@ import QualityValue from '../components/quality/QualityValue';
 import QualityUnitsToggle from '../components/quality/QualityUnitsToggle';
 import './NightReport.css';
 
-// Q1c Night Report (docs/design/Q1-star-quality.md §8.2): how star quality
+// Q1c Night Report (docs/design/20260927-Q1-star-quality.md §8.2): how star quality
 // varied through one observing night, per rig, with every sub listed.
 
 const FLAG_LABELS = { SOFT: 'Soft', CLOUD: 'Few stars', TRAILED: 'Elongated' };

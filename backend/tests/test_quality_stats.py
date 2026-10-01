@@ -1,4 +1,4 @@
-"""Q1d library-wide star quality statistics (docs/design/Q1-star-quality.md §7.6)."""
+"""Q1d library-wide star quality statistics (docs/design/20260927-Q1-star-quality.md §7.6)."""
 
 from datetime import datetime, timedelta
 

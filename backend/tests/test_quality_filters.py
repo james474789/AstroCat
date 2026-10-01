@@ -1,4 +1,4 @@
-"""Q1d star quality search filters (docs/design/Q1-star-quality.md §6, §7.1)."""
+"""Q1d star quality search filters (docs/design/20260927-Q1-star-quality.md §6, §7.1)."""
 
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql

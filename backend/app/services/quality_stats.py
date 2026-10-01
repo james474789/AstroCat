@@ -1,5 +1,5 @@
 """
-Library-wide star quality statistics (Q1d, docs/design/Q1-star-quality.md §7.6).
+Library-wide star quality statistics (Q1d, docs/design/20260927-Q1-star-quality.md §7.6).
 
 Pure functions over measured Light subs of one rig (dicts with fwhm_px,
 hfr_px, scale, filter, t, alt_deg, foc_temp). The API gathers the rows.

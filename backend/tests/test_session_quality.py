@@ -1,4 +1,4 @@
-"""Q1c session timeline (docs/design/Q1-star-quality.md §6, §7.4): events, flags, drift, altitude."""
+"""Q1c session timeline (docs/design/20260927-Q1-star-quality.md §6, §7.4): events, flags, drift, altitude."""
 
 from datetime import datetime, timedelta
 

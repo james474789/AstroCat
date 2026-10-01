@@ -196,7 +196,7 @@ async def trigger_data_migrations(payload: dict = None):
     return {"message": "Data migrations started", "task_id": task.id}
 
 
-# Star quality metrics (Q1, docs/design/Q1-star-quality.md §5.5, §7.8)
+# Star quality metrics (Q1, docs/design/20260927-Q1-star-quality.md §5.5, §7.8)
 REMEASURE_SCOPES = ("failed", "no_stars", "all")
 
 

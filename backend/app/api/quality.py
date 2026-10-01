@@ -1,5 +1,5 @@
 """
-Star quality over time (Q1c, docs/design/Q1-star-quality.md §7.4).
+Star quality over time (Q1c, docs/design/20260927-Q1-star-quality.md §7.4).
 
 GET /api/quality/nights    observing nights with Light subs (for the picker)
 GET /api/quality/timeline  one night's subs with FWHM/HFR, altitude, events, flags

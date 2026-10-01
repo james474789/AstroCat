@@ -1,5 +1,5 @@
 """
-Star quality presentation helpers (Q1, docs/design/Q1-star-quality.md §5.1, §7.1).
+Star quality presentation helpers (Q1, docs/design/20260927-Q1-star-quality.md §5.1, §7.1).
 
 Sizes are stored in native pixels; arcsec is derived here from the image's
 plate scale, falling back to its rig's measured scale. Pure functions: the

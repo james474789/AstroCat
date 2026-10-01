@@ -23,7 +23,9 @@ from app.models.catalog import MessierCatalog, NGCCatalog, CaldwellCatalog, Name
 from app.models.target import TargetGoal
 from app.models.equipment import Rig as RigModel
 from app.schemas.target import TargetGoalInput
-from app.services.targets import normalize_designation
+from app.models.matches import ImageCatalogMatch
+from app.services.targets import normalize_designation, linked_target_keys, get_alias_index_async
+from app.utils.field_geometry import effective_field_radius
 from app.utils.filter_names import normalize_filter, filter_sort_key
 from app.utils.observing_night import NIGHT_JOIN_SQL, NIGHT_SQL
 from app.utils.path_security import validate_path_safety
@@ -308,6 +310,67 @@ def _fold_quality_parts(parts: Optional[List[dict]]) -> Optional[dict]:
     return out
 
 
+async def _compute_master_links(db: AsyncSession, path: Optional[str] = None) -> Dict[str, List[dict]]:
+    """
+    {target_key -> [master summary, ...]} linking each master to every target
+    that is a central object in it (T1): the canonical keys of its central
+    catalog matches plus its own primary target_key. Masters are few, so this
+    is computed on demand rather than stored. Each list is ordered best cover
+    first (highest rating, then most recent).
+    """
+    stmt = select(
+        Image.id, Image.target_key, Image.field_radius_degrees, Image.width_pixels,
+        Image.height_pixels, Image.pixel_scale_arcsec, Image.thumbnail_path,
+        Image.rating, Image.capture_date,
+    ).where(
+        Image.frame_type == FrameType.LIGHT,
+        Image.subtype == ImageSubtype.INTEGRATION_MASTER,
+    )
+    path_clause = _path_clause(path)
+    if path_clause is not None:
+        stmt = stmt.where(path_clause)
+    masters = (await db.execute(stmt)).all()
+    if not masters:
+        return {}
+
+    match_rows = (await db.execute(
+        select(
+            ImageCatalogMatch.image_id, ImageCatalogMatch.catalog_type,
+            ImageCatalogMatch.catalog_designation,
+            ImageCatalogMatch.angular_separation_degrees, ImageCatalogMatch.is_in_field,
+        ).where(ImageCatalogMatch.image_id.in_([m.id for m in masters]))
+    )).all()
+    matches_by_image: Dict[int, list] = {}
+    for r in match_rows:
+        # Magnitude only breaks ties between candidates; linking keeps all of them.
+        matches_by_image.setdefault(r.image_id, []).append(
+            (r.catalog_type, r.catalog_designation, r.angular_separation_degrees, bool(r.is_in_field), None)
+        )
+
+    alias_index = await get_alias_index_async(db)
+    links: Dict[str, List[dict]] = {}
+    for m in masters:
+        radius = effective_field_radius(
+            m.field_radius_degrees, m.width_pixels, m.height_pixels, m.pixel_scale_arcsec)
+        keys = linked_target_keys(
+            matches=matches_by_image.get(m.id, []),
+            field_radius=radius,
+            alias_index=alias_index,
+            primary_key=m.target_key,
+        )
+        for key in keys:
+            links.setdefault(key, []).append({
+                "id": m.id, "thumbnail_path": m.thumbnail_path,
+                "rating": m.rating, "capture_date": m.capture_date,
+                "primary": key == m.target_key,
+            })
+    for items in links.values():
+        items.sort(key=lambda x: (x["rating"] if x["rating"] is not None else -1,
+                                  x["capture_date"].timestamp() if x["capture_date"] else 0.0),
+                   reverse=True)
+    return links
+
+
 async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) -> List[dict]:
     """
     Build the full folded targets list (§3.5): one row per (target_key, raw
@@ -338,19 +401,35 @@ async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) ->
         stmt = stmt.where(path_clause)
     rows = (await db.execute(stmt)).all()
 
-    if not rows:
-        return []
+    # T1: masters link to every central target in their field, so a target can
+    # have masters (or consist only of masters) without being any master's
+    # primary target_key.
+    master_links = await _compute_master_links(db, path)
 
-    targets: Dict[str, dict] = {}
-    for row in rows:
-        key = row.target_key
-        t = targets.setdefault(key, {
+    def _new_target() -> dict:
+        return {
             "total_seconds": 0.0,
             "total_subs": 0,
             "first_capture": None,
             "last_capture": None,
             "_filter_raw": {},
-        })
+        }
+
+    # Incidental links never create a target: a master-only target needs a
+    # master whose own primary target_key it is (otherwise a wide-field master
+    # would spawn a row for every galaxy in the frame).
+    sub_keys = {row.target_key for row in rows}
+    master_links = {
+        key: linked for key, linked in master_links.items()
+        if key in sub_keys or any(m["primary"] for m in linked)
+    }
+    if not rows and not master_links:
+        return []
+
+    targets: Dict[str, dict] = {key: _new_target() for key in master_links}
+    for row in rows:
+        key = row.target_key
+        t = targets.setdefault(key, _new_target())
         norm = normalize_filter(row.filter_name)
         bucket = t["_filter_raw"].setdefault(norm, {"raw_names": set(), "subs": 0, "seconds": 0.0})
         bucket["raw_names"].add(row.filter_name or "")
@@ -395,20 +474,9 @@ async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) ->
         targets[r.target_key]["cameras"] = sorted([c for c in (r.cameras or []) if c])
         targets[r.target_key]["telescopes"] = sorted([tt for tt in (r.telescopes or []) if tt])
 
-    # Masters (subtype = INTEGRATION_MASTER, frame_type = LIGHT)
-    masters_stmt = (
-        select(Image.target_key, func.count(Image.id).label("cnt"))
-        .where(
-            Image.target_key.in_(keys),
-            Image.frame_type == FrameType.LIGHT,
-            Image.subtype == ImageSubtype.INTEGRATION_MASTER,
-        )
-        .group_by(Image.target_key)
-    )
-    if path_clause is not None:
-        masters_stmt = masters_stmt.where(path_clause)
-    for r in (await db.execute(masters_stmt)).all():
-        targets[r.target_key]["master_count"] = r.cnt
+    # Masters (T1: linked by central catalog matches, see _compute_master_links)
+    for key, linked in master_links.items():
+        targets[key]["master_count"] = len(linked)
 
     # Planetary count (excluded from integration sums, shown separately per §7 decisions)
     planetary_stmt = (
@@ -440,6 +508,14 @@ async def _compute_targets_list(db: AsyncSession, path: Optional[str] = None) ->
     """)
     for r in (await db.execute(cover_stmt, {"keys": keys, **_path_like_params(path)})).all():
         targets[r.target_key]["cover_image_id"] = r.id
+    # A target whose only masters are linked (none is its own primary) would
+    # otherwise show a sub as its cover; use its best linked master instead.
+    for key, linked in master_links.items():
+        if any(m["primary"] for m in linked):
+            continue
+        best = next((m for m in linked if m["thumbnail_path"]), None)
+        if best is not None:
+            targets[key]["cover_image_id"] = best["id"]
 
     # Star quality (Q1b): exact medians per target, and per raw filter name
     # (folded into normalized filter buckets below). AstroCat-measured subs only.
@@ -695,7 +771,7 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
     items = await get_cached_targets_list(db)
     summary = next((t for t in items if t["target_key"] == target_key), None)
     if summary is None:
-        raise HTTPException(status_code=404, detail="Target not found or has no integration yet")
+        raise HTTPException(status_code=404, detail="Target not found or has no data yet")
 
     light_clause = _light_subs_clause()
 
@@ -795,11 +871,12 @@ async def get_target_detail(target_key: str, db: AsyncSession = Depends(get_db))
         for night, filters in sorted(nights_map.items(), key=lambda kv: str(kv[0]))
     ]
 
-    # masters
+    # masters (T1: every master with this target as a central object)
+    linked_masters = (await _compute_master_links(db)).get(target_key, [])
     masters_stmt = (
         select(Image)
         .where(
-            Image.target_key == target_key,
+            Image.id.in_([m["id"] for m in linked_masters]),
             Image.frame_type == FrameType.LIGHT,
             Image.subtype == ImageSubtype.INTEGRATION_MASTER,
         )

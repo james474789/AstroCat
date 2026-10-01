@@ -11,7 +11,7 @@ import QualityUnitsToggle from './QualityUnitsToggle';
 import SessionQualityChart from './SessionQualityChart';
 import './Quality.css';
 
-// Q1 "Star Quality" section for Image Detail (docs/design/Q1-star-quality.md §8.3).
+// Q1 "Star Quality" section for Image Detail (docs/design/20260927-Q1-star-quality.md §8.3).
 
 const HINT_LABELS = {
     HFR: 'HFR', FWHM: 'FWHM', STARS: 'Stars', GUIDE_RMS: 'Guide RMS', ECCENTRICITY: 'Eccentricity',

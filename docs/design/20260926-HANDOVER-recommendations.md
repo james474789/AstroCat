@@ -24,13 +24,13 @@ Backups in `library/backups/`: `pre_p0_20260926.dump`, `pre_r0_20260926.dump`,
 ## 0. Read in this order
 
 1. **This file**: current state, what changed from the plans, and the traps.
-2. [target-recommendations-research.md](target-recommendations-research.md): why the feature exists,
+2. [20260926-target-recommendations-research.md](20260926-target-recommendations-research.md): why the feature exists,
    competitor survey, engine design (§4), phasing (§7), the Equipment page rationale (§8a),
    Telescopius API findings (§8b), prototype lessons (§9).
 3. `P0-R0-equipment-sites.md`: **the spec for the next step (R0 = §4)**.
    §3 (P0) is done; see §2 below for where the shipped code differs from it.
 4. [README.md](README.md) §3–§5 (defensive migrations, merge hotspots, conventions), and
-   [HANDOVER.md](HANDOVER.md) (the F1/F2 handover: deploy notes, Windows quirks, agent pattern).
+   [20260925-HANDOVER.md](20260925-HANDOVER.md) (the F1/F2 handover: deploy notes, Windows quirks, agent pattern).
    Both still apply.
 5. `CLAUDE.md`: "Shipping a One-off Data Repair" (data migration registry) and "Deploying Changes".
 

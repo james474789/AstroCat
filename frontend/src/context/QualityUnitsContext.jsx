@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { fetchSettings } from '../api/client';
 
-// Q1 (docs/design/Q1-star-quality.md §12.3): FWHM/HFR display units, arcsec or px.
+// Q1 (docs/design/20260927-Q1-star-quality.md §12.3): FWHM/HFR display units, arcsec or px.
 // Each viewer's choice lives in localStorage; until they pick one, the admin
 // default from Settings (quality_units) applies, else arcsec.
 

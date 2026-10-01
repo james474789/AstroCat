@@ -1,5 +1,5 @@
 """
-Curated wide-field candidates (R1b, docs/design/R1b-rig-aware-picking.md §3).
+Curated wide-field candidates (R1b, docs/design/20260930-R1b-rig-aware-picking.md §3).
 
 Messier, NGC, Caldwell and Sharpless objects are mostly under a degree, so a
 wide rig (a 105 mm lens on a DSLR, 20 x 14 deg) has almost nothing to frame.
