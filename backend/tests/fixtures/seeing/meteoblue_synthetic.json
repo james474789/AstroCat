@@ -1,0 +1,17 @@
+{
+  "metadata": {"note": "SYNTHETIC. Shape follows the design's ASSUMED meteoblue keys (S1 §3.2), not a recorded response."},
+  "units": {"time": "YYYY-MM-DD hh:mm"},
+  "data_1h": {
+    "time": ["2030-01-01 00:00", "2030-01-01 01:00", "2030-01-01 02:00", "2030-01-01 03:00"],
+    "seeing_arcsec": [1.6, 1.4, 1.2, 1.9],
+    "seeing1": [4, 5, 4, 2],
+    "seeing2": [3, 4, 3, 2],
+    "jetstream": [18.0, 16.5, 22.0, 41.0],
+    "badlayer_bottom": [2.1, 2.3, null, 3.0],
+    "badlayer_top": [3.5, 3.6, null, 4.2],
+    "badlayer_gradient": [1.0, 0.9, null, 1.4],
+    "lowclouds": [0, 0, 5, 40],
+    "midclouds": [0, 0, 0, 10],
+    "highclouds": [0, 0, 10, 60]
+  }
+}

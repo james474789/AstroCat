@@ -260,6 +260,8 @@ app.include_router(equipment.router, prefix="/api/equipment", tags=["Equipment"]
 app.include_router(equipment.sites_router, prefix="/api/sites", tags=["Sites"], dependencies=[Depends(get_current_user)])
 from app.api import recommendations  # noqa: E402  (R1)
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["Recommendations"], dependencies=[Depends(get_current_user)])
+from app.api import seeing as seeing_api  # noqa: E402  (S1)
+app.include_router(seeing_api.router, prefix="/api/seeing", tags=["Seeing"], dependencies=[Depends(get_current_user)])
 from app.api import quality  # noqa: E402  (Q1c)
 app.include_router(quality.router, prefix="/api/quality", tags=["Quality"], dependencies=[Depends(get_current_user)])
 
