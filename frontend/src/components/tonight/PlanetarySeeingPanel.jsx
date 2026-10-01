@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, ReferenceArea } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, ReferenceArea, Tooltip } from 'recharts';
 import { ChevronDown, Orbit, Check, X, Minus, AlertTriangle } from 'lucide-react';
 import { getSeeingForecast } from '../../api/client';
 import './PlanetarySeeingPanel.css';
@@ -151,7 +151,19 @@ function Header({ data, collapsed, onToggle }) {
     );
 }
 
-function BodySparkline({ body }) {
+function SparkTooltip({ active, payload, tz }) {
+    const p = active && payload?.length ? payload[0].payload : null;
+    if (!p) return null;
+    return (
+        <div className="seeing-spark-tooltip">
+            <strong>{fmtTime(p.t, tz)}</strong>
+            <span>Altitude {p.alt == null ? '—' : `${Math.round(p.alt)}°`}</span>
+            <span>Score {p.score == null ? '—' : p.score.toFixed(2)}</span>
+        </div>
+    );
+}
+
+function BodySparkline({ body, tz }) {
     const track = body.track || [];
     if (track.length === 0) return <div className="seeing-spark-empty" />;
     const data = track.map((p) => ({ t: p.t, alt: p.alt, score: p.score }));
@@ -160,6 +172,13 @@ function BodySparkline({ body }) {
         <ResponsiveContainer width="100%" height={52}>
             <LineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
                 {w && <ReferenceArea yAxisId="alt" x1={w.start_utc} x2={w.end_utc} fill="var(--color-primary)" fillOpacity={0.12} strokeOpacity={0} />}
+                <Tooltip
+                    content={<SparkTooltip tz={tz} />}
+                    cursor={{ stroke: 'var(--color-text-muted)', strokeDasharray: '3 3' }}
+                    isAnimationActive={false}
+                    allowEscapeViewBox={{ x: false, y: true }}
+                    wrapperStyle={{ zIndex: 10 }}
+                />
                 <XAxis dataKey="t" hide />
                 <YAxis yAxisId="alt" domain={[0, 90]} hide />
                 <YAxis yAxisId="score" domain={[0, 1]} hide orientation="right" />
@@ -205,7 +224,7 @@ function PlanetRows({ bodies, tz }) {
                                 </>
                             ) : null}
                         </div>
-                        <div className="seeing-planet-spark"><BodySparkline body={b} /></div>
+                        <div className="seeing-planet-spark"><BodySparkline body={b} tz={tz} /></div>
                         <div className="seeing-chips">
                             {b.cloud_blocked && <span className="seeing-chip warn">Cloud</span>}
                             {(b.warnings || []).map((k) => (
