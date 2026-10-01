@@ -15,6 +15,7 @@ before starting any of the four.
 | R1b | Rig-aware target picking: per-rig size window, wide-field candidates, "nothing good" rigs | [R1b-rig-aware-picking.md](R1b-rig-aware-picking.md) | R1 (shipped) | yes |
 | E1 | Compact Equipment rig list (rows + expand, search/filter) | [E1-equipment-rig-list.md](E1-equipment-rig-list.md) | none | no |
 | Q2 | Per-rig median FWHM/HFR chart on the FITS page | [Q2-per-rig-star-size.md](Q2-per-rig-star-size.md) | Q1 | no |
+| S1 | Planetary seeing forecast on Tonight (Open-Meteo models + optional meteoblue, per-planet windows) | [S1-planetary-seeing-forecast.md](S1-planetary-seeing-forecast.md) | none | yes |
 
 ## 1. Recommended execution plan
 
