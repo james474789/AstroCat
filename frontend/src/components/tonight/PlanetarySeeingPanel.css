@@ -140,6 +140,18 @@
     min-width: 0;
 }
 
+.seeing-spark-tooltip {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-light);
+    color: var(--color-text-primary);
+}
+
 .seeing-spark-empty {
     height: 52px;
 }
