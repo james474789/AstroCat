@@ -64,7 +64,7 @@ services:
       - ${THUMBNAIL_CACHE_PATH_HOST}:/data/thumbnails
       - ${FULLRES_CACHE_PATH_HOST:-./library/fullres}:/data/fullres
     healthcheck:
-      test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8089/api/health\")'" ]
+      test: [ "CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8089/api/health\", timeout=8)'" ]
       interval: 10s
       timeout: 10s
       retries: 10
