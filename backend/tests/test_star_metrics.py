@@ -218,3 +218,23 @@ class TestLoading:
     def test_unsupported_format_is_skipped(self):
         with pytest.raises(SkipMeasurement):
             load_luminance("x.bmp", "BMP", None)
+
+
+def test_measure_skips_oversized_non_raw_before_loading(monkeypatch):
+    from app.services import star_metrics as sm
+
+    def boom(*a, **k):
+        raise AssertionError("must not load an oversized file")
+
+    monkeypatch.setattr(sm, "load_luminance", boom)
+    result = sm.measure("/x/mosaic.xisf", "XISF", None, pixels=sm.MAX_LOAD_PIXELS + 1)
+    assert result.status == "SKIPPED"
+    assert result.details["reason"] == "TOO_LARGE"
+
+
+def test_measure_oversized_raw_is_not_skipped(monkeypatch):
+    from app.services import star_metrics as sm
+
+    monkeypatch.setattr(sm, "load_luminance", lambda *a, **k: (_ for _ in ()).throw(sm.SkipMeasurement("LOADED")))
+    result = sm.measure("/x/a.CR2", "CR2", None, pixels=sm.MAX_LOAD_PIXELS + 1)
+    assert result.details["reason"] == "LOADED"

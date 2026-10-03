@@ -153,6 +153,7 @@ def _measure_impl(image_id: int, force: bool = False) -> Dict[str, Any]:
             return {"status": "not_needed", "image_id": image_id}
         path, file_format = image.file_path, image.file_format
         raw_header, file_name = image.raw_header, image.file_name
+        pixels = (image.width_pixels or 0) * (image.height_pixels or 0)
 
     # Measure outside any DB session: this is the slow part (file read + fit).
     hints = extract_hints(raw_header, file_name)
@@ -161,7 +162,7 @@ def _measure_impl(image_id: int, force: bool = False) -> Dict[str, Any]:
         result = _failed("File not found")
     else:
         try:
-            result = measure(path, fmt, raw_header)
+            result = measure(path, fmt, raw_header, pixels=pixels)
         except Exception as e:
             if _is_transient_error(e):
                 raise  # Celery retries with backoff

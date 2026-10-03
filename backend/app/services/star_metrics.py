@@ -38,6 +38,9 @@ FIT_MIN_SNR = 30.0
 MOFFAT_BETA = 4.0           # PixInsight SubframeSelector's default family
 SATURATION_FRACTION = 0.9   # pixels above this x saturation count as saturated
 MAX_MEASURE_PIXELS = 80_000_000  # larger frames are centre-cropped to this area
+# Non-RAW files above this are skipped *before* loading: FITS/XISF/TIFF readers materialise the whole
+# (often 3-plane float32) cube, so a 117 MP mosaic peaks at >2.5 GB and OOM-kills the container.
+MAX_LOAD_PIXELS = 50_000_000
 DETECT_BIN = 2              # detection binning for large frames
 DETECT_BIN_ABOVE_PIXELS = 8_000_000
 SHARP_OUTLIER_FRACTION = 0.5   # HFR below this x the median -> not a star
@@ -492,8 +495,14 @@ def measure_array(data: np.ndarray, cfa_factor: int = 1,
     )
 
 
-def measure(path: str, file_format: str, raw_header: Optional[dict] = None) -> StarMetrics:
-    """Load and measure one file. SkipMeasurement becomes a SKIPPED result; other errors propagate."""
+def measure(path: str, file_format: str, raw_header: Optional[dict] = None,
+            pixels: Optional[int] = None) -> StarMetrics:
+    """Load and measure one file. SkipMeasurement becomes a SKIPPED result; other errors propagate.
+
+    `pixels` (width x height from the index) lets oversized files be skipped before any load."""
+    if pixels and pixels > MAX_LOAD_PIXELS and (file_format or "").upper() not in RAW_FORMATS:
+        return StarMetrics(status="SKIPPED", details={"reason": "TOO_LARGE", "pixels": int(pixels),
+                                                      "algo_version": ALGO_VERSION})
     try:
         data, cfa_factor, saturation = load_luminance(path, file_format, raw_header)
     except SkipMeasurement as e:
