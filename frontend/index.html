@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Home-screen app: an explicit scope keeps every in-app route inside the app,
+         instead of iOS treating navigation away from the saved page as leaving it -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="AstroCat" />
+    <meta name="theme-color" content="#0a0e17" />
     <meta name="description" content="AstroCat - Astronomical Image Database for cataloging, indexing, and retrieving astronomical image files" />
     <title>%VITE_LOGO_TITLE% - Astronomical Image Database</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
