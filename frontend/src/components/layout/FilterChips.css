@@ -89,6 +89,15 @@
     transform: scale(0.95);
 }
 
+/* Touch: the 16px remove target is too small to hit with a thumb */
+@media (pointer: coarse) {
+    .filter-chip-remove {
+        width: 24px;
+        height: 24px;
+        font-size: 0.8em;
+    }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .filter-chips-container {

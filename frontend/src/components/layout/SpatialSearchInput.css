@@ -106,8 +106,13 @@
     }
 
     .spatial-coords {
-        grid-template-columns: 1fr;
-        gap: var(--spacing-md);
+        grid-template-columns: 1fr 1fr;
+        gap: var(--spacing-sm);
+    }
+
+    .spatial-field,
+    .spatial-input {
+        min-width: 0;
     }
 
     .spatial-radius-input {

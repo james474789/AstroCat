@@ -255,18 +255,29 @@
         width: 100% !important;
         height: 100dvh;
         border-radius: 0;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        padding-top: calc(var(--spacing-lg) + var(--safe-top));
-        padding-bottom: calc(var(--spacing-xl) + var(--safe-bottom));
+        border: none;
+        /* header + Apply stay pinned; only .filters-body scrolls */
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0;
     }
 
     .filters-header {
-        position: sticky;
-        top: calc(-1 * var(--spacing-lg) - var(--safe-top));
-        z-index: 2;
+        flex: none;
+        margin: 0;
+        padding: calc(var(--spacing-sm) + var(--safe-top)) var(--spacing-md) var(--spacing-sm);
         background: var(--color-surface);
         gap: var(--spacing-sm);
+    }
+
+    .filters-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        padding: var(--spacing-md);
     }
 
     .filters-done {
@@ -371,18 +382,11 @@
         width: auto !important;
     }
 
-    /* Filter sheet: compact, and Apply always reachable */
-    .filters-sidebar {
-        padding-left: var(--spacing-md);
-        padding-right: var(--spacing-md);
-    }
-
+    /* Apply is pinned under the scrolling body, clear of the home indicator */
     .btn-apply-filters {
-        position: sticky;
-        bottom: 0;
-        z-index: 3;
-        margin-top: var(--spacing-md);
-        box-shadow: 0 -8px 16px var(--color-surface);
+        flex: none;
+        width: auto;
+        margin: var(--spacing-sm) var(--spacing-md) calc(var(--spacing-sm) + var(--safe-bottom));
     }
 
     .filter-range,
@@ -394,6 +398,44 @@
     .date-range-inputs .input {
         min-width: 0;
         width: 100%;
+    }
+
+    /* iOS date inputs ignore width and overflow their grid cell unless reset */
+    .date-range-inputs > div {
+        min-width: 0;
+    }
+
+    .date-range-inputs input[type="date"] {
+        -webkit-appearance: none;
+        appearance: none;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    /* Active filter chips: one swipeable row instead of a tall block */
+    .filters-body .filter-chips-container {
+        padding: var(--spacing-xs) var(--spacing-sm);
+    }
+
+    .filters-body .filter-chips-label {
+        display: none;
+    }
+
+    .filters-body .filter-chips {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        padding: 2px 0;
+    }
+
+    .filters-body .filter-chips::-webkit-scrollbar {
+        display: none;
+    }
+
+    .filters-body .filter-chip {
+        flex: 0 0 auto;
+        white-space: nowrap;
     }
 }
 

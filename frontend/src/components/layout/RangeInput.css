@@ -55,18 +55,13 @@
 
 /* Responsive */
 @media (max-width: 768px) {
-    .range-input-container {
-        flex-direction: column;
-        gap: var(--spacing-xs);
+    /* Min / max stay side by side: stacking them doubled the sheet's height */
+    .range-input-field {
+        min-width: 0;
     }
 
-    .range-separator {
-        transform: rotate(90deg);
-        margin: 0;
-        height: 12px;
-    }
-
-    .range-unit {
-        margin-bottom: 0;
+    .range-input-field .input {
+        min-width: 0;
+        width: 100%;
     }
 }

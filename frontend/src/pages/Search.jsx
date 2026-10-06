@@ -12,6 +12,7 @@ import RangeInput from '../components/layout/RangeInput';
 import SpatialSearchInput from '../components/layout/SpatialSearchInput';
 import FolderTree from '../components/layout/FolderTree';
 import { useQualityUnits } from '../context/QualityUnitsContext';
+import { useIsMobile } from '../hooks/useMediaQuery';
 import './Search.css';
 
 // Q1d: star quality filters (units for fwhm/hfr bounds travel in quality_units).
@@ -128,6 +129,15 @@ export default function Search() {
 
     // Phones/tablets: filters live in a full-screen sheet, closed by default
     const [showFilters, setShowFilters] = useState(() => !window.matchMedia('(max-width: 1024px)').matches);
+
+    // The full-screen filter sheet must not let the page behind it scroll
+    const isMobile = useIsMobile();
+    useEffect(() => {
+        if (!(isMobile && showFilters)) return undefined;
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => { document.body.style.overflow = prev; };
+    }, [isMobile, showFilters]);
 
     useEffect(() => {
         loadImages();
@@ -579,6 +589,8 @@ export default function Search() {
                             </button>
                         </div>
 
+                        {/* Scrolls on phones while the header and Apply button stay pinned */}
+                        <div className="filters-body">
                         {/* Active Filters Display */}
                         <FilterChips
                             filters={filters}
@@ -925,6 +937,7 @@ export default function Search() {
                                 </div>
                             </div>
                         </FilterSection>
+                        </div>
 
                         <button type="submit" className="btn btn-primary btn-lg btn-apply-filters">
                             ✓ Apply Filters
