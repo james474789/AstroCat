@@ -1,10 +1,14 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchImage, updateImage, rescanImage, fetchAnnotation, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
+import { fetchImage, updateImage, rescanImage, solveFieldOverlaps, fetchAnnotation, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
 import useImageNav from '../hooks/useImageNav';
-import { Maximize2 } from 'lucide-react';
+import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays';
+import { hitTest, containedRect } from '../utils/fieldOverlay';
+import FieldOverlayLayer from '../components/fieldOverlay/FieldOverlayLayer';
+import FieldOverlayPopover from '../components/fieldOverlay/FieldOverlayPopover';
+import { Maximize2, Layers, Crosshair } from 'lucide-react';
 import StarQualityCard from '../components/quality/StarQualityCard';
 import './ImageDetail.css';
 
@@ -36,6 +40,8 @@ export default function ImageDetail() {
         setAnnotatedImageError(false);
         setView({ s: 1, x: 0, y: 0 });
         setCursorPos(null);
+        setHoveredOverlayId(null);
+        setOverlayPopover(null);
     }, [id]);
 
     // Annotations Toggle: 0=None, 1=Nova (Image Overlay), 2=PixInsight (Full Image)
@@ -61,6 +67,48 @@ export default function ImageDetail() {
         staleTime: 60 * 1000,
     });
     const rigs = rigsQuery.data?.rigs || [];
+
+    // Images-in-field overlay: other images' footprints, hit-tested in native image pixels
+    const overlays = useFieldOverlays(image);
+    const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
+    const [hoveredOverlayId, setHoveredOverlayId] = useState(null);
+    const [overlayPopover, setOverlayPopover] = useState(null);
+    const mouseDownRef = useRef(null);
+    const [boxSize, setBoxSize] = useState(null);
+    useEffect(() => {
+        const el = previewRef.current;
+        if (!el) return undefined;
+        const ro = new ResizeObserver(([entry]) => {
+            const { width, height } = entry.contentRect;
+            setBoxSize({ w: width, h: height });
+        });
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [loading, imgError]);
+    const imgRect = image && boxSize ? containedRect(boxSize.w, boxSize.h, image.width_pixels, image.height_pixels) : null;
+    const overlayToScreen = (px, py) => ({
+        x: imgRect.x + (px / image.width_pixels) * imgRect.w,
+        y: imgRect.y + (py / image.height_pixels) * imgRect.h,
+    });
+    const closeOverlayPopover = useCallback(() => setOverlayPopover(null), []);
+
+    // Client point -> native image pixels, accounting for the letterboxed (object-fit: contain) image
+    const overlayHit = (clientX, clientY) => {
+        if (!overlays.groups.length || !imageRef.current || !imgRect) return null;
+        const rect = imageRef.current.getBoundingClientRect();
+        const s = viewRef.current.s;
+        const lx = (clientX - rect.left) / s;
+        const ly = (clientY - rect.top) / s;
+        const px = ((lx - imgRect.x) / imgRect.w) * image.width_pixels;
+        const py = ((ly - imgRect.y) / imgRect.h) * image.height_pixels;
+        if (px < 0 || py < 0 || px > image.width_pixels || py > image.height_pixels) return null;
+        return hitTest(overlays.groups, px, py);
+    };
+
+    const openOverlay = (group, clientX, clientY) => {
+        if (group.count > 1) setOverlayPopover({ group, x: clientX, y: clientY });
+        else navigate(`/images/${group.id}`);
+    };
 
     async function loadImage() {
         try {
@@ -164,6 +212,22 @@ export default function ImageDetail() {
         }
     }
 
+    async function handleSolveOverlays() {
+        const n = overlays.unsolvedCount;
+        const capped = overlays.truncated ? ' (the list is capped; some may be left out)' : '';
+        if (!window.confirm(`Submit ${n} unsolved image${n === 1 ? '' : 's'} in view (${OVERLAY_MODE_LABELS[overlays.mode]}) for astrometry?${capped}`)) return;
+        try {
+            setSaving(true);
+            const res = await solveFieldOverlaps(id, overlays.mode);
+            alert(`Queued ${res.queued} for astrometry` + (res.skipped ? `, skipped ${res.skipped} (already submitted or solved)` : ''));
+            setTimeout(() => overlays.refetch(), 5000);
+        } catch (e) {
+            alert('Error submitting for astrometry: ' + e.message);
+        } finally {
+            setSaving(false);
+        }
+    }
+
     async function handleFetchAnnotation() {
         try {
             setSaving(true);
@@ -248,12 +312,15 @@ export default function ImageDetail() {
             } else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 e.preventDefault();
                 navigate(`/images/${id}/view`);
+            } else if (e.key.toLowerCase() === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && !overlaysUnavailable) {
+                e.preventDefault();
+                cycleOverlays();
             }
         };
 
         window.addEventListener('keydown', handleKeyPress);
         return () => window.removeEventListener('keydown', handleKeyPress);
-    }, [image, id, navInfo, navigate, goPrev, goNext, returnToSearch]);
+    }, [image, id, navInfo, navigate, goPrev, goNext, returnToSearch, overlaysUnavailable, cycleOverlays]);
 
     // Generate placeholder background
     const getPlaceholderStyle = () => {
@@ -293,6 +360,11 @@ export default function ImageDetail() {
             image.raw_header?.astrometry_parity || 1
         );
 
+        if (e.pointerType === 'mouse') {
+            const hit = overlayHit(e.clientX, e.clientY);
+            setHoveredOverlayId(hit ? hit.id : null);
+        }
+
         setCursorPos({
             x, // Screen/Div relative for crosshair lines
             y,
@@ -305,6 +377,7 @@ export default function ImageDetail() {
 
     const handleMouseLeave = () => {
         setCursorPos(null);
+        setHoveredOverlayId(null);
     };
 
     // ---- Pointer handling: mouse hover = crosshair; touch = tap to read, pinch/pan to zoom ----
@@ -330,7 +403,10 @@ export default function ImageDetail() {
     };
 
     const handlePointerDown = (e) => {
-        if (e.pointerType === 'mouse') return;
+        if (e.pointerType === 'mouse') {
+            mouseDownRef.current = { x: e.clientX, y: e.clientY };
+            return;
+        }
         e.currentTarget.setPointerCapture?.(e.pointerId);
         pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
         const pts = [...pointersRef.current.values()];
@@ -372,7 +448,16 @@ export default function ImageDetail() {
     };
 
     const handlePointerUp = (e) => {
-        if (e.pointerType === 'mouse') return;
+        if (e.pointerType === 'mouse') {
+            // A click (not a drag) on a footprint opens it
+            const down = mouseDownRef.current;
+            mouseDownRef.current = null;
+            if (e.type === 'pointerup' && e.button === 0 && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) {
+                const hit = overlayHit(e.clientX, e.clientY);
+                if (hit) openOverlay(hit, e.clientX, e.clientY);
+            }
+            return;
+        }
         const g = gestureRef.current;
         pointersRef.current.delete(e.pointerId);
         if (!g) return;
@@ -388,7 +473,9 @@ export default function ImageDetail() {
                     lastTapRef.current = 0;
                 } else {
                     lastTapRef.current = now;
-                    handleMouseMove(e); // tap places the crosshair + RA/Dec readout
+                    const hit = overlayHit(e.clientX, e.clientY);
+                    if (hit) openOverlay(hit, e.clientX, e.clientY); // tap on a footprint opens it
+                    else handleMouseMove(e); // tap places the crosshair + RA/Dec readout
                 }
             } else if (e.type === 'pointerup' && !g.multi && g.startView.s === 1 && Math.abs(dx) > 70 && Math.abs(dy) < 50) {
                 // swipe (not zoomed) navigates prev/next
@@ -421,6 +508,14 @@ export default function ImageDetail() {
 
     return (
         <div className="image-detail">
+            {overlayPopover && (
+                <FieldOverlayPopover
+                    group={overlayPopover.group}
+                    x={overlayPopover.x}
+                    y={overlayPopover.y}
+                    onClose={closeOverlayPopover}
+                />
+            )}
             {/* Breadcrumb & Navigation */}
             <nav className="breadcrumb">
                 <div className="breadcrumb-left">
@@ -533,6 +628,19 @@ export default function ImageDetail() {
                                         />
                                     )}
 
+                                    {/* Images-in-field footprints (visual only; hit-tested by the interaction layer) */}
+                                    {overlays.groups.length > 0 && imgRect && (
+                                        <div style={{ position: 'absolute', inset: 0, zIndex: 9, pointerEvents: 'none' }}>
+                                            <FieldOverlayLayer
+                                                groups={overlays.groups}
+                                                toScreen={overlayToScreen}
+                                                clip={imgRect}
+                                                hoveredId={hoveredOverlayId}
+                                                labelScale={1 / view.s}
+                                            />
+                                        </div>
+                                    )}
+
                                     {/* Transparent interactive layer for crosshair (needs to be on top) */}
                                     <div
                                         style={{
@@ -542,7 +650,7 @@ export default function ImageDetail() {
                                             width: '100%',
                                             height: '100%',
                                             zIndex: 10,
-                                            cursor: 'crosshair',
+                                            cursor: hoveredOverlayId != null ? 'pointer' : 'crosshair',
                                             touchAction: 'none'
                                         }}
                                         ref={imageRef}
@@ -628,6 +736,31 @@ export default function ImageDetail() {
                                 {annotationMode === 1 && '🔭 Nova Annotation'}
                                 {annotationMode === 2 && '🎨 PixInsight Annotation'}
                             </button>
+
+                            <button
+                                className={`btn ${overlays.active ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={overlays.cycle}
+                                disabled={!!overlays.unavailable}
+                                title={overlays.unavailable || `Images in this field: ${OVERLAY_MODE_LABELS[overlays.mode]} — click to cycle Off / Masters / Subs / All (O)`}
+                            >
+                                <Layers size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                                In field: {overlays.unavailable ? 'Off' : OVERLAY_MODE_LABELS[overlays.mode]}
+                                {overlays.active && (
+                                    overlays.isLoading ? ' …' : ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`
+                                )}
+                            </button>
+
+                            {overlays.active && overlays.unsolvedCount > 0 && (
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={handleSolveOverlays}
+                                    disabled={saving}
+                                    title="Submit the dashed-circle footprints currently shown (no rotation yet) for astrometry"
+                                >
+                                    <Crosshair size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                                    Solve {overlays.unsolvedCount} unsolved
+                                </button>
+                            )}
 
                             <button
                                 className="btn btn-secondary"

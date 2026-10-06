@@ -2,13 +2,17 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import OpenSeadragon from 'openseadragon';
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minimize, ScanSearch, Frame, Loader2 } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minimize, ScanSearch, Frame, Loader2, Layers } from 'lucide-react';
 import {
     fetchImage, fetchFullRes, getFullResDziUrl, getFullResSourceUrl,
     API_BASE_URL, formatRA, formatDec,
 } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
 import useImageNav from '../hooks/useImageNav';
+import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays';
+import { hitTest } from '../utils/fieldOverlay';
+import FieldOverlayLayer from '../components/fieldOverlay/FieldOverlayLayer';
+import FieldOverlayPopover from '../components/fieldOverlay/FieldOverlayPopover';
 import './FullResViewer.css';
 
 const PRESET_LABELS = {
@@ -64,9 +68,19 @@ export default function FullResViewer() {
     const [cursor, setCursor] = useState(null);
     const [barVisible, setBarVisible] = useState(true);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    // Viewport -> screen mapping (OSD viewport units are image widths), refreshed as the view moves
+    const [vpMap, setVpMap] = useState(null);
+    // Hover/popover are tagged with the image they belong to, so they lapse on navigation
+    const [overlayHover, setOverlayHover] = useState(null);
+    const [overlayPopoverState, setOverlayPopover] = useState(null);
+    const hoveredOverlayId = overlayHover?.imageId === id ? overlayHover.groupId : null;
+    const overlayPopover = overlayPopoverState?.imageId === id ? overlayPopoverState : null;
+    const overlayClickRef = useRef(null);
 
     const imageQuery = useQuery({ queryKey: ['image', id], queryFn: () => fetchImage(id), staleTime: 60 * 1000 });
     const image = imageQuery.data && String(imageQuery.data.id) === String(id) ? imageQuery.data : null;
+    const overlays = useFieldOverlays(image);
+    const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
 
     const manifest = fullres?.manifest;
     const nativeSize = useCallback(() => {
@@ -111,10 +125,18 @@ export default function FullResViewer() {
                 setZoomPct((vp.getContainerSize().x * zoom) / native.w * 100);
                 const c = vp.getCenter(true);
                 lastViewRef.current = { cx: c.x, cy: c.y, zoom, ...curDimsRef.current };
+                const o = vp.pixelFromPoint(new OpenSeadragon.Point(0, 0), true);
+                const u = vp.pixelFromPoint(new OpenSeadragon.Point(1, 0), true);
+                setVpMap({ ox: o.x, oy: o.y, k: u.x - o.x });
             });
         };
         viewer.addHandler('animation', sync);
         viewer.addHandler('open', sync);
+        viewer.addHandler('resize', sync);
+        // Quick (non-drag) clicks/taps go to the images-in-field overlay first
+        viewer.addHandler('canvas-click', (e) => {
+            if (e.quick) overlayClickRef.current?.(e);
+        });
         return () => {
             cancelAnimationFrame(raf);
             viewer.destroy();
@@ -247,6 +269,41 @@ export default function FullResViewer() {
         setCursor({ x, y, px: Math.floor(fx * native.w), py: Math.floor(fy * native.h), ra: sky?.ra, dec: sky?.dec });
     }, [image]);
 
+    // ---- Images-in-field overlay -------------------------------------------------------------
+    const W = image?.width_pixels;
+    const overlayToScreen = useCallback(
+        (px, py) => ({ x: vpMap.ox + (px / W) * vpMap.k, y: vpMap.oy + (py / W) * vpMap.k }),
+        [vpMap, W],
+    );
+    const overlayClip = vpMap && image
+        ? { x: vpMap.ox, y: vpMap.oy, w: vpMap.k, h: (image.height_pixels / W) * vpMap.k }
+        : null;
+
+    // Point in the viewer element -> overlay group under it (native image pixels)
+    const overlayHitAt = useCallback((x, y) => {
+        const viewer = viewerRef.current;
+        if (!overlays.groups.length || !viewer || !viewer.world.getItemCount() || !image) return null;
+        const vp = viewer.viewport.pointFromPixel(new OpenSeadragon.Point(x, y), true);
+        const px = vp.x * image.width_pixels;
+        const py = vp.y * image.width_pixels;
+        if (px < 0 || py < 0 || px > image.width_pixels || py > image.height_pixels) return null;
+        return hitTest(overlays.groups, px, py);
+    }, [overlays.groups, image]);
+
+    useEffect(() => {
+        overlayClickRef.current = (e) => {
+            const hit = overlayHitAt(e.position.x, e.position.y);
+            if (!hit) return;
+            if (hit.count > 1) {
+                const oe = e.originalEvent;
+                setOverlayPopover({ imageId: id, group: hit, x: oe?.clientX ?? e.position.x, y: oe?.clientY ?? e.position.y });
+            } else {
+                navigate(`/images/${hit.id}`);
+            }
+        };
+    }, [overlayHitAt, navigate, id]);
+    const closeOverlayPopover = useCallback(() => setOverlayPopover(null), []);
+
     // ---- Controls -----------------------------------------------------------------------------
     const fit = useCallback(() => viewerRef.current?.viewport.goHome(), []);
     const oneToOne = useCallback(() => {
@@ -290,6 +347,7 @@ export default function FullResViewer() {
                 0: fit, 1: oneToOne,
                 arrowleft: goPrev, arrowright: goNext,
                 f: toggleFullscreen, p: cyclePreset,
+                o: () => { if (!overlaysUnavailable) cycleOverlays(); },
                 escape: () => { if (!document.fullscreenElement) back(); },
                 g: returnToSearch,
             }[k];
@@ -300,7 +358,7 @@ export default function FullResViewer() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [zoomBy, panBy, fit, oneToOne, goPrev, goNext, toggleFullscreen, cyclePreset, back, returnToSearch]);
+    }, [zoomBy, panBy, fit, oneToOne, goPrev, goNext, toggleFullscreen, cyclePreset, back, returnToSearch, overlaysUnavailable, cycleOverlays]);
 
     useEffect(() => {
         const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -326,7 +384,12 @@ export default function FullResViewer() {
     // ---- Pointer handling on the stage -----------------------------------------------------
     const onPointerMove = (e) => {
         showBar();
-        if (e.pointerType === 'mouse') updateCursor(e.clientX, e.clientY);
+        if (e.pointerType === 'mouse') {
+            updateCursor(e.clientX, e.clientY);
+            const rect = osdRef.current?.getBoundingClientRect();
+            const hit = rect ? overlayHitAt(e.clientX - rect.left, e.clientY - rect.top) : null;
+            setOverlayHover(hit ? { imageId: id, groupId: hit.id } : null);
+        }
     };
     const onPointerDown = (e) => {
         showBar();
@@ -395,6 +458,17 @@ export default function FullResViewer() {
                     {presets.length === 0 && <option value="">Stretch</option>}
                     {presets.map((p) => <option key={p} value={p}>{PRESET_LABELS[p] || p}</option>)}
                 </select>
+                <button
+                    className={`fr-btn${overlays.active ? ' active' : ''}`}
+                    onClick={overlays.cycle}
+                    disabled={!!overlays.unavailable}
+                    title={overlays.unavailable || `Images in this field: ${OVERLAY_MODE_LABELS[overlays.mode]} — click to cycle Off / Masters / Subs / All (O)`}
+                >
+                    <Layers size={16} /> In field: {overlays.unavailable ? 'Off' : OVERLAY_MODE_LABELS[overlays.mode]}
+                    {overlays.active && (
+                        overlays.isLoading ? ' …' : ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`
+                    )}
+                </button>
                 <button className="fr-btn" onClick={fit} title="Fit (0)"><Frame size={16} /> Fit</button>
                 <button className="fr-btn" onClick={oneToOne} title="100% native pixels (1)"><ScanSearch size={16} /> 1:1</button>
                 <span className="fr-zoom">{zoomPct != null ? `${zoomPct < 10 ? zoomPct.toFixed(1) : Math.round(zoomPct)}%` : ''}</span>
@@ -409,9 +483,21 @@ export default function FullResViewer() {
                 onPointerMove={onPointerMove}
                 onPointerDown={onPointerDown}
                 onPointerUp={onPointerUp}
-                onPointerLeave={(e) => e.pointerType === 'mouse' && setCursor(null)}
+                onPointerLeave={(e) => {
+                    if (e.pointerType !== 'mouse') return;
+                    setCursor(null);
+                    setOverlayHover(null);
+                }}
             >
-                <div className="fullres-osd" ref={osdRef} />
+                <div className={`fullres-osd${hoveredOverlayId != null ? ' fo-hover' : ''}`} ref={osdRef} />
+                {overlayClip && overlays.groups.length > 0 && (
+                    <FieldOverlayLayer
+                        groups={overlays.groups}
+                        toScreen={overlayToScreen}
+                        clip={overlayClip}
+                        hoveredId={hoveredOverlayId}
+                    />
+                )}
                 {cursor && (
                     <>
                         <div className="fr-crosshair horizontal" style={{ top: cursor.y }} />
@@ -438,6 +524,15 @@ export default function FullResViewer() {
             )}
             {phase.kind === 'ready' && scale > 1 && (
                 <div className="fullres-chip subtle">Rendered at 1/{scale} resolution</div>
+            )}
+
+            {overlayPopover && (
+                <FieldOverlayPopover
+                    group={overlayPopover.group}
+                    x={overlayPopover.x}
+                    y={overlayPopover.y}
+                    onClose={closeOverlayPopover}
+                />
             )}
 
             {cursor && (

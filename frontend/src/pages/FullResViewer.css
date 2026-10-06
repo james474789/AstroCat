@@ -148,3 +148,9 @@
     .fullres-bar { flex-wrap: wrap; gap: 0.4rem; }
     .fr-title { flex-basis: 100%; order: -1; }
 }
+
+/* Images-in-field overlay */
+.fullres-stage .field-overlay-layer { z-index: 5; }
+.fullres-osd.fo-hover,
+.fullres-osd.fo-hover * { cursor: pointer; }
+.fr-btn.active { background: var(--color-primary, #5b8dee); border-color: var(--color-primary, #5b8dee); color: #fff; }

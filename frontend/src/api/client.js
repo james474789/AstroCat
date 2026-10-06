@@ -148,6 +148,18 @@ export async function fetchImage(id) {
     return handleResponse(await fetch(`${API_BASE_URL}/images/${id}`, { credentials: 'include' }));
 }
 
+export async function fetchFieldOverlaps(id, mode = 'all') {
+    return handleResponse(await fetch(`${API_BASE_URL}/images/${id}/field-overlaps?mode=${mode}`, { credentials: 'include' }));
+}
+
+export async function solveFieldOverlaps(id, mode = 'all') {
+    return handleResponse(await fetch(`${API_BASE_URL}/images/${id}/field-overlaps/solve?mode=${mode}`, {
+        method: 'POST',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
 export async function updateImage(id, updates) {
     return handleResponse(await fetch(`${API_BASE_URL}/images/${id}`, {
         method: 'PUT',

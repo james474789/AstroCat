@@ -193,3 +193,42 @@ class BulkUpdateImageTypeResponse(BaseModel):
     failed_count: int
     total_count: int
     errors: List[str] = []
+
+
+class FieldOverlapMember(BaseModel):
+    id: int
+    file_name: str
+    subtype: Optional[ImageSubtype] = None
+    capture_date: Optional[datetime] = None
+    exposure_time_seconds: Optional[float] = None
+    filter_name: Optional[str] = None
+
+
+class FieldOverlapGroup(BaseModel):
+    """One footprint (or a group of near-identical footprints) inside another image's field.
+    Coordinates are in the viewed image's native pixels, top-left origin."""
+    id: int                                   # representative image
+    file_name: str
+    object_name: Optional[str] = None
+    subtype: Optional[ImageSubtype] = None
+    capture_date: Optional[datetime] = None
+    count: int
+    master_count: int = 0                     # masters in the group (listed first in members)
+    shape: str                                # "polygon" | "circle" (rotation unknown)
+    corners: Optional[List[List[float]]] = None
+    center: Optional[List[float]] = None
+    radius_px: Optional[float] = None
+    area: float
+    members: List[FieldOverlapMember] = []
+
+
+class FieldOverlapResponse(BaseModel):
+    groups: List[FieldOverlapGroup]
+    truncated: bool = False
+    reason: Optional[str] = None              # "not_solved" | "no_rotation" when groups can't be computed
+
+
+class FieldOverlapSolveResponse(BaseModel):
+    queued: int
+    skipped: int          # already submitted/processing/solved, or not solvable
+    total_unsolved: int

@@ -3,7 +3,7 @@ Images API
 Endpoints for listing, retrieving, and managing images.
 """
 
-from typing import Optional, List, Sequence, Union
+from typing import Optional, List, Sequence, Union, Literal
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -16,12 +16,14 @@ import math
 
 from app.database import get_db
 from app.models.image import Image, ImageFormat, ImageSubtype, FrameType
-from app.schemas.image import ImageDetail, ImageList, UpdateImageRequest
+from app.schemas.image import ImageDetail, ImageList, UpdateImageRequest, FieldOverlapResponse, FieldOverlapSolveResponse
 from app.schemas.image import ImageDetail, ImageList
 from app.schemas.common import PaginatedResponse
 from app.services.thumbnails import ThumbnailGenerator
 from app.utils.path_security import validate_path_safety, sanitize_filename
 from app.services.quality_filters import QualityFilters, fwhm_arcsec_expr
+from app.services.field_overlaps import compute_field_overlaps, SIZE_RATIO_MAX
+from app.utils.field_geometry import effective_field_radius
 
 import io
 from fastapi.responses import StreamingResponse
@@ -1816,6 +1818,124 @@ async def regenerate_thumbnail_endpoint(image_id: int, db: AsyncSession = Depend
     generate_thumbnail.delay(image_id, force=True)
     
     return {"status": "queued", "message": "Thumbnail regeneration task queued"}
+
+
+FIELD_OVERLAP_CANDIDATE_LIMIT = 20000
+FIELD_OVERLAP_MAX_GROUPS = 300
+# effective_field_radius in SQL: stored radius if positive, else the half-diagonal from scale and size
+_CAND_RADIUS_SQL = (
+    "COALESCE(NULLIF(GREATEST(field_radius_degrees, 0), 0), "
+    "sqrt(width_pixels::float * width_pixels + height_pixels::float * height_pixels) / 2.0 "
+    "* pixel_scale_arcsec / 3600.0)"
+)
+
+
+async def _load_field_overlap_groups(db: AsyncSession, image_id: int, mode: str):
+    """Shared by the overlay and bulk-solve endpoints so "displayed" means the same thing in both.
+    Returns (groups, truncated, reason)."""
+    image = await db.get(Image, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    if not image.is_plate_solved:
+        return [], False, "not_solved"
+    if image.rotation_degrees is None:
+        return [], False, "no_rotation"
+    radius = effective_field_radius(
+        image.field_radius_degrees, image.width_pixels, image.height_pixels, image.pixel_scale_arcsec,
+    )
+    if not radius or image.ra_center_degrees is None or image.dec_center_degrees is None:
+        return [], False, "not_solved"
+    # A smaller candidate overlapping the field has its centre within R_cur + R_cand < 2 * R_cur
+    search_meters = 2 * radius * 111320 * 1.05
+    stmt = select(
+        Image.id, Image.file_name, Image.object_name, Image.subtype, Image.capture_date,
+        Image.exposure_time_seconds, Image.filter_name,
+        Image.ra_center_degrees, Image.dec_center_degrees, Image.field_radius_degrees,
+        Image.pixel_scale_arcsec, Image.rotation_degrees, Image.width_pixels, Image.height_pixels,
+        Image.raw_header["astrometry_parity"].astext.label("parity"),
+    ).where(
+        Image.is_plate_solved.is_(True),
+        Image.id != image_id,
+        Image.subtype != ImageSubtype.INTEGRATION_DEPRECATED,
+        Image.frame_type == FrameType.LIGHT,
+        Image.ra_center_degrees.isnot(None),
+        Image.dec_center_degrees.isnot(None),
+        Image.pixel_scale_arcsec.isnot(None),
+        Image.width_pixels.isnot(None),
+        Image.height_pixels.isnot(None),
+        text(
+            "ST_DWithin(center_location, "
+            "ST_SetSRID(ST_MakePoint(:ov_ra, :ov_dec), 4326)::geography, :ov_meters)"
+        ).bindparams(ov_ra=image.ra_center_degrees, ov_dec=image.dec_center_degrees, ov_meters=search_meters),
+        # Size prefilter mirroring effective_field_radius, so same-size frames don't use up the candidate cap
+        text(f"{_CAND_RADIUS_SQL} < :ov_max_radius").bindparams(ov_max_radius=SIZE_RATIO_MAX * radius),
+        # Tight per-row bound: centre within R_cur + R_cand (the indexed 2 * R_cur test above is the coarse pass)
+        text(
+            "ST_DWithin(center_location, ST_SetSRID(ST_MakePoint(:ov_ra2, :ov_dec2), 4326)::geography, "
+            f"(:ov_radius + {_CAND_RADIUS_SQL}) * 111320 * 1.05)"
+        ).bindparams(ov_ra2=image.ra_center_degrees, ov_dec2=image.dec_center_degrees, ov_radius=radius),
+    ).limit(FIELD_OVERLAP_CANDIDATE_LIMIT)
+    if mode == "masters":
+        stmt = stmt.where(Image.subtype == ImageSubtype.INTEGRATION_MASTER)
+    elif mode == "subs":
+        stmt = stmt.where(Image.subtype != ImageSubtype.INTEGRATION_MASTER)
+
+    rows = (await db.execute(stmt)).all()
+    result = compute_field_overlaps(image, rows)
+    groups = result["groups"]
+    truncated = len(groups) > FIELD_OVERLAP_MAX_GROUPS or len(rows) >= FIELD_OVERLAP_CANDIDATE_LIMIT
+    if len(groups) > FIELD_OVERLAP_MAX_GROUPS:
+        # Keep the smallest (most specific) footprints, still drawn largest-first
+        groups = sorted(groups, key=lambda g: g["area"])[:FIELD_OVERLAP_MAX_GROUPS]
+        groups.sort(key=lambda g: -g["area"])
+    return groups, truncated, result["reason"]
+
+
+@router.get("/{image_id}/field-overlaps", response_model=FieldOverlapResponse)
+async def get_field_overlaps(
+    image_id: int,
+    mode: Literal["masters", "subs", "all"] = Query("all", description="Which images to include"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Other images whose footprints overlap this image's field and are smaller than it,
+    with near-identical framings grouped. Coordinates are in this image's native pixels.
+    """
+    groups, truncated, reason = await _load_field_overlap_groups(db, image_id, mode)
+    return FieldOverlapResponse(groups=groups, truncated=truncated, reason=reason)
+
+
+@router.post("/{image_id}/field-overlaps/solve", response_model=FieldOverlapSolveResponse, status_code=202)
+async def solve_field_overlaps(
+    image_id: int,
+    mode: Literal["masters", "subs", "all"] = Query("all", description="Same filter as the displayed overlays"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Queue astrometry for the overlay footprints currently shown that lack a full solve
+    (no rotation, drawn as circles). Uses the same queue as bulk rescan, so the
+    submission throttle, hints and monitoring all apply.
+    """
+    from app.tasks.astrometry import astrometry_task
+
+    groups, _, _ = await _load_field_overlap_groups(db, image_id, mode)
+    ids = [mid for g in groups if g["shape"] == "circle" for mid in g["member_ids"]]
+    if not ids:
+        return FieldOverlapSolveResponse(queued=0, skipped=0, total_unsolved=0)
+
+    rows = (await db.execute(select(Image).where(Image.id.in_(ids)))).scalars().all()
+    queued = 0
+    for img in rows:
+        if (
+            img.frame_type != FrameType.LIGHT
+            or img.subtype == ImageSubtype.PLANETARY
+            or img.rotation_degrees is not None
+            or img.astrometry_status in ("SUBMITTED", "PROCESSING", "SOLVED")
+        ):
+            continue
+        astrometry_task.delay(img.id)
+        queued += 1
+    return FieldOverlapSolveResponse(queued=queued, skipped=len(rows) - queued, total_unsolved=len(rows))
 
 
 @router.get("/{image_id}/annotated")

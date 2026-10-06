@@ -1,0 +1,100 @@
+.field-overlay-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+/* Colour by type: masters stand out, subs recede */
+.fo-shape.master {
+    fill: rgba(251, 191, 36, 0.08);
+    stroke: rgba(251, 191, 36, 0.95);
+}
+.fo-shape.sub {
+    fill: none;
+    stroke: rgba(34, 211, 238, 0.45);
+}
+.fo-shape.hovered {
+    fill: rgba(255, 255, 255, 0.14);
+    stroke: #fff;
+}
+
+.fo-label {
+    fill: #fff;
+    stroke: rgba(0, 0, 0, 0.8);
+    paint-order: stroke;
+    font-family: inherit;
+    font-weight: 600;
+}
+
+.field-overlay-popover {
+    position: fixed;
+    z-index: 1000;
+    width: 320px;
+    max-height: 300px;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface-elevated, #1a2435);
+    border: 1px solid var(--color-border-light, #3d4a5f);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    color: var(--color-text-primary, #f1f5f9);
+    font-size: 0.8rem;
+}
+.fo-pop-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--color-border, #2d3a4f);
+    font-weight: 600;
+}
+.fo-pop-note {
+    font-weight: 400;
+    color: var(--color-text-muted, #64748b);
+}
+.fo-pop-close {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary, #94a3b8);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+}
+.fo-pop-list {
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    overflow-y: auto;
+}
+.fo-pop-list a {
+    display: flex;
+    flex-direction: column;
+    padding: 5px 10px;
+    color: inherit;
+    text-decoration: none;
+}
+.fo-pop-list a:hover {
+    background: var(--color-surface-hover, #232d42);
+}
+.fo-pop-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.fo-pop-meta {
+    color: var(--color-text-secondary, #94a3b8);
+    font-size: 0.72rem;
+}
+.fo-pop-more {
+    padding: 6px 10px;
+    border-top: 1px solid var(--color-border, #2d3a4f);
+    color: var(--color-text-muted, #64748b);
+}
+.fo-pop-list li.master .fo-pop-name {
+    color: rgb(251, 191, 36);
+    font-weight: 600;
+}
