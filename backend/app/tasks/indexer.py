@@ -227,6 +227,34 @@ def _record_process_failure(file_path: str, error: str):
         pass
 
 
+MAX_CRASH_STARTS = 4          # starts without a clean finish before a file is parked
+_CRASH_KEY_TTL = 24 * 3600
+
+
+def _crash_loop_exceeded(file_path: str) -> bool:
+    """
+    A task whose worker is SIGKILLed (usually the OOM killer) never reaches a
+    `finally`, and task_reject_on_worker_lost re-queues it forever. Count starts
+    per file in Redis; process_image clears the counter on any normal exit, so
+    only files that keep killing their worker cross the limit.
+    """
+    try:
+        r = redis.from_url(settings.redis_url)
+        key = f"indexer:starts:{file_path}"
+        n = r.incr(key)
+        r.expire(key, _CRASH_KEY_TTL)
+        return n > MAX_CRASH_STARTS
+    except Exception:
+        return False   # Redis trouble must never block indexing
+
+
+def _clear_crash_counter(file_path: str):
+    try:
+        redis.from_url(settings.redis_url).delete(f"indexer:starts:{file_path}")
+    except Exception:
+        pass
+
+
 def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
     """
     Process a single image file - extract metadata and match catalogs (Synchronous).
@@ -550,8 +578,17 @@ def process_image(self, file_path: str, generate_thumbnail: bool = True):
       this point: they are handled inside _process_image_impl, which inserts a
       minimal record so the scanner stops re-queueing the file on every scan.
     """
+    if _crash_loop_exceeded(file_path):
+        msg = (f"Worker was killed {MAX_CRASH_STARTS} times while processing this file "
+               "(likely out of memory); skipped")
+        logger.error(f"{msg}: {file_path}")
+        _record_process_failure(file_path, msg)
+        return {"status": "skipped", "reason": "repeated_worker_crash", "file": file_path}
     try:
-        return _process_image_impl(file_path, generate_thumbnail)
+        try:
+            return _process_image_impl(file_path, generate_thumbnail)
+        finally:
+            _clear_crash_counter(file_path)
     except SoftTimeLimitExceeded:
         logger.error(f"Metadata extraction soft time limit (2 hours) exceeded for file: {file_path}")
         _record_process_failure(file_path, "Task timeout: Soft time limit (2 hours) exceeded")
