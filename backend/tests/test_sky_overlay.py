@@ -320,3 +320,104 @@ def test_catalog_row_normalisation_and_route():
                           major=50.0, minor=30.0, pa=None, ra=344.0, dec=62.6)
     assert api._sky_catalog_row(sh2)["aliases"] == ["Cave Nebula", "C9", "Sh 2-155"]
     assert any(r.path == "/{image_id}/sky-overlay" for r in api.router.routes)
+
+
+# ---- sidecar .ini WCS ------------------------------------------------------------------------
+
+ASTROMETRY_INI = """[Astrometry]
+source = {source}
+ra = 323.376653399
+dec = 39.39045610589
+pixscale = 6.938314418159394
+orientation = 89.03706094826508
+
+[WCS]
+crpix1 = 2736.5
+crpix2 = 1824.5
+crval1 = 323.376653399
+crval2 = 39.39045610589
+cd1_1 = 3.238972032315e-05
+cd1_2 = 0.001927037375973
+cd2_1 = -0.001926940868906
+cd2_2 = 3.33509186234e-05
+"""
+
+
+def _parse_ini(tmp_path, text):
+    from app.extractors.ini_parser import SidecarParser
+
+    img = tmp_path / "frame.cr2"
+    img.write_bytes(b"")
+    (tmp_path / "frame.ini").write_text(text, encoding="utf-8")
+    return SidecarParser.parse(img)
+
+
+@pytest.mark.parametrize("source,order", [("astap_local", "BOTTOM_UP"), ("", "TOP_DOWN")])
+def test_ini_wcs_section_is_kept_with_row_order(tmp_path, source, order):
+    data = _parse_ini(tmp_path, ASTROMETRY_INI.format(source=source))
+    assert data["wcs"]["CRPIX1"] == 2736.5 and data["wcs"]["CD1_2"] == pytest.approx(0.001927037375973)
+    assert data["wcs"]["CTYPE1"] == "RA---TAN"
+    assert data["wcs_row_order"] == order
+    assert data["rotation"] == pytest.approx(89.037, abs=1e-3)  # existing fields untouched
+
+
+def test_ini_without_wcs_section_has_no_wcs(tmp_path):
+    text = ASTROMETRY_INI.format(source="").split("[WCS]")[0]
+    data = _parse_ini(tmp_path, text)
+    assert data["is_plate_solved"] and "wcs" not in data
+
+
+def test_astap_flat_ini_wcs_is_bottom_up(tmp_path):
+    text = "\n".join(["PLTSOLVD=T", "CRPIX1=2736.5", "CRPIX2=1824.5", "CRVAL1=323.37", "CRVAL2=39.39",
+                      "CD1_1=3.2e-05", "CD1_2=0.001927", "CD2_1=-0.001927", "CD2_2=3.3e-05"])
+    data = _parse_ini(tmp_path, text)
+    assert data["wcs_source"] == "astap" and data["wcs_row_order"] == "BOTTOM_UP"
+
+
+def _sidecar_img(order, source="astap_local", w=5472, h=3648, **extra):
+    cards = {"CTYPE1": "RA---TAN", "CTYPE2": "DEC--TAN", "CRPIX1": 2736.5, "CRPIX2": 1824.5,
+             "CRVAL1": 323.376653399, "CRVAL2": 39.39045610589,
+             "CD1_1": 3.238972032315e-05, "CD1_2": 0.001927037375973,
+             "CD2_1": -0.001926940868906, "CD2_2": 3.33509186234e-05}
+    sidecar = {"wcs_type": "SIDECAR_INI", "wcs": cards, "wcs_source": source, "wcs_row_order": order}
+    return _img(raw_header={"SIDECAR": sidecar, **extra}, w=w, h=h, file_format="CR2")
+
+
+def test_sidecar_frame_mirrors_bottom_up_solves():
+    top = so.resolve_frame(_sidecar_img("TOP_DOWN", source=""))
+    bottom = so.resolve_frame(_sidecar_img("BOTTOM_UP"))
+    assert top.source == bottom.source == so.SOURCE_SIDECAR
+    assert so.WARN_SIDECAR in bottom.accuracy_warning
+    assert (bottom.grid_w, bottom.grid_h) == (5472, 3648)
+    rng = np.random.default_rng(3)
+    px, py = rng.uniform(0, 5472, 20), rng.uniform(0, 3648, 20)
+    ra, dec = top.unproject(px, py)
+    bx, by = bottom.project(ra, dec)
+    assert np.allclose(bx, px, atol=1e-6) and np.allclose(by, 3648 - py, atol=1e-6)
+    # Round trip through the flipped frame itself
+    ra, dec = bottom.unproject(px, py)
+    x, y = bottom.project(ra, dec)
+    assert np.max(np.hypot(x - px, y - py)) < 1e-6
+    # Reference pixel: FITS row 1824.5 from the bottom
+    x, y = bottom.project([323.376653399], [39.39045610589])
+    assert (x[0], y[0]) == pytest.approx((2736.0, 3648 - 1824.0))
+
+
+def test_sidecar_ellipse_mirrors_with_frame():
+    top = so.resolve_frame(_sidecar_img("TOP_DOWN", source=""))
+    bottom = so.resolve_frame(_sidecar_img("BOTTOM_UP"))
+    a_top = so.ellipse_for(top, 323.38, 39.39, 20.0, 8.0, 30.0)["angle_deg"] % 180.0
+    a_bot = so.ellipse_for(bottom, 323.38, 39.39, 20.0, 8.0, 30.0)["angle_deg"] % 180.0
+    assert a_bot == pytest.approx((180.0 - a_top) % 180.0, abs=0.5)
+
+
+def test_sidecar_source_priority_and_flat_astap_warning():
+    solver = _img(_solver_header(), raw_header=_sidecar_img("BOTTOM_UP").raw_header)
+    assert so.resolve_frame(solver).source == so.SOURCE_SOLVER
+    with_header = _sidecar_img("BOTTOM_UP", **_raw_wcs())
+    assert so.resolve_frame(with_header).source == so.SOURCE_SIDECAR
+    flat = so.resolve_frame(_sidecar_img("BOTTOM_UP", source="astap"))
+    assert so.WARN_SIDECAR_UNVERIFIED in flat.accuracy_warning
+    # A sidecar dict without WCS cards (older rows) leaves the image without a usable frame
+    bare = _img(raw_header={"SIDECAR": {"wcs_type": "SIDECAR_INI", "ra_center": 1.0}})
+    assert so.resolve_frame(bare) is None

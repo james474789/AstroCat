@@ -94,6 +94,9 @@ class SidecarParser:
                 orientation = section.get("orientation", section.get("ORIENTATION", "")).strip()
                 if orientation:
                     result["rotation"] = float(orientation) % 360.0
+                if "WCS" in config:
+                    source = section.get("source", "").strip()
+                    SidecarParser._add_wcs(result, dict(config["WCS"]), source)
                 return result
         except Exception:
             pass
@@ -153,4 +156,33 @@ class SidecarParser:
             result["pixel_scale"] = pixel_scale_deg * 3600.0
         if rotation is not None:
             result["rotation"] = rotation % 360.0
+        SidecarParser._add_wcs(result, values, "astap")
         return result
+
+    # Linear WCS cards kept from a sidecar, for the sky overlay (app/services/sky_overlay.py)
+    _WCS_CARDS = ("CRPIX1", "CRPIX2", "CRVAL1", "CRVAL2", "CD1_1", "CD1_2", "CD2_1", "CD2_2",
+                  "CDELT1", "CDELT2", "CROTA1", "CROTA2")
+
+    @staticmethod
+    def _add_wcs(result: Dict[str, Any], values: Dict[str, str], source: str) -> None:
+        """
+        Attach the sidecar's linear TAN WCS as FITS cards under result["wcs"], with the pixel
+        row order it was solved in. ASTAP counts FITS rows from the bottom of the image (measured
+        against astrometry.net solves of the same frames: mirrored in Y); the other writers count
+        from the top, like our display. Nothing is attached without a reference pixel.
+        """
+        cards = {}
+        for key, val in values.items():
+            k = key.strip().upper()
+            if k in SidecarParser._WCS_CARDS:
+                try:
+                    cards[k] = float(val)
+                except (TypeError, ValueError):
+                    continue
+        if not {"CRPIX1", "CRPIX2", "CRVAL1", "CRVAL2"} <= cards.keys():
+            return
+        cards["CTYPE1"] = "RA---TAN"
+        cards["CTYPE2"] = "DEC--TAN"
+        result["wcs"] = cards
+        result["wcs_source"] = source or None
+        result["wcs_row_order"] = "BOTTOM_UP" if source.lower().startswith("astap") else "TOP_DOWN"

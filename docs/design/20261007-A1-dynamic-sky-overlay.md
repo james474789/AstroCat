@@ -34,6 +34,7 @@ every source: the thumbnail, the full-res tiles and the solver upload all use lo
 | Source | Where | Grid | Warning |
 |---|---|---|---|
 | SOLVER | `wcs_header` cards only (never merged with `raw_header`) | `IMAGEW×IMAGEH`; if missing, inferred from the plate scale (flagged) | none, unless the grid was inferred |
+| SIDECAR | linear WCS from the plate-solve `.ini` (`raw_header["SIDECAR"]["wcs"]`, kept by `SidecarParser`, backfilled by data migration `0015`) | native frame; **mirrored in Y** for ASTAP solves, which count rows from the bottom (measured against astrometry.net on 11 frames: median 1.97 px). Other writers measured top-down (58 frames, median 2.1 px) | always ("no distortion model"); also "row order not yet verified" for ASTAP's flat-format `.ini` |
 | HEADER | the file's own WCS (`raw_header`), WCS cards only | `wcs_frame()` (handles the ASIAIR `IMAGEW` grid) | always ("embedded WCS"); also "no distortion model" without SIP, and "XISF row order not yet verified" for XISF |
 
 The warning shows as ⚠ on the annotation button and in the legend; the tooltip gives the reason.

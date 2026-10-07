@@ -3,21 +3,25 @@ Sky overlay: catalog objects projected into an image through its own plate solut
 
 Unlike field_overlaps (a TAN rebuilt from centre/scale/rotation), this uses the
 stored WCS as-is, SIP distortion included, so markers land where the solver
-says the sky is. Two sources, in order:
+says the sky is. Three sources, in order:
 
 - SOLVER: images.wcs_header, the astrometry.net (Nova or local) solution. It
   describes the downsampled JPEG that was uploaded (IMAGEW x IMAGEH), not the
   original frame, so solve-grid pixels are rescaled to native pixels. Never
   merged with raw_header: leftover CDELT/PC/SIP cards would corrupt it.
+- SIDECAR: the linear WCS from a plate-solve .ini next to the image
+  (raw_header["SIDECAR"]["wcs"], see ini_parser), on the native grid. ASTAP
+  counts rows from the bottom, so its solutions are mirrored in Y (measured
+  against astrometry.net solves of the same frames). Flagged: no distortion model.
 - HEADER: the WCS embedded in the file itself (capture or processing
   software). Flagged as possibly less accurate.
 
 Coordinate contract (single place: SkyFrame.to_native): astropy 0-based grid
 pixel (x0, y0) -> native continuous pixel ((x0 + 0.5) * W / gridW,
 (y0 + 0.5) * H / gridH), top-left origin, the same frame as field_overlaps
-and the frontend. FITS row 1 is the top display row for every source: the
-thumbnail, the full-res tiles and the solver upload all come from loaders
-that never flip.
+and the frontend; mirrored in Y (H - y) for bottom-up sidecar solves. FITS
+row 1 is otherwise the top display row: the thumbnail, the full-res tiles and
+the solver upload all come from loaders that never flip.
 
 Pure functions only; the API layer does the DB work.
 """
@@ -37,6 +41,7 @@ from app.utils.sky_wcs import has_sip, wcs_cards
 
 SOURCE_SOLVER = "SOLVER"
 SOURCE_HEADER = "HEADER"
+SOURCE_SIDECAR = "SIDECAR"
 
 # Merged markers take colour and label from the highest-priority catalog
 CATALOG_PRIORITY = ("MESSIER", "CALDWELL", "NGC", "IC", "SH2", "NAMED_STAR")
@@ -53,6 +58,8 @@ MAX_OBJECTS = 1500
 WARN_HEADER = "Using the file's embedded WCS — positions may be less accurate"
 WARN_NO_SIP = "no distortion model"
 WARN_XISF = "XISF row order not yet verified"
+WARN_SIDECAR = "Using the plate-solve sidecar's linear WCS (no distortion model) — positions may be slightly off"
+WARN_SIDECAR_UNVERIFIED = "ASTAP .ini row order not yet verified"
 WARN_GRID_INFERRED = "solve grid size not recorded, inferred from the plate scale"
 WARN_GRID_ASSUMED = "solve grid size unknown, assumed to be the full frame"
 
@@ -66,6 +73,7 @@ class SkyFrame:
     grid_h: float
     source: str
     warnings: List[str] = field(default_factory=list)
+    flip_y: bool = False  # solve grid rows count from the bottom of the displayed image
 
     @property
     def accuracy_warning(self) -> Optional[str]:
@@ -77,11 +85,14 @@ class SkyFrame:
         """astropy 0-based solve-grid pixels -> native continuous pixels (top-left origin)."""
         x0 = np.asarray(x0, dtype=float)
         y0 = np.asarray(y0, dtype=float)
-        return (x0 + 0.5) * self.width / self.grid_w, (y0 + 0.5) * self.height / self.grid_h
+        y = (y0 + 0.5) * self.height / self.grid_h
+        return (x0 + 0.5) * self.width / self.grid_w, (self.height - y) if self.flip_y else y
 
     def from_native(self, x, y) -> Tuple[np.ndarray, np.ndarray]:
         x = np.asarray(x, dtype=float)
         y = np.asarray(y, dtype=float)
+        if self.flip_y:
+            y = self.height - y
         return x * self.grid_w / self.width - 0.5, y * self.grid_h / self.height - 0.5
 
     def project(self, ra, dec) -> Tuple[np.ndarray, np.ndarray]:
@@ -154,7 +165,7 @@ def _celestial_wcs(header: Any) -> Optional[WCS]:
 
 
 def resolve_frame(image: Any) -> Optional[SkyFrame]:
-    """The image's sky frame from its stored solution (SOLVER) or embedded WCS (HEADER), else None."""
+    """The image's sky frame from its stored solution (SOLVER), sidecar solve (SIDECAR) or embedded WCS (HEADER)."""
     width = getattr(image, "width_pixels", None)
     height = getattr(image, "height_pixels", None)
     if not width or not height or width <= 0 or height <= 0:
@@ -178,6 +189,16 @@ def resolve_frame(image: Any) -> Optional[SkyFrame]:
         return SkyFrame(w, width, height, float(gw), float(gh), SOURCE_SOLVER, notes)
 
     raw = getattr(image, "raw_header", None)
+    sidecar = raw.get("SIDECAR") if isinstance(raw, dict) else None
+    cards = sidecar.get("wcs") if isinstance(sidecar, dict) else None
+    w = _celestial_wcs(cards)
+    if w is not None:
+        notes = [WARN_SIDECAR]
+        if sidecar.get("wcs_source") == "astap":  # flat-format ASTAP .ini: no verified example yet
+            notes.append(WARN_SIDECAR_UNVERIFIED)
+        return SkyFrame(w, width, height, float(width), float(height), SOURCE_SIDECAR, notes,
+                        flip_y=sidecar.get("wcs_row_order") == "BOTTOM_UP")
+
     w = _celestial_wcs(raw)
     if w is not None:
         sized = with_image_size(raw, width, height)

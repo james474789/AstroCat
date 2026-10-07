@@ -137,6 +137,11 @@ def _seed_thumbnail_stats():
     return update_thumbnail_stats()
 
 
+def _backfill_sidecar_wcs_cards():
+    from app.scripts.backfill_sidecar_wcs_cards import backfill_sidecar_wcs_cards
+    return backfill_sidecar_wcs_cards(dry_run=False)
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -208,6 +213,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0014_seed_thumbnail_stats",
         "Count the thumbnail cache once so the Admin thumbnail tiles show real numbers (afterwards kept current incrementally; slow on a large cache).",
         _seed_thumbnail_stats,
+    ),
+    DataMigrationSpec(
+        "0015_backfill_sidecar_wcs_cards",
+        "Store the linear WCS from plate-solve sidecar .ini files (and the row order it was solved in) so the AstroCat annotation overlay works for sidecar-solved images.",
+        _backfill_sidecar_wcs_cards,
     ),
 ]
 
