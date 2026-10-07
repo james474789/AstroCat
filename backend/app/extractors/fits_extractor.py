@@ -252,7 +252,7 @@ class FITSExtractor(BaseExtractor):
         
         # Initialize defaults
         ra_center, dec_center = None, None
-        rotation = 0.0
+        rotation = None  # None = the header gives no rotation; never invent 0
         radius_degrees = 1.0
         wcs_type = "NONE"
 
@@ -298,7 +298,7 @@ class FITSExtractor(BaseExtractor):
                         wcs_type = "HEADER_CRVAL"
             except Exception as e:
                 logger.debug(f"FITS extractor: unusable header WCS in {self.file_path}: {e}")
-                ra_center, dec_center, rotation, radius_degrees = None, None, 0.0, 1.0
+                ra_center, dec_center, rotation, radius_degrees = None, None, None, 1.0
 
         # 2. Fallback for coordinates if standard WCS failed or was incomplete
         if ra_center is None:
@@ -320,10 +320,16 @@ class FITSExtractor(BaseExtractor):
 
         # 3. Fallback for Rotation / radius if missing from standard WCS
         if ra_center is not None and dec_center is not None:
-            if rotation == 0:
+            if rotation is None:
+                # The astropy WCS can fail to build (e.g. TAN-SIP without SIP
+                # coefficients) even though the matrix keywords are readable.
+                rotation = self._header_rotation(header)
+            if rotation is None or rotation == 0:
                 rot = self._safe_get(header, "ROTATION", "POSANGLE", "ANGLE", "POSANG", "ROTATANG", "ROTATOR")
-                if rot:
-                    rotation = self._parse_float(rot) or 0.0
+                if rot not in (None, ""):
+                    parsed = self._parse_float(rot)
+                    if parsed is not None:
+                        rotation = parsed
             
             # Recalculate radius if we have a better pixel scale
             # (Either radius is default 1.0 or suspiciously large due to 1deg/px default)
@@ -341,10 +347,29 @@ class FITSExtractor(BaseExtractor):
                 "dec_center": float(dec_center),
                 "radius_degrees": float(radius_degrees),
                 "pixel_scale": float(pixel_scale) if pixel_scale else None,
-                "rotation": float(rotation),
+                "rotation": float(rotation) if rotation is not None else None,
                 "wcs_type": wcs_type
             }
 
+        return None
+
+    def _header_rotation(self, header):
+        """Rotation straight from CD / PC+CDELT / CROTA2 keywords; None if none are present."""
+        try:
+            if "CD1_1" in header or "CD1_2" in header:
+                cd12 = self._parse_float(self._safe_get(header, "CD1_2", default=0)) or 0.0
+                cd22 = self._parse_float(self._safe_get(header, "CD2_2", default=0)) or 0.0
+                return math.degrees(math.atan2(-cd12, cd22))
+            if "PC1_1" in header or "PC1_2" in header:
+                pc12 = self._parse_float(self._safe_get(header, "PC1_2", default=0)) or 0.0
+                pc22 = self._parse_float(self._safe_get(header, "PC2_2", default=1)) or 0.0
+                cdelt1 = self._parse_float(self._safe_get(header, "CDELT1", default=1)) or 1.0
+                cdelt2 = self._parse_float(self._safe_get(header, "CDELT2", default=1)) or 1.0
+                return math.degrees(math.atan2(-cdelt1 * pc12, cdelt2 * pc22))
+            if "CROTA2" in header:
+                return self._parse_float(self._safe_get(header, "CROTA2"))
+        except Exception:
+            pass
         return None
 
     def _wcs_header(self, header) -> fits.Header:

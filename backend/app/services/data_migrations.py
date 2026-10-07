@@ -117,6 +117,21 @@ def _backfill_binning():
     return backfill_binning()
 
 
+def _backfill_sidecar_wcs():
+    from app.scripts.backfill_sidecar_wcs import backfill_sidecar_wcs
+    return backfill_sidecar_wcs(dry_run=False)
+
+
+def _null_fake_rotation():
+    from app.scripts.null_fake_rotation import null_fake_rotation
+    return null_fake_rotation(dry_run=False)
+
+
+def _restore_header_rotation():
+    from app.scripts.restore_header_rotation import restore_header_rotation
+    return restore_header_rotation(dry_run=False)
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -168,6 +183,21 @@ REGISTRY: List[DataMigrationSpec] = [
         "Backfill images.binning from raw_header XBINNING/YBINNING, then re-assign rigs so frames are matched "
         "by their binning relative to each rig's camera (not the header's, which older ZWO drivers under-report).",
         _backfill_binning,
+    ),
+    DataMigrationSpec(
+        "0011_backfill_sidecar_wcs",
+        "Fill rotation from Astrometry.net sidecar .ini files, and import ASTAP-solved sidecar .ini solves (centre, scale, rotation) for images indexed as unsolved, then re-match catalogs and targets.",
+        _backfill_sidecar_wcs,
+    ),
+    DataMigrationSpec(
+        "0012_null_fake_rotation",
+        "Set rotation to unknown (NULL) for header-solved images whose header has no rotation, replacing the placeholder 0 the extractor used to store.",
+        _null_fake_rotation,
+    ),
+    DataMigrationSpec(
+        "0013_restore_header_rotation",
+        "Restore rotation for header-solved images whose CD/PC/CROTA2 keywords or rotator keyword 0.0 were missed by 0012, now read directly from the stored header.",
+        _restore_header_rotation,
     ),
 ]
 
