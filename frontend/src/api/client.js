@@ -752,7 +752,9 @@ export function formatSubtype(subtype) {
         'SUB_FRAME': 'Sub Frame',
         'INTEGRATION_MASTER': 'Integration Master',
         'INTEGRATION_DEPRECATED': 'Deprecated',
-        'PLANETARY': 'Planetary'
+        'PLANETARY': 'Planetary',
+        'ALLSKY': 'All-sky',
+        'AURORA': 'Aurora'
     };
     return mapping[subtype] || subtype;
 }

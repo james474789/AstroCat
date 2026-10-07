@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 import { formatDateTime, formatExposure } from '../../api/client';
 import './FieldOverlay.css';
 
-const SUBTYPE_LABELS = { INTEGRATION_MASTER: 'Master', SUB_FRAME: 'Sub', PLANETARY: 'Planetary' };
+const SUBTYPE_LABELS = { INTEGRATION_MASTER: 'Master', SUB_FRAME: 'Sub', PLANETARY: 'Planetary', ALLSKY: 'All-sky', AURORA: 'Aurora' };
 
 /** Member list for a grouped footprint, positioned at a viewport point. */
 export default function FieldOverlayPopover({ group, x, y, onClose }) {

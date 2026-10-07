@@ -650,6 +650,8 @@ export default function Search() {
                                     <option value="INTEGRATION_MASTER">Masters</option>
                                     <option value="INTEGRATION_DEPRECATED">Deprecated</option>
                                     <option value="PLANETARY">Planetary</option>
+                                    <option value="ALLSKY">All-sky</option>
+                                    <option value="AURORA">Aurora</option>
                                 </select>
                             </div>
 
@@ -1151,6 +1153,8 @@ export default function Search() {
                                 <option value="INTEGRATION_MASTER">Masters</option>
                                 <option value="INTEGRATION_DEPRECATED">Deprecated</option>
                                 <option value="PLANETARY">Planetary</option>
+                                <option value="ALLSKY">All-sky</option>
+                                <option value="AURORA">Aurora</option>
                             </select>
                         </div>
 

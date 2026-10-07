@@ -227,6 +227,8 @@ This table allows efficient queries like: "Show me all images containing M31" or
 *   `INTEGRATION_MASTER`: Stacked, calibrated, final image.
 *   `INTEGRATION_DEPRECATED`: Old version of a stack.
 *   `PLANETARY`: Planetary, lunar, or solar imaging.
+*   `ALLSKY`: All-sky camera frames. Never plate-solved; excluded from plate-solve stats, filters and queues.
+*   `AURORA`: Aurora images. Never plate-solved; excluded from plate-solve stats, filters and queues.
 
 ### ImageFormat
 *   `FITS`, `FIT`

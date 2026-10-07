@@ -2257,6 +2257,9 @@ async def rescan_image(image_id: int, force: bool = Query(False), db: AsyncSessi
             detail=f"Calibration frames ({image.frame_type.value}) are not plate-solved"
         )
 
+    if image.subtype in (ImageSubtype.ALLSKY, ImageSubtype.AURORA) and not force:
+        raise HTTPException(status_code=409, detail=f"{image.subtype.value.title()} images are not plate-solved")
+
     # Check if already processing?
     # if image.astrometry_status in ['SUBMITTED', 'PROCESSING']:
     #      return {"status": "processing", "message": "Already processing", "start_rescan": False}

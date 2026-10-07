@@ -24,6 +24,8 @@ class ImageSubtype(str, enum.Enum):
     INTEGRATION_MASTER = "INTEGRATION_MASTER"  # Stacked/processed master
     INTEGRATION_DEPRECATED = "INTEGRATION_DEPRECATED"  # Old/superseded version
     PLANETARY = "PLANETARY"                    # Planetary/Lunar/Solar images
+    ALLSKY = "ALLSKY"                          # All-sky camera frames (never plate-solved)
+    AURORA = "AURORA"                          # Aurora images (never plate-solved)
 
 
 class FrameType(str, enum.Enum):

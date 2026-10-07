@@ -43,6 +43,8 @@ class TestEligibility:
         (FrameType.LIGHT, ImageSubtype.SUB_FRAME, True),
         (FrameType.LIGHT, ImageSubtype.INTEGRATION_MASTER, True),
         (FrameType.LIGHT, ImageSubtype.PLANETARY, False),
+        (FrameType.LIGHT, ImageSubtype.ALLSKY, False),
+        (FrameType.LIGHT, ImageSubtype.AURORA, False),
         (FrameType.LIGHT, ImageSubtype.INTEGRATION_DEPRECATED, False),
         (FrameType.DARK, ImageSubtype.SUB_FRAME, False),
         (FrameType.FLAT, ImageSubtype.SUB_FRAME, False),

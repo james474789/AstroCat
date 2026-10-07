@@ -164,8 +164,8 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False):
             skipped_count = 0
 
             for img in images:
-                # 1. Planetary Exclusion
-                if img.subtype == 'PLANETARY':
+                # 1. Planetary / all-sky / aurora exclusion (not plate-solvable)
+                if img.subtype in ('PLANETARY', 'ALLSKY', 'AURORA'):
                     skipped_count += 1
                     continue
 

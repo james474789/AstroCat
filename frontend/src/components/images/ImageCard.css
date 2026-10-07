@@ -108,6 +108,16 @@
     color: white;
 }
 
+.badge-aurora {
+    background: rgba(34, 197, 94, 0.8);
+    color: white;
+}
+
+.badge-allsky {
+    background: rgba(14, 165, 233, 0.8);
+    color: white;
+}
+
 /* Calibration frame badge (F1): neutral grey/blue, distinct from processing-stage badges */
 .badge-calib {
     background: rgba(100, 116, 139, 0.75);

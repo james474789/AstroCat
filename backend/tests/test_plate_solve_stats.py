@@ -13,6 +13,8 @@ from app.utils.frame_filters import (
 def test_solvable_subtypes_are_subs_and_masters_only():
     assert set(PLATE_SOLVABLE_SUBTYPES) == {ImageSubtype.SUB_FRAME, ImageSubtype.INTEGRATION_MASTER}
     assert ImageSubtype.PLANETARY not in PLATE_SOLVABLE_SUBTYPES
+    assert ImageSubtype.ALLSKY not in PLATE_SOLVABLE_SUBTYPES
+    assert ImageSubtype.AURORA not in PLATE_SOLVABLE_SUBTYPES
     assert ImageSubtype.INTEGRATION_DEPRECATED not in PLATE_SOLVABLE_SUBTYPES
 
 

@@ -18,7 +18,7 @@ The central table storing all indexed image metadata.
 | `center_location`| Geography(Point)| PostGIS point for spatial queries |
 | `field_boundary` | Geography(Polygon)| Precise field of view on the sky |
 | `exposure_time_seconds`| Double | Total duration of exposure |
-| `subtype` | Enum | SUB_FRAME, INTEGRATION_MASTER, PLANETARY, etc. |
+| `subtype` | Enum | SUB_FRAME, INTEGRATION_MASTER, PLANETARY, ALLSKY, AURORA, etc. |
 | `astrometry_status`| String | Plate solving status (SUBMITTED, SOLVED, etc) |
 | `frame_type` | Enum | (F1) Acquisition frame type: LIGHT, DARK, FLAT, BIAS, DARK_FLAT. Orthogonal to `subtype` (processing stage). Defaults to LIGHT. |
 | `frame_type_source`| String | (F1) HEADER, FILENAME, PATH, DEFAULT, or MANUAL. NULL means never classified (the backfill's resume marker). MANUAL rows are never overwritten by the indexer. |

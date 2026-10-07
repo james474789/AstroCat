@@ -11,6 +11,8 @@ const subtypeBadges = {
     'INTEGRATION_MASTER': { label: 'Master', className: 'badge-master' },
     'INTEGRATION_DEPRECATED': { label: 'Old', className: 'badge-deprecated' },
     'PLANETARY': { label: 'Planetary', className: 'badge-planetary' },
+    'ALLSKY': { label: 'All-sky', className: 'badge-allsky' },
+    'AURORA': { label: 'Aurora', className: 'badge-aurora' },
 };
 
 export default function ImageCard({ image, onContextMenu, showQuality = false }) {
@@ -91,7 +93,7 @@ export default function ImageCard({ image, onContextMenu, showQuality = false })
                                 {formatFrameTypeBadge(image.frame_type)}
                             </span>
                         )}
-                        {image.is_plate_solved && image.subtype !== 'PLANETARY' && (
+                        {image.is_plate_solved && image.subtype !== 'PLANETARY' && image.subtype !== 'ALLSKY' && image.subtype !== 'AURORA' && (
                             <span className="image-badge badge-solved">
                                 {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? '✓ Solve Imported' : '✓ Solved'}
                             </span>

@@ -812,8 +812,8 @@ export default function ImageDetail() {
                                 </h3>
                             </div>
                             <div className="panel-content">
-                                {image.subtype === 'PLANETARY' ? (
-                                    <p className="text-muted text-sm">Plate solving disabled for planetary images.</p>
+                                {['PLANETARY', 'ALLSKY', 'AURORA'].includes(image.subtype) ? (
+                                    <p className="text-muted text-sm">Plate solving disabled for {({ ALLSKY: 'all-sky', AURORA: 'aurora' })[image.subtype] || 'planetary'} images.</p>
                                 ) : (
                                     <div className="astrometry-panel">
                                         {/* Status Display */}
@@ -873,7 +873,7 @@ export default function ImageDetail() {
                         <div className="title-group">
                             <div className="title-left">
                                 <h1 className="image-title">{image.file_name}</h1>
-                                {image.is_plate_solved && image.subtype !== 'PLANETARY' && (
+                                {image.is_plate_solved && image.subtype !== 'PLANETARY' && image.subtype !== 'ALLSKY' && image.subtype !== 'AURORA' && (
                                     <span className="badge badge-success">
                                         {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? 'Solve Imported' : 'Img Solved'}
                                     </span>
@@ -930,6 +930,8 @@ export default function ImageDetail() {
                                 <option value="INTEGRATION_MASTER">Integration Master</option>
                                 <option value="INTEGRATION_DEPRECATED">Deprecated</option>
                                 <option value="PLANETARY">Planetary</option>
+                                <option value="ALLSKY">All-sky</option>
+                                <option value="AURORA">Aurora</option>
                             </select>
                         </div>
 
@@ -1040,7 +1042,7 @@ export default function ImageDetail() {
                     </section>
 
                     {/* Plate Solve Data */}
-                    {image.is_plate_solved && image.subtype !== 'PLANETARY' && (
+                    {image.is_plate_solved && image.subtype !== 'PLANETARY' && image.subtype !== 'ALLSKY' && image.subtype !== 'AURORA' && (
                         <section className="metadata-section">
                             <h3 className="section-title">
                                 <span className="badge badge-success">

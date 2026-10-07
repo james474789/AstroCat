@@ -349,6 +349,8 @@ const MetadataSearch = () => {
                                 <option value="INTEGRATION_MASTER">Integration Master</option>
                                 <option value="INTEGRATION_DEPRECATED">Deprecated</option>
                                 <option value="PLANETARY">Planetary</option>
+                                <option value="ALLSKY">All-sky</option>
+                                <option value="AURORA">Aurora</option>
                             </select>
                         </div>
 

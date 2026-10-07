@@ -28,7 +28,7 @@ def plate_solvable_clause():
     """
     Images that can be plate-solved, and so belong in plate-solve stats:
     LIGHT sub-frames and integration masters. Excludes PLANETARY,
-    INTEGRATION_DEPRECATED and calibration frames (dark/flat/bias/dark-flat).
+    ALLSKY, AURORA, INTEGRATION_DEPRECATED and calibration frames (dark/flat/bias/dark-flat).
     """
     return and_(
         Image.frame_type == FrameType.LIGHT,

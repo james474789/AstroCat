@@ -20,7 +20,7 @@ function formatRigBucket(key) {
 export default function FilterChips({ filters, onRemove, rigNames = {} }) {
     // Map filter keys to display labels
     const filterLabels = {
-        subtype: { label: 'Type', format: (v) => v === 'SUB_FRAME' ? 'Sub Frames' : v === 'INTEGRATION_MASTER' ? 'Masters' : v === 'PLANETARY' ? 'Planetary' : 'Deprecated' },
+        subtype: { label: 'Type', format: (v) => v === 'SUB_FRAME' ? 'Sub Frames' : v === 'INTEGRATION_MASTER' ? 'Masters' : v === 'PLANETARY' ? 'Planetary' : v === 'ALLSKY' ? 'All-sky' : v === 'AURORA' ? 'Aurora' : 'Deprecated' },
         format: { label: 'Format', format: (v) => v },
         rating: {
             label: 'Min Rating', format: (v) => {
