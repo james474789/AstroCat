@@ -13,6 +13,8 @@ import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays
 import { hitTest } from '../utils/fieldOverlay';
 import FieldOverlayLayer from '../components/fieldOverlay/FieldOverlayLayer';
 import FieldOverlayPopover from '../components/fieldOverlay/FieldOverlayPopover';
+import useSeenIn from '../hooks/useSeenIn';
+import SeenInPanel from '../components/seenIn/SeenInPanel';
 import useSkyOverlay from '../hooks/useSkyOverlay';
 import { hitTestSky, searchNameFor } from '../utils/skyOverlay';
 import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
@@ -98,6 +100,7 @@ export default function FullResViewer() {
     const imageQuery = useQuery({ queryKey: ['image', id], queryFn: () => fetchImage(id), staleTime: 60 * 1000 });
     const image = imageQuery.data && String(imageQuery.data.id) === String(id) ? imageQuery.data : null;
     const overlays = useFieldOverlays(image);
+    const seenIn = useSeenIn(image);
     const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
     const sky = useSkyOverlay(image, skyOn);
     const skyUnavailable = sky.unavailable;
@@ -525,6 +528,14 @@ export default function FullResViewer() {
                     )}
                 </button>
                 <button
+                    className={`fr-btn${seenIn.open ? ' active' : ''}`}
+                    onClick={() => seenIn.setOpen(true)}
+                    disabled={!!seenIn.unavailable}
+                    title={seenIn.unavailable || 'Larger images whose field covers this image'}
+                >
+                    <Frame size={16} /> Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
+                </button>
+                <button
                     className={`fr-btn${sky.active ? ' active' : ''}`}
                     onClick={toggleSky}
                     disabled={!!skyUnavailable}
@@ -623,6 +634,8 @@ export default function FullResViewer() {
                     onClose={closeOverlayPopover}
                 />
             )}
+
+            {seenIn.open && <SeenInPanel seenIn={seenIn} onClose={() => seenIn.setOpen(false)} />}
 
             {cursor && (
                 <div className="fullres-readout">

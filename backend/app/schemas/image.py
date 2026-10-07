@@ -231,6 +231,25 @@ class FieldOverlapResponse(BaseModel):
     reason: Optional[str] = None              # "not_solved" | "no_rotation" when groups can't be computed
 
 
+class SeenInGroup(BaseModel):
+    """A larger image (or a group of near-identical framings) whose field covers the viewed image."""
+    id: int                                   # representative image
+    file_name: str
+    object_name: Optional[str] = None
+    subtype: Optional[ImageSubtype] = None
+    capture_date: Optional[datetime] = None
+    count: int
+    master_count: int = 0
+    coverage: float                           # fraction (0-1) of the viewed image this framing covers
+    members: List[FieldOverlapMember] = []
+
+
+class SeenInResponse(BaseModel):
+    groups: List[SeenInGroup]
+    truncated: bool = False
+    reason: Optional[str] = None              # "not_solved" | "no_rotation" when groups can't be computed
+
+
 class FieldOverlapSolveResponse(BaseModel):
     queued: int
     skipped: int          # already submitted/processing/solved, or not solvable

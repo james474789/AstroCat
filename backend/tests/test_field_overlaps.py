@@ -241,3 +241,57 @@ def test_refine_corners_uses_candidate_solutions():
     # Can't be projected at all (other hemisphere): the rebuilt outline is kept rather than lost
     behind = _solved_frame(200.0, -40.0, 1 / 3600, 3000, 2000)
     assert fo.refine_corners(groups_far, cur, cur_frame, {5: behind}) == groups_far
+
+
+# ---- Seen in (reverse lookup) --------------------------------------------------------------------
+
+def _small_at(wide, x, y, id=50):
+    """A 1"/px 3000x2000 image (~0.5 deg radius) centred on pixel (x, y) of `wide`."""
+    return _img(id, *_sky_at(wide, x, y), 1.0, 70.0)
+
+
+def test_seen_in_fully_covered_image_reports_full_coverage():
+    small = _small_at(WIDE, 2000, 1500)
+    out = fo.compute_seen_in(small, [WIDE])
+    assert out["reason"] is None and len(out["groups"]) == 1
+    g = out["groups"][0]
+    assert g["id"] == WIDE.id and g["count"] == 1 and g["coverage"] == pytest.approx(1.0)
+
+
+def test_seen_in_partial_overlap_and_disjoint():
+    edge = _small_at(WIDE, 0, 1500)
+    out = fo.compute_seen_in(edge, [WIDE])["groups"]
+    assert len(out) == 1 and 0.3 < out[0]["coverage"] < 0.7
+    outside = _small_at(WIDE, -3000, 1500)
+    assert fo.compute_seen_in(outside, [WIDE])["groups"] == []
+
+
+def test_seen_in_ignores_smaller_and_similar_sized_images():
+    small = _small_at(WIDE, 2000, 1500)
+    same_size = _img(3, small.ra_center_degrees, small.dec_center_degrees, 1.0, 70.0)
+    smaller = _img(4, small.ra_center_degrees, small.dec_center_degrees, 0.2, 70.0)
+    assert fo.compute_seen_in(small, [same_size, smaller, small])["groups"] == []
+
+
+def test_seen_in_unrotated_candidate_uses_circle_and_needs_current_rotation():
+    small = _small_at(WIDE, 2000, 1500)
+    unrotated = _img(5, WIDE.ra_center_degrees, WIDE.dec_center_degrees, 30.0, None, w=4000, h=3000)
+    unrotated.ra_center_degrees, unrotated.dec_center_degrees = small.ra_center_degrees, small.dec_center_degrees
+    g = fo.compute_seen_in(small, [unrotated])["groups"]
+    assert len(g) == 1 and g[0]["coverage"] == pytest.approx(1.0)
+    assert fo.compute_seen_in(_img(6, 10.0, 40.0, 1.0, None), [WIDE])["reason"] == "no_rotation"
+
+
+def test_seen_in_groups_same_framing_and_sorts_by_coverage():
+    small = _small_at(WIDE, 2000, 1500)
+    dup = _img(7, WIDE.ra_center_degrees, WIDE.dec_center_degrees, 30.0, 20.0, w=4000, h=3000,
+               captured=datetime(2024, 1, 1))
+    edge_wide = _img(8, *_sky_at(WIDE, 2000, 1500), 30.0, 20.0, w=4000, h=3000)
+    # A differently framed wide image that only clips the small one
+    edge = _img(9, *_sky_at(small, 9000, 1000), 5.0, 70.0, w=3000, h=2000)
+    groups = fo.compute_seen_in(small, [WIDE, dup, edge, edge_wide])["groups"]
+    assert [g["coverage"] for g in groups] == sorted((g["coverage"] for g in groups), reverse=True)
+    top = groups[0]
+    assert top["coverage"] == pytest.approx(1.0) and top["count"] == 3
+    assert {m["id"] for m in top["members"]} == {1, 7, 8}
+    assert all(g["coverage"] < 1.0 for g in groups[1:])

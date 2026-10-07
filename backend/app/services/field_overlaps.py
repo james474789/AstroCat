@@ -382,3 +382,133 @@ def refine_corners(groups: List[Dict[str, Any]], current: Any, current_frame: An
                     "radius_px": None, "area": polygon_area(poly)})
     out.sort(key=lambda g: -g["area"])
     return out
+
+
+# ---- Seen in: the reverse lookup (larger images whose field covers the current image) ----------------
+
+SEEN_IN_GRID = 24  # coverage is estimated from a GRID x GRID sample of the current image
+
+
+def _sample_sky(current: Any, current_frame: Any = None) -> Optional[np.ndarray]:
+    """(N,2) [ra, dec] of a regular grid of points across the current image, or None if it can't be placed."""
+    if current_frame is None:
+        params = tan_params(current)
+    else:
+        params = _frame_params(current)
+    if params is None:
+        return None
+    w, h = params["w"], params["h"]
+    xs = (np.arange(SEEN_IN_GRID) + 0.5) / SEEN_IN_GRID * w
+    ys = (np.arange(SEEN_IN_GRID) + 0.5) / SEEN_IN_GRID * h
+    gx, gy = np.meshgrid(xs, ys)
+    gx, gy = gx.ravel(), gy.ravel()
+    if current_frame is None:
+        return pixel_to_sky(params, np.column_stack([gx, gy]))
+    ra, dec = current_frame.unproject(gx, gy)
+    return np.column_stack([ra, dec])
+
+
+def _separation_deg(ra0: float, dec0: float, ra: np.ndarray, dec: np.ndarray) -> np.ndarray:
+    """Great-circle separation (degrees) of arrays of points from one position."""
+    p0, p = math.radians(dec0), np.radians(dec)
+    a = np.sin((p - p0) / 2) ** 2 + math.cos(p0) * np.cos(p) * np.sin(np.radians(ra - ra0) / 2) ** 2
+    return np.degrees(2 * np.arcsin(np.minimum(1.0, np.sqrt(a))))
+
+
+def _coverage(cand: Any, radius: float, sky: np.ndarray) -> float:
+    """Fraction of the sampled sky points that fall inside the candidate's footprint."""
+    if cand.rotation_degrees is None:
+        # Orientation unknown: the half-diagonal circle covers every possible orientation
+        sep = _separation_deg(cand.ra_center_degrees, cand.dec_center_degrees, sky[:, 0], sky[:, 1])
+        return float(np.mean(sep < radius))
+    params = tan_params(cand)
+    if params is None:
+        return 0.0
+    pix = sky_to_pixel(params, sky)
+    with np.errstate(invalid="ignore"):
+        inside = (pix[:, 0] >= 0) & (pix[:, 0] <= params["w"]) & (pix[:, 1] >= 0) & (pix[:, 1] <= params["h"])
+    return float(np.mean(inside))
+
+
+def compute_seen_in(current: Any, candidates: Sequence[Any], current_frame: Any = None) -> Dict[str, Any]:
+    """
+    The mirror of compute_field_overlaps: group the candidates that are meaningfully larger than the
+    current image and cover part of its field, with the fraction of the current image each covers.
+    Returns {"groups": [...], "reason": None | "not_solved" | "no_rotation"}; groups sorted by coverage, highest first.
+    """
+    if current_frame is None and getattr(current, "rotation_degrees", "missing") is None:
+        return {"groups": [], "reason": "no_rotation"}
+    cur_radius = _radius(current) if getattr(current, "pixel_scale_arcsec", None) else None
+    sky = _sample_sky(current, current_frame) if cur_radius else None
+    if sky is None:
+        return {"groups": [], "reason": "not_solved"}
+
+    items = []
+    for cand in candidates:
+        if cand.id == current.id or not cand.pixel_scale_arcsec or not cand.width_pixels or not cand.height_pixels:
+            continue
+        if cand.ra_center_degrees is None or cand.dec_center_degrees is None:
+            continue
+        radius = _radius(cand)
+        if not radius or cur_radius >= SIZE_RATIO_MAX * radius:
+            continue
+        coverage = _coverage(cand, radius, sky)
+        if coverage <= 0:
+            continue
+        items.append({"img": cand, "radius": radius, "rot": cand.rotation_degrees, "coverage": coverage,
+                      "shape": "circle" if cand.rotation_degrees is None else "polygon",
+                      "ra": cand.ra_center_degrees, "dec": cand.dec_center_degrees})
+
+    items.sort(key=_rep_key)
+    clusters: List[List[Dict[str, Any]]] = []
+    for item in items:
+        for cluster in clusters:
+            if _same_framing(cluster[0], item):
+                cluster.append(item)
+                break
+        else:
+            clusters.append([item])
+
+    groups = []
+    for cluster in clusters:
+        rep = cluster[0]
+        img = rep["img"]
+        groups.append({
+            "id": img.id,
+            "file_name": img.file_name,
+            "object_name": getattr(img, "object_name", None),
+            "subtype": _subtype_value(img),
+            "capture_date": getattr(img, "capture_date", None),
+            "count": len(cluster),
+            "master_count": sum(1 for m in cluster if _subtype_value(m["img"]) == "INTEGRATION_MASTER"),
+            "coverage": rep["coverage"],
+            "members": [_member(m["img"]) for m in cluster[:MAX_MEMBERS]],
+        })
+    groups.sort(key=lambda g: -g["coverage"])
+    return {"groups": groups, "reason": None}
+
+
+def refine_seen_in(groups: List[Dict[str, Any]], current: Any, current_frame: Any,
+                   cand_frames: Dict[int, Any]) -> List[Dict[str, Any]]:
+    """
+    Recompute each group's coverage through its representative's own plate solution (cand_frames: image id ->
+    SkyFrame). Groups without a solution keep the rebuilt-TAN estimate; groups an exact solution shows
+    don't cover the field are dropped.
+    """
+    sky = _sample_sky(current, current_frame)
+    if sky is None:
+        return groups
+    out = []
+    for g in groups:
+        frame = cand_frames.get(g["id"])
+        if frame is None:
+            out.append(g)
+            continue
+        x, y = frame.project(sky[:, 0], sky[:, 1])
+        with np.errstate(invalid="ignore"):
+            inside = (x >= 0) & (x <= frame.width) & (y >= 0) & (y <= frame.height)
+        coverage = float(np.mean(inside))
+        if coverage > 0:
+            out.append({**g, "coverage": coverage})
+    out.sort(key=lambda g: -g["coverage"])
+    return out

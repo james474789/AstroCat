@@ -16,13 +16,13 @@ import math
 
 from app.database import get_db
 from app.models.image import Image, ImageFormat, ImageSubtype, FrameType
-from app.schemas.image import ImageDetail, ImageList, UpdateImageRequest, FieldOverlapResponse, FieldOverlapSolveResponse, SkyOverlayResponse
+from app.schemas.image import ImageDetail, ImageList, UpdateImageRequest, FieldOverlapResponse, FieldOverlapSolveResponse, SeenInResponse, SkyOverlayResponse
 from app.schemas.image import ImageDetail, ImageList
 from app.schemas.common import PaginatedResponse
 from app.services.thumbnails import ThumbnailGenerator
 from app.utils.path_security import validate_path_safety, sanitize_filename
 from app.services.quality_filters import QualityFilters, fwhm_arcsec_expr
-from app.services.field_overlaps import compute_field_overlaps, refine_corners, SIZE_RATIO_MAX
+from app.services.field_overlaps import compute_field_overlaps, compute_seen_in, refine_corners, refine_seen_in, SIZE_RATIO_MAX
 from app.services import sky_overlay
 from app.utils.field_geometry import effective_field_radius
 from app.utils.frame_filters import plate_solvable_clause
@@ -1915,6 +1915,86 @@ async def _load_field_overlap_groups(db: AsyncSession, image_id: int, mode: str)
     return groups, truncated, result["reason"]
 
 
+# Larger images considered by "Seen in"; bounds the indexed coarse search (per-row distances can't use the index)
+SEEN_IN_MAX_RADIUS_DEG = 45.0
+
+
+async def _load_seen_in_groups(db: AsyncSession, image_id: int, mode: str):
+    """Larger images whose field covers this image, grouped by framing, highest coverage first.
+    Returns (groups, truncated, reason)."""
+    image = await db.get(Image, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    if not image.is_plate_solved:
+        return [], False, "not_solved"
+    current_frame = sky_overlay.resolve_frame(image)
+    if image.rotation_degrees is None and current_frame is None:
+        return [], False, "no_rotation"
+    radius = effective_field_radius(
+        image.field_radius_degrees, image.width_pixels, image.height_pixels, image.pixel_scale_arcsec,
+    )
+    if not radius or image.ra_center_degrees is None or image.dec_center_degrees is None:
+        return [], False, "not_solved"
+    stmt = select(
+        Image.id, Image.file_name, Image.object_name, Image.subtype, Image.capture_date,
+        Image.exposure_time_seconds, Image.filter_name,
+        Image.ra_center_degrees, Image.dec_center_degrees, Image.field_radius_degrees,
+        Image.pixel_scale_arcsec, Image.rotation_degrees, Image.width_pixels, Image.height_pixels,
+        Image.raw_header["astrometry_parity"].astext.label("parity"),
+    ).where(
+        Image.is_plate_solved.is_(True),
+        Image.id != image_id,
+        Image.subtype != ImageSubtype.INTEGRATION_DEPRECATED,
+        Image.frame_type == FrameType.LIGHT,
+        Image.ra_center_degrees.isnot(None),
+        Image.dec_center_degrees.isnot(None),
+        Image.pixel_scale_arcsec.isnot(None),
+        Image.width_pixels.isnot(None),
+        Image.height_pixels.isnot(None),
+        # Coarse indexed pass: a covering image's centre is within R_cur + R_cand <= R_cur + the cap
+        text(
+            "ST_DWithin(center_location, "
+            "ST_SetSRID(ST_MakePoint(:si_ra, :si_dec), 4326)::geography, :si_meters)"
+        ).bindparams(si_ra=image.ra_center_degrees, si_dec=image.dec_center_degrees,
+                     si_meters=(radius + SEEN_IN_MAX_RADIUS_DEG) * 111320 * 1.05),
+        # Meaningfully larger than this image (mirror of the In field size ratio), and within the cap
+        text(f"{_CAND_RADIUS_SQL} > :si_min_radius").bindparams(si_min_radius=radius / SIZE_RATIO_MAX),
+        text(f"{_CAND_RADIUS_SQL} <= :si_max_radius").bindparams(si_max_radius=SEEN_IN_MAX_RADIUS_DEG),
+        # Tight per-row bound: centre within R_cur + R_cand
+        text(
+            "ST_DWithin(center_location, ST_SetSRID(ST_MakePoint(:si_ra2, :si_dec2), 4326)::geography, "
+            f"(:si_radius + {_CAND_RADIUS_SQL}) * 111320 * 1.05)"
+        ).bindparams(si_ra2=image.ra_center_degrees, si_dec2=image.dec_center_degrees, si_radius=radius),
+    ).limit(FIELD_OVERLAP_CANDIDATE_LIMIT)
+    if mode == "masters":
+        stmt = stmt.where(Image.subtype == ImageSubtype.INTEGRATION_MASTER)
+    elif mode == "subs":
+        stmt = stmt.where(Image.subtype != ImageSubtype.INTEGRATION_MASTER)
+
+    rows = (await db.execute(stmt)).all()
+    result = compute_seen_in(image, rows, current_frame)
+    groups = result["groups"]
+    truncated = len(groups) > FIELD_OVERLAP_MAX_GROUPS or len(rows) >= FIELD_OVERLAP_CANDIDATE_LIMIT
+    if len(groups) > FIELD_OVERLAP_MAX_GROUPS:
+        groups = groups[:FIELD_OVERLAP_MAX_GROUPS]
+    if groups:
+        # Exact coverage from each representative's own solution (headers loaded for these only)
+        frame_rows = (await db.execute(select(
+            Image.id, Image.wcs_header, Image.raw_header, Image.width_pixels, Image.height_pixels,
+            Image.file_format, Image.pixel_scale_arcsec,
+        ).where(Image.id.in_([g["id"] for g in groups])))).all()
+        cand_frames = {}
+        for r in frame_rows:
+            try:
+                frame = sky_overlay.resolve_frame(r)
+            except Exception:
+                frame = None
+            if frame is not None:
+                cand_frames[r.id] = frame
+        groups = refine_seen_in(groups, image, current_frame, cand_frames)
+    return groups, truncated, result["reason"]
+
+
 # Catalog rows for the sky overlay, one query per table, normalised to the same columns.
 # Messier sizes are a diameter string plus axis ratio; NGC-table rows are split into NGC/IC.
 _SKY_CATALOG_SQL = {
@@ -2014,6 +2094,20 @@ async def get_field_overlaps(
     """
     groups, truncated, reason = await _load_field_overlap_groups(db, image_id, mode)
     return FieldOverlapResponse(groups=groups, truncated=truncated, reason=reason)
+
+
+@router.get("/{image_id}/seen-in", response_model=SeenInResponse)
+async def get_seen_in(
+    image_id: int,
+    mode: Literal["masters", "subs", "all"] = Query("all", description="Which images to include"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Larger images whose field covers this image (the reverse of field-overlaps), with near-identical
+    framings grouped and the fraction of this image each one covers.
+    """
+    groups, truncated, reason = await _load_seen_in_groups(db, image_id, mode)
+    return SeenInResponse(groups=groups, truncated=truncated, reason=reason)
 
 
 @router.post("/{image_id}/field-overlaps/solve", response_model=FieldOverlapSolveResponse, status_code=202)

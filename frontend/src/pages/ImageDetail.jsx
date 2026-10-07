@@ -12,7 +12,9 @@ import useSkyOverlay from '../hooks/useSkyOverlay';
 import { hitTestSky, searchNameFor } from '../utils/skyOverlay';
 import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
 import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
-import { Maximize2, Layers, Crosshair, AlertTriangle } from 'lucide-react';
+import useSeenIn from '../hooks/useSeenIn';
+import SeenInPanel from '../components/seenIn/SeenInPanel';
+import { Maximize2, Layers, Crosshair, AlertTriangle, Frame } from 'lucide-react';
 import StarQualityCard from '../components/quality/StarQualityCard';
 import './ImageDetail.css';
 
@@ -71,6 +73,7 @@ export default function ImageDetail() {
 
     // Images-in-field overlay: other images' footprints, hit-tested in native image pixels
     const overlays = useFieldOverlays(image);
+    const seenIn = useSeenIn(image);
     const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
     const [hoveredOverlayId, setHoveredOverlayId] = useState(null);
     // Dynamic catalog overlay (AstroCat annotations), drawn from the image's own plate solution
@@ -738,6 +741,16 @@ export default function ImageDetail() {
                                 )}
                             </button>
 
+                            <button
+                                className={`btn ${seenIn.open ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => seenIn.setOpen(true)}
+                                disabled={!!seenIn.unavailable}
+                                title={seenIn.unavailable || 'Larger images whose field covers this image'}
+                            >
+                                <Frame size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                                Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
+                            </button>
+
                             {overlays.active && overlays.unsolvedCount > 0 && (
                                 <button
                                     className="btn btn-secondary"
@@ -766,6 +779,8 @@ export default function ImageDetail() {
                             </button>
                         </div>
                     </div>
+
+                    {seenIn.open && <SeenInPanel seenIn={seenIn} onClose={() => seenIn.setOpen(false)} />}
 
                     {/* Secondary Layout Section (Below Image) */}
                     <div className="image-secondary-section">
