@@ -25,6 +25,7 @@ from app.services.quality_filters import QualityFilters, fwhm_arcsec_expr
 from app.services.field_overlaps import compute_field_overlaps, refine_corners, SIZE_RATIO_MAX
 from app.services import sky_overlay
 from app.utils.field_geometry import effective_field_radius
+from app.utils.frame_filters import plate_solvable_clause
 
 import io
 from fastapi.responses import StreamingResponse
@@ -95,13 +96,15 @@ def _build_image_query(
         elif is_plate_solved == 'imported':
             stmt = stmt.where(Image.is_plate_solved == True).where(Image.astrometry_status != 'SOLVED')
         elif is_plate_solved == 'unsolved':
-            stmt = stmt.where(Image.is_plate_solved == False)
+            stmt = stmt.where(Image.is_plate_solved == False, plate_solvable_clause())
         elif isinstance(is_plate_solved, bool):
             stmt = stmt.where(Image.is_plate_solved == is_plate_solved)
+            if not is_plate_solved:
+                stmt = stmt.where(plate_solvable_clause())
         elif is_plate_solved in ['true', '1']:
             stmt = stmt.where(Image.is_plate_solved == True)
         elif is_plate_solved in ['false', '0']:
-            stmt = stmt.where(Image.is_plate_solved == False)
+            stmt = stmt.where(Image.is_plate_solved == False, plate_solvable_clause())
     
     if rating is not None:
         stmt = stmt.where(Image.rating >= rating)
@@ -2036,7 +2039,7 @@ async def solve_field_overlaps(
     for img in rows:
         if (
             img.frame_type != FrameType.LIGHT
-            or img.subtype == ImageSubtype.PLANETARY
+            or img.subtype not in (ImageSubtype.SUB_FRAME, ImageSubtype.INTEGRATION_MASTER)
             or img.rotation_degrees is not None
             or img.astrometry_status in ("SUBMITTED", "PROCESSING", "SOLVED")
         ):

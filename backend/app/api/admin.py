@@ -13,6 +13,7 @@ import os
 import shutil
 import logging
 from app.database import AsyncSessionLocal
+from app.utils.frame_filters import PLATE_SOLVABLE_SQL
 from sqlalchemy import text, select
 
 import time
@@ -251,15 +252,18 @@ async def get_system_stats():
                     
                     # Get both record count and astrometry counts in ONE query
                     # Categorize based on astrometry_status and is_plate_solved
-                    result = await session.execute(text("""
-                        SELECT 
+                    # Astrometry buckets only count plate-solvable images (LIGHT
+                    # subs/masters); planetary, deprecated and calibration frames
+                    # are excluded. total_count stays the whole table.
+                    result = await session.execute(text(f"""
+                        SELECT
                             COUNT(*) as total_count,
-                            COALESCE(SUM(CASE WHEN astrometry_status = 'SOLVED' THEN 1 ELSE 0 END), 0) as solved,
-                            COALESCE(SUM(CASE WHEN (astrometry_status = 'NONE' OR astrometry_status IS NULL) AND is_plate_solved THEN 1 ELSE 0 END), 0) as imported,
-                            COALESCE(SUM(CASE WHEN (astrometry_status = 'NONE' OR astrometry_status IS NULL) AND NOT is_plate_solved THEN 1 ELSE 0 END), 0) as unsolved,
-                            COALESCE(SUM(CASE WHEN astrometry_status = 'FAILED' THEN 1 ELSE 0 END), 0) as failed,
-                            COALESCE(SUM(CASE WHEN astrometry_status = 'SUBMITTED' THEN 1 ELSE 0 END), 0) as submitted,
-                            COALESCE(SUM(CASE WHEN astrometry_status = 'PROCESSING' THEN 1 ELSE 0 END), 0) as processing
+                            COALESCE(SUM(CASE WHEN {PLATE_SOLVABLE_SQL} AND astrometry_status = 'SOLVED' THEN 1 ELSE 0 END), 0) as solved,
+                            COALESCE(SUM(CASE WHEN {PLATE_SOLVABLE_SQL} AND (astrometry_status = 'NONE' OR astrometry_status IS NULL) AND is_plate_solved THEN 1 ELSE 0 END), 0) as imported,
+                            COALESCE(SUM(CASE WHEN {PLATE_SOLVABLE_SQL} AND (astrometry_status = 'NONE' OR astrometry_status IS NULL) AND NOT is_plate_solved THEN 1 ELSE 0 END), 0) as unsolved,
+                            COALESCE(SUM(CASE WHEN {PLATE_SOLVABLE_SQL} AND astrometry_status = 'FAILED' THEN 1 ELSE 0 END), 0) as failed,
+                            COALESCE(SUM(CASE WHEN {PLATE_SOLVABLE_SQL} AND astrometry_status = 'SUBMITTED' THEN 1 ELSE 0 END), 0) as submitted,
+                            COALESCE(SUM(CASE WHEN {PLATE_SOLVABLE_SQL} AND astrometry_status = 'PROCESSING' THEN 1 ELSE 0 END), 0) as processing
                         FROM images
                     """))
                     row = result.first()

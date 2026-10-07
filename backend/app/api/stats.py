@@ -17,7 +17,7 @@ from app.database import get_db
 from app.models.image import Image, ImageSubtype, FrameType
 from app.models.matches import ImageCatalogMatch
 from app.config import settings
-from app.utils.frame_filters import light_subs_clause, lights_clause
+from app.utils.frame_filters import light_subs_clause, lights_clause, plate_solvable_clause
 
 router = APIRouter()
 
@@ -65,17 +65,15 @@ async def get_stats_overview(db: AsyncSession = Depends(get_db)):
     )).scalar() or 0
     total_exposure_hours = total_exposure_seconds / 3600
     
-    # Plate solved stats (filtered to masters and subs as requested)
-    relevant_subtypes = [ImageSubtype.SUB_FRAME, ImageSubtype.INTEGRATION_MASTER]
-    
+    # Plate solved stats (only images that can be solved: LIGHT subs and masters)
     total_relevant_images = (await db.execute(
-        select(func.count(Image.id)).where(Image.subtype.in_(relevant_subtypes))
+        select(func.count(Image.id)).where(plate_solvable_clause())
     )).scalar() or 0
-    
+
     total_plate_solved = (await db.execute(
         select(func.count(Image.id)).where(
             Image.is_plate_solved == True,
-            Image.subtype.in_(relevant_subtypes)
+            plate_solvable_clause()
         )
     )).scalar() or 0
     
