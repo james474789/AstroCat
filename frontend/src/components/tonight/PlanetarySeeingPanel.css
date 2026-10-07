@@ -22,8 +22,10 @@
     cursor: pointer;
 }
 
-.seeing-header:hover {
-    background: var(--color-surface-hover);
+@media (hover: hover) {
+  .seeing-header:hover {
+      background: var(--color-surface-hover);
+  }
 }
 
 .seeing-header-icon {

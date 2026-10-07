@@ -25,8 +25,10 @@
     min-width: 100%;
 }
 
-.folder-item:hover {
-    background-color: var(--color-surface-hover);
+@media (hover: hover) {
+  .folder-item:hover {
+      background-color: var(--color-surface-hover);
+  }
 }
 
 .folder-item.selected {
@@ -130,9 +132,11 @@
     font-size: 0.9rem;
 }
 
-.menu-item:hover {
-    background-color: var(--color-surface-hover);
-    color: var(--color-primary);
+@media (hover: hover) {
+  .menu-item:hover {
+      background-color: var(--color-surface-hover);
+      color: var(--color-primary);
+  }
 }
 
 @keyframes fadeIn {
@@ -144,5 +148,31 @@
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+/* Explicit actions button for touch (no right-click) */
+.folder-more {
+    display: none;
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+@media (pointer: coarse) {
+    .folder-more {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .folder-item {
+        min-height: 44px;
     }
 }

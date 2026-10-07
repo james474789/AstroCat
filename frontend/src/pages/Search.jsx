@@ -128,10 +128,10 @@ export default function Search() {
     const [raInput, setRaInput] = useState('');
 
     // Phones/tablets: filters live in a full-screen sheet, closed by default
+    const isMobile = useIsMobile();
     const [showFilters, setShowFilters] = useState(() => !window.matchMedia('(max-width: 1024px)').matches);
 
     // The full-screen filter sheet must not let the page behind it scroll
-    const isMobile = useIsMobile();
     useEffect(() => {
         if (!(isMobile && showFilters)) return undefined;
         const prev = document.body.style.overflow;
@@ -295,7 +295,7 @@ export default function Search() {
         });
         params.set('page', '1');
         setSearchParams(params);
-        if (window.matchMedia('(max-width: 1024px)').matches) setShowFilters(false);
+        if (isMobile) setShowFilters(false);
         // loadImages(); // Handled by useEffect dependence on searchParams
     }
 
@@ -578,7 +578,10 @@ export default function Search() {
             <div className="search-layout">
                 {/* Filters Sidebar */}
                 {showFilters && (
-                    <form className="filters-sidebar" onSubmit={(e) => { e.preventDefault(); applyFilters(); }}>
+                    <div className="filters-backdrop" onClick={() => setShowFilters(false)} aria-hidden="true" />
+                )}
+                {showFilters && (
+                    <form className="filters-sidebar"onSubmit={(e) => { e.preventDefault(); applyFilters(); }}>
                         <div className="filters-header">
                             <h3>🔍 Search & Filter</h3>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>
@@ -618,7 +621,7 @@ export default function Search() {
                         />
 
                         {/* Folder Structure */}
-                        <FilterSection title="Folder Structure" icon="📂" defaultOpen={!window.matchMedia('(max-width: 1024px)').matches}>
+                        <FilterSection title="Folder Structure" icon="📂" defaultOpen={!isMobile}>
                             <FolderTree
                                 selectedPath={filters.path}
                                 onSelect={(path) => {

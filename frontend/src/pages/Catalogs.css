@@ -19,9 +19,11 @@
     text-align: left;
 }
 
-.catalog-tab:hover {
-    border-color: var(--color-border-light);
-    background: var(--color-surface-elevated);
+@media (hover: hover) {
+  .catalog-tab:hover {
+      border-color: var(--color-border-light);
+      background: var(--color-surface-elevated);
+  }
 }
 
 .catalog-tab.active {
@@ -136,10 +138,12 @@
     flex-direction: column;
 }
 
-.catalog-card:hover {
-    border-color: var(--color-primary);
-    box-shadow: var(--shadow-glow);
-    transform: translateY(-2px);
+@media (hover: hover) {
+  .catalog-card:hover {
+      border-color: var(--color-primary);
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-2px);
+  }
 }
 
 .catalog-card-header-link {
@@ -220,8 +224,10 @@
     text-decoration: none;
 }
 
-.view-images-link:hover {
-    text-decoration: underline;
+@media (hover: hover) {
+  .view-images-link:hover {
+      text-decoration: underline;
+  }
 }
 
 /* Pagination */

@@ -86,10 +86,12 @@
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-    border-color: rgba(91, 141, 238, 0.3);
+@media (hover: hover) {
+  .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      border-color: rgba(91, 141, 238, 0.3);
+  }
 }
 
 .stat-card.highlight::before {

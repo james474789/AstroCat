@@ -94,6 +94,7 @@ body {
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -122,8 +123,10 @@ a {
   transition: color var(--transition-fast);
 }
 
-a:hover {
-  color: var(--color-accent);
+@media (hover: hover) {
+  a:hover {
+    color: var(--color-accent);
+  }
 }
 
 /* Links */
@@ -133,9 +136,11 @@ a:hover {
   transition: all var(--transition-fast);
 }
 
-.link:hover {
-  color: var(--color-accent);
-  text-decoration: underline;
+@media (hover: hover) {
+  .link:hover {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
 }
 
 /* Buttons */
@@ -168,9 +173,11 @@ a:hover {
   box-shadow: var(--shadow-glow);
 }
 
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-glow-lg);
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-glow-lg);
+  }
 }
 
 .btn-secondary {
@@ -179,9 +186,11 @@ a:hover {
   border-color: var(--color-border);
 }
 
-.btn-secondary:hover:not(:disabled) {
-  background: var(--color-surface-hover);
-  border-color: var(--color-border-light);
+@media (hover: hover) {
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-surface-hover);
+    border-color: var(--color-border-light);
+  }
 }
 
 .btn-ghost {
@@ -189,9 +198,11 @@ a:hover {
   color: var(--color-text-secondary);
 }
 
-.btn-ghost:hover:not(:disabled) {
-  background: var(--color-surface-elevated);
-  color: var(--color-text-primary);
+@media (hover: hover) {
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-surface-elevated);
+    color: var(--color-text-primary);
+  }
 }
 
 .btn-icon {
@@ -375,8 +386,10 @@ a:hover {
   background: var(--color-surface-elevated);
 }
 
-.table tr:hover td {
-  background: var(--color-surface-elevated);
+@media (hover: hover) {
+  .table tr:hover td {
+    background: var(--color-surface-elevated);
+  }
 }
 
 /* Grid Utilities */
@@ -486,8 +499,10 @@ a:hover {
   border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-border-light);
+@media (hover: hover) {
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-light);
+  }
 }
 
 /* Tabs */
@@ -509,9 +524,11 @@ a:hover {
   transition: all var(--transition-fast);
 }
 
-.tab:hover {
-  color: var(--color-text-primary);
-  background: var(--color-surface-elevated);
+@media (hover: hover) {
+  .tab:hover {
+    color: var(--color-text-primary);
+    background: var(--color-surface-elevated);
+  }
 }
 
 .tab.active {
@@ -584,6 +601,8 @@ a:hover {
 /* ==========================================================================
    Mobile / touch foundation
    Breakpoints used across the app: 1024 (tablet/nav switch), 768, 480.
+   Touch tablets (iPad): up to 1194px with (pointer: coarse) also use the bottom
+   tab bar; see useIsTablet / useIsTouchNav in hooks/useMediaQuery.js.
    ========================================================================== */
 :root {
   --safe-top: env(safe-area-inset-top, 0px);
@@ -614,6 +633,15 @@ button, a, .btn, .nav-item {
     min-height: 44px;
   }
   .btn-icon {
+    min-width: 44px;
+  }
+  .tab,
+  .filter-chip,
+  .pagination .btn,
+  .sidebar-toggle {
+    min-height: 44px;
+  }
+  .sidebar-toggle {
     min-width: 44px;
   }
 }

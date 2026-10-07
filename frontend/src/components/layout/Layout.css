@@ -25,9 +25,11 @@
     width: 70px;
 }
 
-.layout.is-collapsed .sidebar:hover {
-    width: var(--sidebar-width);
-    box-shadow: var(--shadow-xl);
+@media (hover: hover) {
+  .layout.is-collapsed .sidebar:hover {
+      width: var(--sidebar-width);
+      box-shadow: var(--shadow-xl);
+  }
 }
 
 .sidebar-header {
@@ -53,10 +55,12 @@
     opacity: 0.5;
 }
 
-.sidebar-toggle:hover {
-    background: var(--color-surface-elevated);
-    color: var(--color-primary);
-    opacity: 1;
+@media (hover: hover) {
+  .sidebar-toggle:hover {
+      background: var(--color-surface-elevated);
+      color: var(--color-primary);
+      opacity: 1;
+  }
 }
 
 .layout.is-pinned .sidebar-toggle {
@@ -144,9 +148,11 @@
     width: 100%;
 }
 
-.logout-button:hover {
-    background: rgba(248, 81, 73, 0.1) !important;
-    color: #f85149 !important;
+@media (hover: hover) {
+  .logout-button:hover {
+      background: rgba(248, 81, 73, 0.1) !important;
+      color: #f85149 !important;
+  }
 }
 
 
@@ -162,6 +168,7 @@
     flex: 1;
     margin-left: var(--sidebar-width);
     min-height: 100vh;
+    min-height: 100dvh;
     position: relative;
     transition: margin-left var(--transition-normal);
 }
@@ -175,8 +182,9 @@
     display: none;
 }
 
-/* Responsive: below 1024px the sidebar is replaced by a bottom tab bar */
-@media (max-width: 1024px) {
+/* Responsive: up to 1024px, and on touch tablets (iPad landscape, up to 1194px),
+   the sidebar is replaced by a bottom tab bar. Keep in sync with useIsTouchNav. */
+@media (max-width: 1024px), (max-width: 1194px) and (pointer: coarse) {
     .sidebar {
         display: none;
     }

@@ -38,9 +38,11 @@
     height: 40px;
 }
 
-.btn-back:hover {
-    background: rgba(99, 102, 241, 0.3);
-    border-color: rgba(99, 102, 241, 0.5);
+@media (hover: hover) {
+  .btn-back:hover {
+      background: rgba(99, 102, 241, 0.3);
+      border-color: rgba(99, 102, 241, 0.5);
+  }
 }
 
 .header-content {
@@ -140,8 +142,10 @@
     position: relative;
 }
 
-.tab-button:hover {
-    color: var(--color-text-primary);
+@media (hover: hover) {
+  .tab-button:hover {
+      color: var(--color-text-primary);
+  }
 }
 
 .tab-button.active {
@@ -280,7 +284,9 @@
     border-radius: 10px;
 }
 
-.tab-content-container::-webkit-scrollbar-thumb:hover,
-.tabs-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+@media (hover: hover) {
+  .tab-content-container::-webkit-scrollbar-thumb:hover,
+  .tabs-container::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+  }
 }

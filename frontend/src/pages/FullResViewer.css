@@ -69,7 +69,9 @@
 }
 
 .fr-btn.icon { padding: 0.35rem; }
-.fr-btn:hover:not(:disabled) { background: var(--color-surface-hover, #232d42); }
+@media (hover: hover) {
+  .fr-btn:hover:not(:disabled) { background: var(--color-surface-hover, #232d42); }
+}
 .fr-btn:disabled { opacity: 0.4; cursor: default; }
 
 .fr-select {
@@ -162,3 +164,9 @@
 .fullres-osd.fo-hover,
 .fullres-osd.fo-hover * { cursor: pointer; }
 .fr-btn.active { background: var(--color-primary, #5b8dee); border-color: var(--color-primary, #5b8dee); color: #fff; }
+
+/* Touch: viewer toolbar controls meet the 44px target size */
+@media (pointer: coarse) {
+    .fr-btn, .fr-select { min-height: 44px; }
+    .fr-btn.icon { min-width: 44px; justify-content: center; }
+}

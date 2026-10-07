@@ -79,9 +79,11 @@
     display: none;
 }
 
-.btn-filter-toggle:hover {
-    color: var(--color-text-primary);
-    background: rgba(255, 255, 255, 0.1);
+@media (hover: hover) {
+  .btn-filter-toggle:hover {
+      color: var(--color-text-primary);
+      background: rgba(255, 255, 255, 0.1);
+  }
 }
 
 .filters-content {
@@ -168,8 +170,10 @@
     border-radius: 3px;
 }
 
-.filters-content::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+@media (hover: hover) {
+  .filters-content::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+  }
 }
 
 /* ===== RESULTS SECTION ===== */
@@ -279,9 +283,11 @@
     transition: all 0.2s ease;
 }
 
-.metadata-table th.sortable:hover {
-    color: var(--color-primary);
-    background: rgba(99, 102, 241, 0.1);
+@media (hover: hover) {
+  .metadata-table th.sortable:hover {
+      color: var(--color-primary);
+      background: rgba(99, 102, 241, 0.1);
+  }
 }
 
 .th-checkbox {
@@ -302,16 +308,20 @@
     transition: background 0.2s ease;
 }
 
-.data-row:hover {
-    background: rgba(255, 255, 255, 0.05);
+@media (hover: hover) {
+  .data-row:hover {
+      background: rgba(255, 255, 255, 0.05);
+  }
 }
 
 .data-row.selected {
     background: rgba(99, 102, 241, 0.15);
 }
 
-.data-row.selected:hover {
-    background: rgba(99, 102, 241, 0.25);
+@media (hover: hover) {
+  .data-row.selected:hover {
+      background: rgba(99, 102, 241, 0.25);
+  }
 }
 
 .td-checkbox {
@@ -410,9 +420,11 @@
     justify-content: center;
 }
 
-.action-btn:hover {
-    color: var(--color-text-primary);
-    background: rgba(99, 102, 241, 0.2);
+@media (hover: hover) {
+  .action-btn:hover {
+      color: var(--color-text-primary);
+      background: rgba(99, 102, 241, 0.2);
+  }
 }
 
 /* ===== PAGINATION ===== */
@@ -441,9 +453,11 @@
     transition: all 0.2s ease;
 }
 
-.pagination button:not(:disabled):hover {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
+@media (hover: hover) {
+  .pagination button:not(:disabled):hover {
+      background: var(--color-primary);
+      border-color: var(--color-primary);
+  }
 }
 
 .pagination button:disabled {
@@ -594,8 +608,10 @@
     transition: all 0.2s ease;
 }
 
-.table-wrapper::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.6) !important;
+@media (hover: hover) {
+  .table-wrapper::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(255, 255, 255, 0.6) !important;
+  }
 }
 
 .table-wrapper::-webkit-scrollbar-corner {

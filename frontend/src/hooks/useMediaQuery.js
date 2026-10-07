@@ -18,3 +18,7 @@ export default function useMediaQuery(query) {
 
 export const useIsMobile = () => useMediaQuery('(max-width: 1024px)');
 export const useIsPhone = () => useMediaQuery('(max-width: 640px)');
+// Touch tablets (iPad, portrait and landscape)
+export const useIsTablet = () => useMediaQuery('(min-width: 768px) and (max-width: 1194px) and (pointer: coarse)');
+// Bottom tab bar instead of the sidebar; mirrors the media query in Layout.css
+export const useIsTouchNav = () => useMediaQuery('(max-width: 1024px), (max-width: 1194px) and (pointer: coarse)');

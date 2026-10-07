@@ -74,8 +74,10 @@
     text-align: left;
     cursor: pointer;
 }
-.so-legend-row:hover {
-    background: var(--color-surface-hover, #232d42);
+@media (hover: hover) {
+  .so-legend-row:hover {
+      background: var(--color-surface-hover, #232d42);
+  }
 }
 .so-legend-row.off {
     opacity: 0.4;

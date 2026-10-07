@@ -121,8 +121,10 @@
     transition: background 0.2s;
 }
 
-.clickable-row:hover {
-    background: rgba(255, 255, 255, 0.05);
+@media (hover: hover) {
+  .clickable-row:hover {
+      background: rgba(255, 255, 255, 0.05);
+  }
 }
 
 .btn-icon {
@@ -135,9 +137,11 @@
     transition: all 0.2s;
 }
 
-.btn-icon:hover {
-    background: rgba(99, 102, 241, 0.2);
-    color: var(--accent-primary);
+@media (hover: hover) {
+  .btn-icon:hover {
+      background: rgba(99, 102, 241, 0.2);
+      color: var(--accent-primary);
+  }
 }
 
 /* Pagination */
@@ -165,9 +169,11 @@
     transition: all 0.2s;
 }
 
-.pagination button:not(:disabled):hover {
-    background: var(--accent-primary);
-    border-color: var(--accent-primary);
+@media (hover: hover) {
+  .pagination button:not(:disabled):hover {
+      background: var(--accent-primary);
+      border-color: var(--accent-primary);
+  }
 }
 
 .pagination button:disabled {
@@ -227,9 +233,11 @@
     display: flex;
 }
 
-.modal-header button:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+@media (hover: hover) {
+  .modal-header button:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+  }
 }
 
 .modal-body {

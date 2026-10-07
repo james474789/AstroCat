@@ -7,9 +7,11 @@
     transition: all 0.2s ease;
 }
 
-.filter-section:hover {
-    border-color: var(--color-border-hover, var(--color-border));
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+@media (hover: hover) {
+  .filter-section:hover {
+      border-color: var(--color-border-hover, var(--color-border));
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
 }
 
 .filter-section-header {
@@ -28,8 +30,10 @@
     transition: background-color 0.2s ease;
 }
 
-.filter-section-header:hover {
-    background: linear-gradient(135deg, var(--color-surface-alt) 0%, var(--color-surface) 100%);
+@media (hover: hover) {
+  .filter-section-header:hover {
+      background: linear-gradient(135deg, var(--color-surface-alt) 0%, var(--color-surface) 100%);
+  }
 }
 
 .filter-section-header:active {

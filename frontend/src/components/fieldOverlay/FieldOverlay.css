@@ -32,7 +32,7 @@
 .field-overlay-popover {
     position: fixed;
     z-index: 1000;
-    width: 320px;
+    width: min(320px, calc(100vw - 16px));
     max-height: 300px;
     display: flex;
     flex-direction: column;
@@ -77,8 +77,10 @@
     color: inherit;
     text-decoration: none;
 }
-.fo-pop-list a:hover {
-    background: var(--color-surface-hover, #232d42);
+@media (hover: hover) {
+  .fo-pop-list a:hover {
+      background: var(--color-surface-hover, #232d42);
+  }
 }
 .fo-pop-name {
     white-space: nowrap;

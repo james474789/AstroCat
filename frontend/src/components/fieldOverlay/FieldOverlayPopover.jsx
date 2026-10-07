@@ -28,7 +28,7 @@ export default function FieldOverlayPopover({ group, x, y, onClose }) {
         };
     }, [onClose]);
 
-    const left = Math.max(8, Math.min(x + 8, window.innerWidth - 328));
+    const left = Math.max(8, Math.min(x + 8, window.innerWidth - Math.min(320, window.innerWidth - 16) - 8));
     const top = Math.max(8, Math.min(y + 8, window.innerHeight - 320));
     const more = group.count - group.members.length;
 

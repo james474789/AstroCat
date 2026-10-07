@@ -80,9 +80,11 @@
     flex-shrink: 0;
 }
 
-.filter-chip-remove:hover {
-    background: rgba(255, 255, 255, 0.6);
-    transform: scale(1.15);
+@media (hover: hover) {
+  .filter-chip-remove:hover {
+      background: rgba(255, 255, 255, 0.6);
+      transform: scale(1.15);
+  }
 }
 
 .filter-chip-remove:active {

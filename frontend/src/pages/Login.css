@@ -105,8 +105,10 @@
     margin-top: 10px;
 }
 
-.login-button:hover:not(:disabled) {
-    background-color: #2ea043;
+@media (hover: hover) {
+  .login-button:hover:not(:disabled) {
+      background-color: #2ea043;
+  }
 }
 
 .login-button:disabled {

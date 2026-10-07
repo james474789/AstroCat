@@ -149,8 +149,10 @@
     transition: all var(--transition-fast);
 }
 
-.top-object-item:hover {
-    background: var(--color-surface-elevated);
+@media (hover: hover) {
+  .top-object-item:hover {
+      background: var(--color-surface-elevated);
+  }
 }
 
 .object-rank {
@@ -282,4 +284,10 @@
     font-weight: 600;
     color: var(--color-primary);
     white-space: nowrap;
+}
+/* Touch tablets in landscape have the width for four stat tiles */
+@media (min-width: 1025px) and (max-width: 1200px) and (pointer: coarse) {
+    .stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
 }

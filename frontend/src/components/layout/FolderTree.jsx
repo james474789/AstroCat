@@ -13,7 +13,7 @@ const isPathParent = (parent, child) => {
     return nextChar === '/' || nextChar === '\\';
 };
 
-function FolderNode({ item, level, selectedPath, onSelect, onContextMenu }) {
+function FolderNode({ item, level, selectedPath, onSelect, onContextMenu, showMenu }) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [children, setChildren] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -94,6 +94,17 @@ function FolderNode({ item, level, selectedPath, onSelect, onContextMenu }) {
                         {item.image_count.toLocaleString()}
                     </span>
                 )}
+                {/* Touch has no right-click and iOS long-press is unreliable, so offer an explicit button */}
+                {showMenu && <button
+                    type="button"
+                    className="folder-more"
+                    aria-label={`Actions for ${item.name}`}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        const r = e.currentTarget.getBoundingClientRect();
+                        onContextMenu({ preventDefault() {}, clientX: r.left, clientY: r.bottom }, item.path);
+                    }}
+                >⋯</button>}
             </div>
             {error && <div className="folder-error" style={{ paddingLeft: `${(level + 1) * 16}px` }}>{error}</div>}
             {isExpanded && (
@@ -106,6 +117,7 @@ function FolderNode({ item, level, selectedPath, onSelect, onContextMenu }) {
                             selectedPath={selectedPath}
                             onSelect={onSelect}
                             onContextMenu={onContextMenu}
+                            showMenu={showMenu}
                         />
                     ))}
                     {children.length === 0 && !loading && (
@@ -217,6 +229,7 @@ export default function FolderTree({ selectedPath, onSelect, showContextMenu = t
                     selectedPath={selectedPath}
                     onSelect={onSelect}
                     onContextMenu={handleContextMenu}
+                    showMenu={showContextMenu}
                 />
             ))}
             {!loading && roots.length === 0 && (

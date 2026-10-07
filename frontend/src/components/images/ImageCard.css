@@ -216,7 +216,7 @@
 }
 
 /* Touch: long-press contextmenu is unreliable on iOS, so show an explicit button */
-@media (hover: none) and (pointer: coarse) {
+@media (pointer: coarse) {
     .image-card-more {
         display: flex;
         align-items: center;
@@ -225,8 +225,8 @@
         top: 4px;
         right: 4px;
         z-index: 5;
-        width: 36px;
-        height: 36px;
+        width: 44px;
+        height: 44px;
         border: none;
         border-radius: 50%;
         background: rgba(0, 0, 0, 0.6);

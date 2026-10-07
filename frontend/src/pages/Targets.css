@@ -62,9 +62,11 @@
     opacity: 0.7;
 }
 
-.targets-folder-crumb-clear:hover {
-    opacity: 1;
-    background: rgba(0, 0, 0, 0.08);
+@media (hover: hover) {
+  .targets-folder-crumb-clear:hover {
+      opacity: 1;
+      background: rgba(0, 0, 0, 0.08);
+  }
 }
 
 @media (max-width: 1024px) {
@@ -116,8 +118,10 @@
     white-space: nowrap;
 }
 
-.targets-unassigned-link:hover {
-    text-decoration: underline;
+@media (hover: hover) {
+  .targets-unassigned-link:hover {
+      text-decoration: underline;
+  }
 }
 
 /* Toolbar */
@@ -152,9 +156,11 @@
     transition: all 0.15s ease;
 }
 
-.catalog-chip:hover {
-    border-color: var(--color-border-light);
-    color: var(--color-text-primary);
+@media (hover: hover) {
+  .catalog-chip:hover {
+      border-color: var(--color-border-light);
+      color: var(--color-text-primary);
+  }
 }
 
 .catalog-chip.active {
@@ -184,9 +190,11 @@
     transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.target-row:hover {
-    border-color: var(--color-primary);
-    background: var(--color-surface-hover);
+@media (hover: hover) {
+  .target-row:hover {
+      border-color: var(--color-primary);
+      background: var(--color-surface-hover);
+  }
 }
 
 .target-thumb {

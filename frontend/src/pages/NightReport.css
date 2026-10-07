@@ -81,8 +81,10 @@
     cursor: pointer;
 }
 
-.night-table tbody tr:hover {
-    background: var(--color-surface-hover);
+@media (hover: hover) {
+  .night-table tbody tr:hover {
+      background: var(--color-surface-hover);
+  }
 }
 
 .night-table tr.flagged td:first-child {

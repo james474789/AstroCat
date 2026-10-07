@@ -54,7 +54,9 @@
     font-size: 0.9rem;
 }
 
-.equip-tab:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
+@media (hover: hover) {
+  .equip-tab:hover { background: var(--color-surface-hover); color: var(--color-text-primary); }
+}
 .equip-tab.active { background: var(--color-surface-elevated); color: var(--color-primary); font-weight: 600; }
 
 .assign-now-btn { margin-left: auto; }
@@ -435,7 +437,9 @@
     display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; background: none; border: none;
     border-radius: 6px; color: var(--color-text-primary); font-size: 0.85rem; text-decoration: none; cursor: pointer; text-align: left;
 }
-.rig-row-menu-list > *:hover:not(:disabled) { background: var(--color-surface-hover); }
+@media (hover: hover) {
+  .rig-row-menu-list > *:hover:not(:disabled) { background: var(--color-surface-hover); }
+}
 .rig-row-menu-list .danger { color: var(--color-error); }
 .rig-row-menu-list > *:disabled { opacity: 0.5; cursor: not-allowed; }
 .rig-row-detail { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.25rem 0.75rem 0.75rem 2.6rem; }
@@ -475,7 +479,9 @@
     cursor: pointer;
 }
 
-.unassigned-header:hover { background: var(--color-surface-hover); }
+@media (hover: hover) {
+  .unassigned-header:hover { background: var(--color-surface-hover); }
+}
 .unassigned-header h3 { margin: 0; font-size: 1rem; color: var(--color-text-primary); }
 .unassigned-caret { width: 1rem; color: var(--color-text-secondary); }
 
