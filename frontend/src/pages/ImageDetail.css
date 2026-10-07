@@ -100,6 +100,7 @@
 }
 
 .image-preview {
+    position: relative;
     aspect-ratio: 4 / 3;
     border-radius: var(--border-radius-lg);
     overflow: hidden;
@@ -454,4 +455,18 @@
         text-align: center;
         justify-content: center;
     }
+}
+
+/* AstroCat annotations legend, outside the zoom transform */
+.image-sky-legend {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 20;
+}
+
+.annotation-warning-icon {
+    margin-left: 6px;
+    vertical-align: -2px;
+    color: var(--color-warning);
 }

@@ -1,0 +1,110 @@
+/* Catalog colours: legible on dark sky, distinct from the images-in-field amber/cyan */
+:root {
+    --sky-messier: #f87171;
+    --sky-caldwell: #c084fc;
+    --sky-ngc: #4ade80;
+    --sky-ic: #60a5fa;
+    --sky-sh2: #f472b6;
+    --sky-star: #e2e8f0;
+}
+
+.so-cat-MESSIER { color: var(--sky-messier); }
+.so-cat-CALDWELL { color: var(--sky-caldwell); }
+.so-cat-NGC { color: var(--sky-ngc); }
+.so-cat-IC { color: var(--sky-ic); }
+.so-cat-SH2 { color: var(--sky-sh2); }
+.so-cat-NAMED_STAR { color: var(--sky-star); }
+
+.sky-overlay-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.so-shape {
+    fill: none;
+    stroke: currentColor;
+    stroke-opacity: 0.9;
+}
+.so-shape.hovered {
+    fill: currentColor;
+    fill-opacity: 0.12;
+    stroke-opacity: 1;
+}
+
+.so-label {
+    fill: currentColor;
+    stroke: rgba(0, 0, 0, 0.85);
+    paint-order: stroke;
+    font-family: inherit;
+    font-weight: 600;
+}
+.so-label .so-detail {
+    fill: #e2e8f0;
+    font-weight: 500;
+}
+
+/* Legend */
+.sky-overlay-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    min-width: 140px;
+    background: rgba(10, 14, 23, 0.82);
+    border: 1px solid var(--color-border, #2d3a4f);
+    border-radius: 8px;
+    color: var(--color-text-primary, #f1f5f9);
+    font-size: 0.75rem;
+    backdrop-filter: blur(4px);
+}
+.so-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 6px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.so-legend-row:hover {
+    background: var(--color-surface-hover, #232d42);
+}
+.so-legend-row.off {
+    opacity: 0.4;
+}
+.so-swatch {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+}
+.so-legend-name {
+    flex: 1;
+}
+.so-legend-count {
+    color: var(--color-text-secondary, #94a3b8);
+    font-variant-numeric: tabular-nums;
+}
+.so-legend-note {
+    padding: 3px 6px;
+    color: var(--color-text-secondary, #94a3b8);
+}
+.so-legend-warning {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
+    padding: 4px 6px 2px;
+    border-top: 1px solid var(--color-border, #2d3a4f);
+    color: var(--color-warning, #eab308);
+    cursor: help;
+}

@@ -151,6 +151,14 @@
 
 /* Images-in-field overlay */
 .fullres-stage .field-overlay-layer { z-index: 5; }
+.fullres-stage .sky-overlay-layer { z-index: 4; }
+.fullres-sky-legend {
+    position: absolute;
+    left: 0.75rem;
+    top: calc(3.75rem + var(--safe-top, 0px));
+    z-index: 20;
+}
+.fr-warn-icon { margin-left: 4px; color: var(--color-warning, #eab308); }
 .fullres-osd.fo-hover,
 .fullres-osd.fo-hover * { cursor: pointer; }
 .fr-btn.active { background: var(--color-primary, #5b8dee); border-color: var(--color-primary, #5b8dee); color: #fff; }

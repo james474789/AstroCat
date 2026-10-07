@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import OpenSeadragon from 'openseadragon';
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minimize, ScanSearch, Frame, Loader2, Layers } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Maximize, Minimize, ScanSearch, Frame, Loader2, Layers, Sparkles, AlertTriangle } from 'lucide-react';
 import {
     fetchImage, fetchFullRes, getFullResDziUrl, getFullResSourceUrl,
     API_BASE_URL, formatRA, formatDec,
@@ -13,6 +13,10 @@ import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays
 import { hitTest } from '../utils/fieldOverlay';
 import FieldOverlayLayer from '../components/fieldOverlay/FieldOverlayLayer';
 import FieldOverlayPopover from '../components/fieldOverlay/FieldOverlayPopover';
+import useSkyOverlay from '../hooks/useSkyOverlay';
+import { hitTestSky, searchNameFor } from '../utils/skyOverlay';
+import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
+import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
 import './FullResViewer.css';
 
 const PRESET_LABELS = {
@@ -21,6 +25,16 @@ const PRESET_LABELS = {
     strong: 'Strong STF',
     unlinked: 'Unlinked colour',
 };
+const SKY_STORAGE_KEY = 'astrocat.fullresSkyOverlay';
+
+function readSkyOn() {
+    try {
+        return localStorage.getItem(SKY_STORAGE_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
 const STATE_LABELS = {
     queued: 'Queued',
     loading: 'Loading',
@@ -76,11 +90,27 @@ export default function FullResViewer() {
     const hoveredOverlayId = overlayHover?.imageId === id ? overlayHover.groupId : null;
     const overlayPopover = overlayPopoverState?.imageId === id ? overlayPopoverState : null;
     const overlayClickRef = useRef(null);
+    // AstroCat annotations (catalog objects from the plate solution), on/off remembered per browser
+    const [skyOn, setSkyOn] = useState(readSkyOn);
+    const [skyHover, setSkyHover] = useState(null);
+    const hoveredSkyKey = skyHover?.imageId === id ? skyHover.key : null;
 
     const imageQuery = useQuery({ queryKey: ['image', id], queryFn: () => fetchImage(id), staleTime: 60 * 1000 });
     const image = imageQuery.data && String(imageQuery.data.id) === String(id) ? imageQuery.data : null;
     const overlays = useFieldOverlays(image);
     const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
+    const sky = useSkyOverlay(image, skyOn);
+    const skyUnavailable = sky.unavailable;
+    const toggleSky = useCallback(() => {
+        setSkyOn((on) => {
+            try {
+                localStorage.setItem(SKY_STORAGE_KEY, on ? '0' : '1');
+            } catch {
+                // per-browser convenience only
+            }
+            return !on;
+        });
+    }, []);
 
     const manifest = fullres?.manifest;
     const nativeSize = useCallback(() => {
@@ -127,7 +157,8 @@ export default function FullResViewer() {
                 lastViewRef.current = { cx: c.x, cy: c.y, zoom, ...curDimsRef.current };
                 const o = vp.pixelFromPoint(new OpenSeadragon.Point(0, 0), true);
                 const u = vp.pixelFromPoint(new OpenSeadragon.Point(1, 0), true);
-                setVpMap({ ox: o.x, oy: o.y, k: u.x - o.x });
+                const cs = vp.getContainerSize();
+                setVpMap({ ox: o.x, oy: o.y, k: u.x - o.x, cw: cs.x, ch: cs.y });
             });
         };
         viewer.addHandler('animation', sync);
@@ -278,6 +309,8 @@ export default function FullResViewer() {
     const overlayClip = vpMap && image
         ? { x: vpMap.ox, y: vpMap.oy, w: vpMap.k, h: (image.height_pixels / W) * vpMap.k }
         : null;
+    // Visible stage area plus a margin, so off-screen catalog objects are skipped while zoomed in
+    const stageView = vpMap?.cw ? { x: -50, y: -50, w: vpMap.cw + 100, h: vpMap.ch + 100 } : null;
 
     // Point in the viewer element -> overlay group under it (native image pixels)
     const overlayHitAt = useCallback((x, y) => {
@@ -290,8 +323,27 @@ export default function FullResViewer() {
         return hitTest(overlays.groups, px, py);
     }, [overlays.groups, image]);
 
+    // Point in the viewer element -> catalog object under it (native image pixels)
+    const skyHitAt = useCallback((x, y) => {
+        const viewer = viewerRef.current;
+        if (!sky.objects.length || !viewer || !viewer.world.getItemCount() || !image || !vpMap) return null;
+        const vp = viewer.viewport.pointFromPixel(new OpenSeadragon.Point(x, y), true);
+        const px = vp.x * image.width_pixels;
+        const py = vp.y * image.width_pixels;
+        if (px < 0 || py < 0 || px > image.width_pixels || py > image.height_pixels) return null;
+        return hitTestSky(sky.objects, px, py, image.width_pixels / vpMap.k);
+    }, [sky.objects, image, vpMap]);
+
     useEffect(() => {
         overlayClickRef.current = (e) => {
+            // Catalog objects first: a click searches; a touch tap highlights, a second tap searches
+            const skyObj = skyHitAt(e.position.x, e.position.y);
+            if (skyObj) {
+                const touch = e.originalEvent?.pointerType && e.originalEvent.pointerType !== 'mouse';
+                if (touch && skyObj.key !== hoveredSkyKey) setSkyHover({ imageId: id, key: skyObj.key });
+                else navigate(`/search?object_name=${encodeURIComponent(searchNameFor(skyObj))}`);
+                return;
+            }
             const hit = overlayHitAt(e.position.x, e.position.y);
             if (!hit) return;
             if (hit.count > 1) {
@@ -301,7 +353,7 @@ export default function FullResViewer() {
                 navigate(`/images/${hit.id}`);
             }
         };
-    }, [overlayHitAt, navigate, id]);
+    }, [overlayHitAt, skyHitAt, hoveredSkyKey, navigate, id]);
     const closeOverlayPopover = useCallback(() => setOverlayPopover(null), []);
 
     // ---- Controls -----------------------------------------------------------------------------
@@ -348,6 +400,7 @@ export default function FullResViewer() {
                 arrowleft: goPrev, arrowright: goNext,
                 f: toggleFullscreen, p: cyclePreset,
                 o: () => { if (!overlaysUnavailable) cycleOverlays(); },
+                c: () => { if (!skyUnavailable) toggleSky(); },
                 escape: () => { if (!document.fullscreenElement) back(); },
                 g: returnToSearch,
             }[k];
@@ -358,7 +411,7 @@ export default function FullResViewer() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [zoomBy, panBy, fit, oneToOne, goPrev, goNext, toggleFullscreen, cyclePreset, back, returnToSearch, overlaysUnavailable, cycleOverlays]);
+    }, [zoomBy, panBy, fit, oneToOne, goPrev, goNext, toggleFullscreen, cyclePreset, back, returnToSearch, overlaysUnavailable, cycleOverlays, skyUnavailable, toggleSky]);
 
     useEffect(() => {
         const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -387,7 +440,9 @@ export default function FullResViewer() {
         if (e.pointerType === 'mouse') {
             updateCursor(e.clientX, e.clientY);
             const rect = osdRef.current?.getBoundingClientRect();
-            const hit = rect ? overlayHitAt(e.clientX - rect.left, e.clientY - rect.top) : null;
+            const skyObj = rect ? skyHitAt(e.clientX - rect.left, e.clientY - rect.top) : null;
+            setSkyHover(skyObj ? { imageId: id, key: skyObj.key } : null);
+            const hit = rect && !skyObj ? overlayHitAt(e.clientX - rect.left, e.clientY - rect.top) : null;
             setOverlayHover(hit ? { imageId: id, groupId: hit.id } : null);
         }
     };
@@ -469,6 +524,18 @@ export default function FullResViewer() {
                         overlays.isLoading ? ' …' : ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`
                     )}
                 </button>
+                <button
+                    className={`fr-btn${sky.active ? ' active' : ''}`}
+                    onClick={toggleSky}
+                    disabled={!!skyUnavailable}
+                    title={skyUnavailable
+                        || (sky.active && sky.warning
+                            ? `AstroCat annotations — approximate: ${sky.warning} (C)`
+                            : 'AstroCat annotations: catalog objects from the plate solution (C)')}
+                >
+                    <Sparkles size={16} /> Annotations{sky.active && (sky.isLoading ? ' …' : ` (${sky.objects.length})`)}
+                    {sky.active && sky.warning && <AlertTriangle size={14} className="fr-warn-icon" />}
+                </button>
                 <button className="fr-btn" onClick={fit} title="Fit (0)"><Frame size={16} /> Fit</button>
                 <button className="fr-btn" onClick={oneToOne} title="100% native pixels (1)"><ScanSearch size={16} /> 1:1</button>
                 <span className="fr-zoom">{zoomPct != null ? `${zoomPct < 10 ? zoomPct.toFixed(1) : Math.round(zoomPct)}%` : ''}</span>
@@ -487,9 +554,19 @@ export default function FullResViewer() {
                     if (e.pointerType !== 'mouse') return;
                     setCursor(null);
                     setOverlayHover(null);
+                    setSkyHover(null);
                 }}
             >
-                <div className={`fullres-osd${hoveredOverlayId != null ? ' fo-hover' : ''}`} ref={osdRef} />
+                <div className={`fullres-osd${hoveredOverlayId != null || hoveredSkyKey != null ? ' fo-hover' : ''}`} ref={osdRef} />
+                {overlayClip && sky.active && sky.objects.length > 0 && (
+                    <SkyOverlayLayer
+                        objects={sky.objects}
+                        toScreen={overlayToScreen}
+                        clip={overlayClip}
+                        hoveredKey={hoveredSkyKey}
+                        view={stageView}
+                    />
+                )}
                 {overlayClip && overlays.groups.length > 0 && (
                     <FieldOverlayLayer
                         groups={overlays.groups}
@@ -524,6 +601,18 @@ export default function FullResViewer() {
             )}
             {phase.kind === 'ready' && scale > 1 && (
                 <div className="fullres-chip subtle">Rendered at 1/{scale} resolution</div>
+            )}
+
+            {sky.active && (
+                <SkyOverlayLegend
+                    className="fullres-sky-legend"
+                    counts={sky.counts}
+                    hidden={sky.hidden}
+                    onToggle={sky.toggleCatalog}
+                    warning={sky.warning}
+                    isLoading={sky.isLoading}
+                    isError={sky.isError}
+                />
             )}
 
             {overlayPopover && (

@@ -19,6 +19,7 @@ before starting any of the four.
 
 | T1 | Link masters to every central target in their field (fixes "no masters" on e.g. SH2159) | [20261001-T1-target-master-linking.md](20261001-T1-target-master-linking.md) | F2 (shipped) | no (optional data migration) |
 | V1 | Full-resolution deep-zoom viewer (on-demand DZI tiles, debayer, STF presets, LRU cache) — **Implemented (uncommitted; VERSION 20261001.03)** | [20261001-V1-full-resolution-viewer.md](20261001-V1-full-resolution-viewer.md) | none | no |
+| A1 | Dynamic catalog overlay ("AstroCat annotations") from the stored plate solution (SIP), all catalogs, coloured, merged, ellipses, legend; Image Detail + full-res viewer — **Implemented (uncommitted; VERSION 20261007.01)** | [20261007-A1-dynamic-sky-overlay.md](20261007-A1-dynamic-sky-overlay.md) | none | no |
 
 ## 1. Recommended execution plan
 
