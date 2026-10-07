@@ -11,6 +11,7 @@ from app.extractors.base import BaseExtractor
 from app.extractors.fits_extractor import FITSExtractor
 from app.utils.plate_scale import with_image_size
 from app.utils.header_values import parse_sexagesimal
+from app.utils.pixinsight_wcs import pixinsight_wcs_cards, with_pixinsight_wcs
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,14 @@ class XISFExtractor(BaseExtractor):
             # Extract FITS keywords if present
             fits_keywords = im_md.get("FITSKeywords", [])
             header_dict = self._convert_fits_keywords(fits_keywords)
-            
+
+            # A PixInsight (ImageSolver) solution lives in XISF properties, not
+            # FITS cards. When present it wins over header pointing/WCS, and its
+            # cards are stored in raw_header so the sky overlay can use them.
+            pi_cards = pixinsight_wcs_cards(im_md.get("XISFProperties"), metadata.get("height_pixels"))
+            if pi_cards:
+                header_dict = with_pixinsight_wcs(header_dict, pi_cards)
+
             # Use FITSExtractor logic to parse common keywords
             # We instantiate a temporary FITSExtractor to reuse its helper methods
             fits_ext = FITSExtractor(self.file_path)

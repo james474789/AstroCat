@@ -142,6 +142,11 @@ def _backfill_sidecar_wcs_cards():
     return backfill_sidecar_wcs_cards(dry_run=False)
 
 
+def _backfill_pixinsight_wcs():
+    from app.scripts.backfill_pixinsight_wcs import backfill_pixinsight_wcs
+    return backfill_pixinsight_wcs(dry_run=False)
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -218,6 +223,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0015_backfill_sidecar_wcs_cards",
         "Store the linear WCS from plate-solve sidecar .ini files (and the row order it was solved in) so the AstroCat annotation overlay works for sidecar-solved images.",
         _backfill_sidecar_wcs_cards,
+    ),
+    DataMigrationSpec(
+        "0016_backfill_pixinsight_wcs",
+        "Read PixInsight ImageSolver solutions stored in XISF properties (centre, scale, rotation, field radius) for XISF images indexed from the mount's pointing coordinates, then re-match catalogs and targets.",
+        _backfill_pixinsight_wcs,
     ),
 ]
 
