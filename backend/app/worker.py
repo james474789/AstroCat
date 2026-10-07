@@ -69,6 +69,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.indexer.update_mount_stats",
         "schedule": 60.0,  # Run every 60 seconds
     },
+    "reconcile-thumbnail-stats": {  # full cache walk (minutes on a big cache): daily, off-peak, never more often
+        "task": "app.tasks.indexer.update_thumbnail_stats",
+        "schedule": crontab(hour=3, minute=30),
+    },
     "precompute-tonight-recommendations": {  # R1: warm tonight's recommendations
         "task": "app.tasks.recommend.precompute_tonight",
         "schedule": crontab(hour=12, minute=0),
@@ -90,6 +94,8 @@ celery_app.conf.beat_schedule = {
 
 # Optional: Configure task routes for different queues
 celery_app.conf.task_routes = {
+    # The cache walk is slow; keep it off the indexer queue so it never delays indexing.
+    "app.tasks.indexer.update_thumbnail_stats": {"queue": "thumbnails"},
     "app.tasks.indexer.*": {"queue": "indexer"},
     "app.tasks.thumbnails.*": {"queue": "thumbnails"},
     "app.tasks.bulk.*": {"queue": "indexer"},

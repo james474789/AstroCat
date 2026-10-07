@@ -480,10 +480,15 @@ async def clear_thumbnail_cache():
         await session.execute(stmt)
         await session.commit()
     
-    # 3. Perform a rescan to update the database stats
-    from app.tasks.indexer import update_thumbnail_stats
-    update_thumbnail_stats()
-        
+    # 3. The directory is now empty, so zero the stats instead of re-walking it
+    from sqlalchemy import text
+    async with AsyncSessionLocal() as session:
+        await session.execute(text(
+            "INSERT INTO system_stats (category, count, size_bytes) VALUES ('thumbnails', 0, 0) "
+            "ON CONFLICT (category) DO UPDATE SET count = 0, size_bytes = 0, updated_at = now()"
+        ))
+        await session.commit()
+
     return {"message": "Cache cleared and stats updated", "files_deleted": deleted_count}
 
 

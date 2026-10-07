@@ -25,7 +25,7 @@ def generate_thumbnail(self, image_id: int, force: bool = False):
     # TODO: Implement in Phase 3
     from app.database import SessionLocal
     from app.models.image import Image
-    from app.services.thumbnails import ThumbnailGenerator
+    from app.services.thumbnail_stats import generate_tracked
     import os
     import logging
     
@@ -54,8 +54,8 @@ def generate_thumbnail(self, image_id: int, force: bool = False):
             is_subframe = (image.subtype == ImageSubtype.SUB_FRAME)
             
             # Apply STF stretch for subframes by default
-            thumb_path = ThumbnailGenerator.generate(
-                image.file_path, 
+            thumb_path = generate_tracked(
+                image.file_path,
                 thumb_cache_dir, 
                 max_size=max_size,
                 is_subframe=is_subframe, 

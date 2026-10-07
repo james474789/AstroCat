@@ -328,8 +328,8 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
     thumbnail_path = None
     if generate_thumbnail:
         # 1.5 Generate Thumbnail
-        from app.services.thumbnails import ThumbnailGenerator
-        
+        from app.services.thumbnail_stats import generate_tracked
+
         # Determine if stf stretch is needed (Default to True for new imports as they are likely subframes)
         # Ideally extractors should return this.
         is_subframe = True
@@ -342,7 +342,7 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
         
         try:
             max_size = (settings.thumbnail_max_size, settings.thumbnail_max_size)
-            thumbnail_path = ThumbnailGenerator.generate(
+            thumbnail_path = generate_tracked(
                 file_path,
                 settings.thumbnail_cache_path,
                 max_size=max_size,
@@ -702,22 +702,33 @@ def reindex_all(self):
     return {"status": "completed", "paths": results, "duration": duration}
 
 
+@celery_app.task(name="app.tasks.indexer.update_thumbnail_stats")
 def update_thumbnail_stats():
-    """Update thumbnail statistics in the database by walking the cache directory."""
+    """
+    Recount the thumbnail cache by walking the directory and store the totals.
+
+    SLOW (minutes for ~100k files): never call this from a request or a short
+    interval. Normal upkeep is incremental (app/services/thumbnail_stats.py);
+    this only seeds the row (data migration) and corrects drift (daily beat).
+    """
     logger.info("Updating thumbnail statistics in database...")
     thumb_cache_dir = settings.thumbnail_cache_path
     count = 0
     size_bytes = 0
-    
+
     if os.path.exists(thumb_cache_dir):
         try:
-            for f in os.listdir(thumb_cache_dir):
-                fp = os.path.join(thumb_cache_dir, f)
-                if os.path.isfile(fp):
-                    count += 1
-                    size_bytes += os.path.getsize(fp)
+            with os.scandir(thumb_cache_dir) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_file():
+                            count += 1
+                            size_bytes += entry.stat().st_size
+                    except OSError:
+                        continue  # deleted mid-walk
         except Exception as e:
             logger.error(f"Error walking thumbnail cache: {e}")
+            return {"status": "error", "message": str(e)}
 
     try:
         with SessionLocal() as session:
@@ -734,8 +745,10 @@ def update_thumbnail_stats():
             stats.size_bytes = size_bytes
             session.commit()
             logger.info(f"Thumbnail stats updated: {count} files, {size_bytes} bytes")
+        return {"status": "completed", "count": count, "size_bytes": size_bytes}
     except Exception as e:
         logger.error(f"Error updating thumbnail stats in DB: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 @celery_app.task(name="app.tasks.indexer.update_mount_stats")
@@ -811,11 +824,8 @@ def regenerate_thumbnails(self):
             for img_id in image_ids:
                 generate_thumbnail.delay(img_id, force=True)
                 
-        # 3. Update stats at the end of the queuing process
-        # Note: This will show old/cleared stats until workers finish their jobs.
-        # But this fulfills the "perform a rescan at the end of their process" requirement.
-        update_thumbnail_stats()
-        
+        # Stats are not recounted here: each generate_thumbnail applies its own
+        # delta as it finishes (a full recount walks the whole cache, minutes).
         return {"status": "completed", "images_queued": len(image_ids)}
     except Exception as e:
         logger.error(f"Error during regenerate_thumbnails task: {e}", exc_info=True)

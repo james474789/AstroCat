@@ -132,6 +132,11 @@ def _restore_header_rotation():
     return restore_header_rotation(dry_run=False)
 
 
+def _seed_thumbnail_stats():
+    from app.tasks.indexer import update_thumbnail_stats
+    return update_thumbnail_stats()
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -198,6 +203,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0013_restore_header_rotation",
         "Restore rotation for header-solved images whose CD/PC/CROTA2 keywords or rotator keyword 0.0 were missed by 0012, now read directly from the stored header.",
         _restore_header_rotation,
+    ),
+    DataMigrationSpec(
+        "0014_seed_thumbnail_stats",
+        "Count the thumbnail cache once so the Admin thumbnail tiles show real numbers (afterwards kept current incrementally; slow on a large cache).",
+        _seed_thumbnail_stats,
     ),
 ]
 

@@ -212,13 +212,17 @@ class ThumbnailGenerator:
             return None
 
     @staticmethod
+    def thumb_path_for(source_path: str, output_dir: str) -> str:
+        source = Path(source_path)
+        path_hash = hashlib.md5(str(source).encode("utf-8")).hexdigest()[:8]
+        return os.path.join(output_dir, f"{source.stem}_{path_hash}_thumb.jpg")
+
+    @staticmethod
     def generate(source_path: str, output_dir: str, max_size=(400, 400),
                  is_subframe: bool = True, apply_stf: bool = False,
                  overwrite: bool = False) -> str:
-        source = Path(source_path)
         os.makedirs(output_dir, exist_ok=True)
-        path_hash = hashlib.md5(str(source).encode("utf-8")).hexdigest()[:8]
-        thumb_path = os.path.join(output_dir, f"{source.stem}_{path_hash}_thumb.jpg")
+        thumb_path = ThumbnailGenerator.thumb_path_for(source_path, output_dir)
         if os.path.exists(thumb_path) and not overwrite:
             return thumb_path
         img = ThumbnailGenerator.load_source_image(
