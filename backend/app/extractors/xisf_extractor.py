@@ -11,7 +11,9 @@ from app.extractors.base import BaseExtractor
 from app.extractors.fits_extractor import FITSExtractor
 from app.utils.plate_scale import with_image_size
 from app.utils.header_values import parse_sexagesimal
-from app.utils.pixinsight_wcs import pixinsight_wcs_cards, with_pixinsight_wcs
+from app.utils.pixinsight_wcs import (
+    pixinsight_field, pixinsight_scale_rotation, pixinsight_wcs_cards, with_pixinsight_wcs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,8 @@ class XISFExtractor(BaseExtractor):
             # A PixInsight (ImageSolver) solution lives in XISF properties, not
             # FITS cards. When present it wins over header pointing/WCS, and its
             # cards are stored in raw_header so the sky overlay can use them.
-            pi_cards = pixinsight_wcs_cards(im_md.get("XISFProperties"), metadata.get("height_pixels"))
+            pi_cards = pixinsight_wcs_cards(im_md.get("XISFProperties"),
+                                            metadata.get("width_pixels"), metadata.get("height_pixels"))
             if pi_cards:
                 header_dict = with_pixinsight_wcs(header_dict, pi_cards)
 
@@ -79,6 +82,16 @@ class XISFExtractor(BaseExtractor):
             # WCS center/radius need it.
             wcs_info = fits_ext._extract_wcs(with_image_size(
                 header_dict, metadata.get("width_pixels"), metadata.get("height_pixels")))
+            if wcs_info and pi_cards:
+                # Scale and rotation as PixInsight reports them (the cards keep its
+                # top-down rows, which the generic CD rotation formula doesn't expect).
+                scale_rot = pixinsight_scale_rotation(im_md.get("XISFProperties"))
+                if scale_rot:
+                    wcs_info["pixel_scale"], wcs_info["rotation"] = scale_rot
+                field = pixinsight_field(im_md.get("XISFProperties"), pi_cards,
+                                         metadata.get("width_pixels"), metadata.get("height_pixels"))
+                if field:
+                    wcs_info["ra_center"], wcs_info["dec_center"], wcs_info["radius_degrees"] = field
             if wcs_info:
                 metadata["wcs"] = wcs_info
                 metadata["is_plate_solved"] = True

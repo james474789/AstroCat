@@ -14,7 +14,9 @@ the file header, and are catalog re-matched and target re-resolved (MANUAL
 targets untouched). Rows without a solution are left alone.
 
 Keyset batches of 100, committing per batch. Idempotent: converted rows carry
-the PIWCS marker in raw_header and are skipped on a re-run.
+the PIWCS marker (conversion version) in raw_header and are skipped on a re-run
+unless converted by an older version (v1 mirrored rows and used the linear
+model only).
 
 Usage:
     python -m app.scripts.backfill_pixinsight_wcs
@@ -30,7 +32,7 @@ from app.database import SessionLocal
 from app.extractors.xisf_extractor import XISFExtractor
 from app.models.image import Image
 from app.utils.field_geometry import effective_field_radius
-from app.utils.pixinsight_wcs import MARKER_KEY
+from app.utils.pixinsight_wcs import MARKER_KEY, MARKER_VERSION
 
 BATCH_SIZE = 100
 
@@ -61,7 +63,8 @@ def backfill_pixinsight_wcs(dry_run: bool = False) -> dict:
                 select(Image)
                 .where(func.lower(Image.file_path).like("%.xisf"))
                 .where(or_(Image.astrometry_status.is_(None), Image.astrometry_status != "SOLVED"))
-                .where(or_(Image.raw_header.is_(None), text(f"NOT (images.raw_header ? '{MARKER_KEY}')")))
+                .where(or_(Image.raw_header.is_(None),
+                           text(f"coalesce(images.raw_header->>'{MARKER_KEY}', '') <> '{MARKER_VERSION}'")))
                 .where(Image.id > last_id)
                 .order_by(Image.id)
                 .limit(BATCH_SIZE)

@@ -229,6 +229,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "Read PixInsight ImageSolver solutions stored in XISF properties (centre, scale, rotation, field radius) for XISF images indexed from the mount's pointing coordinates, then re-match catalogs and targets.",
         _backfill_pixinsight_wcs,
     ),
+    DataMigrationSpec(
+        "0017_pixinsight_wcs_distortion",
+        "Redo PixInsight XISF solves imported by 0016: keep PixInsight's top-down row order (the overlay was mirrored) and fit its distortion model as SIP, so centre, radius and overlay match PixInsight.",
+        _backfill_pixinsight_wcs,
+    ),
 ]
 
 _BY_ID = {spec.id: spec for spec in REGISTRY}
