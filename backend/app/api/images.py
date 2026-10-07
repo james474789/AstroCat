@@ -22,7 +22,7 @@ from app.schemas.common import PaginatedResponse
 from app.services.thumbnails import ThumbnailGenerator
 from app.utils.path_security import validate_path_safety, sanitize_filename
 from app.services.quality_filters import QualityFilters, fwhm_arcsec_expr
-from app.services.field_overlaps import compute_field_overlaps, SIZE_RATIO_MAX
+from app.services.field_overlaps import compute_field_overlaps, refine_corners, SIZE_RATIO_MAX
 from app.services import sky_overlay
 from app.utils.field_geometry import effective_field_radius
 
@@ -1842,7 +1842,9 @@ async def _load_field_overlap_groups(db: AsyncSession, image_id: int, mode: str)
         raise HTTPException(status_code=404, detail="Image not found")
     if not image.is_plate_solved:
         return [], False, "not_solved"
-    if image.rotation_degrees is None:
+    # Project through the image's own solution when it has one (exact); the rebuilt TAN needs a rotation
+    current_frame = sky_overlay.resolve_frame(image)
+    if image.rotation_degrees is None and current_frame is None:
         return [], False, "no_rotation"
     radius = effective_field_radius(
         image.field_radius_degrees, image.width_pixels, image.height_pixels, image.pixel_scale_arcsec,
@@ -1885,13 +1887,28 @@ async def _load_field_overlap_groups(db: AsyncSession, image_id: int, mode: str)
         stmt = stmt.where(Image.subtype != ImageSubtype.INTEGRATION_MASTER)
 
     rows = (await db.execute(stmt)).all()
-    result = compute_field_overlaps(image, rows)
+    result = compute_field_overlaps(image, rows, current_frame)
     groups = result["groups"]
     truncated = len(groups) > FIELD_OVERLAP_MAX_GROUPS or len(rows) >= FIELD_OVERLAP_CANDIDATE_LIMIT
     if len(groups) > FIELD_OVERLAP_MAX_GROUPS:
         # Keep the smallest (most specific) footprints, still drawn largest-first
         groups = sorted(groups, key=lambda g: g["area"])[:FIELD_OVERLAP_MAX_GROUPS]
         groups.sort(key=lambda g: -g["area"])
+    if groups:
+        # Redraw the displayed outlines from each representative's own solution (headers loaded for these only)
+        frame_rows = (await db.execute(select(
+            Image.id, Image.wcs_header, Image.raw_header, Image.width_pixels, Image.height_pixels,
+            Image.file_format, Image.pixel_scale_arcsec,
+        ).where(Image.id.in_([g["id"] for g in groups])))).all()
+        cand_frames = {}
+        for r in frame_rows:
+            try:
+                frame = sky_overlay.resolve_frame(r)
+            except Exception:
+                frame = None
+            if frame is not None:
+                cand_frames[r.id] = frame
+        groups = refine_corners(groups, image, current_frame, cand_frames)
     return groups, truncated, result["reason"]
 
 

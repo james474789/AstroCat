@@ -9,10 +9,17 @@ image centre. Pure functions only; the API layer does the DB work.
 Candidates without a rotation get a circular footprint (half-diagonal radius),
 which covers every possible orientation. A current image without a rotation
 can't be used at all: its sky->pixel mapping depends on the angle.
+
+That rebuilt TAN is only a fallback for drawing. When the current image has a
+stored plate solution (sky_overlay.SkyFrame: SIP, solve-grid rescale, ASTAP row
+flip), sky positions are projected through it; on very wide fields the rebuilt
+TAN is turned by the meridian convergence between the solver's reference pixel
+and the image centre (3.5 deg on a 40 deg field). refine_corners then redraws
+each displayed outline from the candidate's own solution where it has one.
 """
 
 import math
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -162,31 +169,56 @@ def _radius(img: Any) -> Optional[float]:
     )
 
 
-def _footprint(cur: Dict[str, Any], cand: Any, cand_radius: float) -> Optional[Dict[str, Any]]:
-    """Candidate footprint in the current image's pixels, or None if it doesn't overlap."""
-    w, h = cur["w"], cur["h"]
+def _projector(cur: Dict[str, Any], frame: Any = None) -> Callable[[np.ndarray], np.ndarray]:
+    """(N,2) [ra, dec] -> (N,2) current-image pixels: the exact frame when there is one, else the rebuilt TAN."""
+    if frame is None:
+        return lambda radec: sky_to_pixel(cur, radec)
+
+    def project(radec):
+        radec = np.asarray(radec, dtype=float)
+        x, y = frame.project(radec[:, 0], radec[:, 1])
+        return np.column_stack([x, y])
+    return project
+
+
+def _footprint_sky(cand: Any) -> Optional[np.ndarray]:
+    """Sky points to project for a candidate: its centre (rotation unknown) or its 4 corners (rebuilt TAN)."""
     if cand.rotation_degrees is None:
-        center = sky_to_pixel(cur, [[cand.ra_center_degrees, cand.dec_center_degrees]])[0]
-        if np.isnan(center).any():
-            return None
+        return np.array([[cand.ra_center_degrees, cand.dec_center_degrees]], dtype=float)
+    params = tan_params(cand)
+    if params is None:
+        return None
+    cw, ch = params["w"], params["h"]
+    return pixel_to_sky(params, [[0, 0], [cw, 0], [cw, ch], [0, ch]])
+
+
+def _footprint_from_pixels(cur: Dict[str, Any], cand: Any, cand_radius: float,
+                           pix: np.ndarray) -> Optional[Dict[str, Any]]:
+    """Footprint from the candidate's projected points (see _footprint_sky), or None if it doesn't overlap."""
+    if np.isnan(pix).any():
+        return None
+    w, h = cur["w"], cur["h"]
+    if len(pix) == 1:
+        center = pix[0]
         r_px = cand_radius * 3600.0 / cur["scale"]
         if not circle_overlaps_rect(center[0], center[1], r_px, w, h):
             return None
         return {"shape": "circle", "center": [float(center[0]), float(center[1])], "radius_px": float(r_px),
                 "corners": None, "area": math.pi * r_px * r_px}
-    params = tan_params(cand)
-    if params is None:
-        return None
-    cw, ch = params["w"], params["h"]
-    sky = pixel_to_sky(params, [[0, 0], [cw, 0], [cw, ch], [0, ch]])
-    corners = sky_to_pixel(cur, sky)
-    if np.isnan(corners).any():
-        return None
-    poly = [(float(x), float(y)) for x, y in corners]
+    poly = [(float(x), float(y)) for x, y in pix]
     if overlap_area(poly, w, h) <= 0:
         return None
     return {"shape": "polygon", "center": None, "radius_px": None,
             "corners": [[x, y] for x, y in poly], "area": polygon_area(poly)}
+
+
+def _footprint(cur: Dict[str, Any], cand: Any, cand_radius: float,
+               to_cur: Optional[Callable[[np.ndarray], np.ndarray]] = None) -> Optional[Dict[str, Any]]:
+    """Candidate footprint in the current image's pixels, or None if it doesn't overlap."""
+    sky = _footprint_sky(cand)
+    if sky is None:
+        return None
+    return _footprint_from_pixels(cur, cand, cand_radius, (to_cur or _projector(cur))(sky))
 
 
 def _rot_close(a: float, b: float) -> bool:
@@ -230,20 +262,24 @@ def _member(img: Any) -> Dict[str, Any]:
     }
 
 
-def compute_field_overlaps(current: Any, candidates: Sequence[Any]) -> Dict[str, Any]:
+def compute_field_overlaps(current: Any, candidates: Sequence[Any], current_frame: Any = None) -> Dict[str, Any]:
     """
     Group the candidates whose footprints overlap the current image's field and are smaller than it.
+    current_frame (a sky_overlay.SkyFrame) projects into the current image exactly; without it the
+    rebuilt TAN is used, which needs the current image's rotation.
     Returns {"groups": [...], "reason": None | "not_solved" | "no_rotation"}; groups sorted largest first.
     """
-    if getattr(current, "rotation_degrees", "missing") is None:
+    if current_frame is None and getattr(current, "rotation_degrees", "missing") is None:
         return {"groups": [], "reason": "no_rotation"}
-    cur = tan_params(current)
+    cur = tan_params(current) if current_frame is None else _frame_params(current)
     cur_radius = _radius(current) if cur else None
     if cur is None or not cur_radius:
         return {"groups": [], "reason": "not_solved"}
     cur["scale"] = current.pixel_scale_arcsec
+    to_cur = _projector(cur, current_frame)
 
-    items = []
+    # Every candidate's sky points go through one projection call: per-call overhead dominates otherwise
+    pending = []
     for cand in candidates:
         if cand.id == current.id or not cand.pixel_scale_arcsec or not cand.width_pixels or not cand.height_pixels:
             continue
@@ -252,7 +288,17 @@ def compute_field_overlaps(current: Any, candidates: Sequence[Any]) -> Dict[str,
         radius = _radius(cand)
         if not radius or radius >= SIZE_RATIO_MAX * cur_radius:
             continue
-        fp = _footprint(cur, cand, radius)
+        sky = _footprint_sky(cand)
+        if sky is not None:
+            pending.append((cand, radius, sky))
+    pix_all = to_cur(np.concatenate([p[2] for p in pending])) if pending else np.empty((0, 2))
+
+    items = []
+    offset = 0
+    for cand, radius, sky in pending:
+        pix = pix_all[offset:offset + len(sky)]
+        offset += len(sky)
+        fp = _footprint_from_pixels(cur, cand, radius, pix)
         if fp is None:
             continue
         items.append({**fp, "img": cand, "radius": radius, "rot": cand.rotation_degrees,
@@ -292,3 +338,47 @@ def compute_field_overlaps(current: Any, candidates: Sequence[Any]) -> Dict[str,
         })
     groups.sort(key=lambda g: -g["area"])
     return {"groups": groups, "reason": None}
+
+
+def _frame_params(img: Any) -> Optional[Dict[str, Any]]:
+    """Frame size for a current image projected through its SkyFrame (no rotation needed)."""
+    w = getattr(img, "width_pixels", None)
+    h = getattr(img, "height_pixels", None)
+    scale = getattr(img, "pixel_scale_arcsec", None)
+    if not w or not h or not scale or w <= 0 or h <= 0 or scale <= 0:
+        return None
+    return {"w": w, "h": h}
+
+
+def refine_corners(groups: List[Dict[str, Any]], current: Any, current_frame: Any,
+                   cand_frames: Dict[int, Any]) -> List[Dict[str, Any]]:
+    """
+    Redraw each group's outline from its representative's own plate solution (cand_frames: image id ->
+    SkyFrame), projected into the current image (current_frame, else its rebuilt TAN). Groups whose
+    representative has no solution keep their rebuilt outline; a circle (rotation unknown) becomes
+    the exact polygon when a solution exists. Groups whose exact outline misses the field are dropped.
+    """
+    cur = tan_params(current) if current_frame is None else _frame_params(current)
+    if cur is None:
+        return groups
+    to_cur = _projector(cur, current_frame)
+    w, h = cur["w"], cur["h"]
+    out = []
+    for g in groups:
+        frame = cand_frames.get(g["id"])
+        if frame is None:
+            out.append(g)
+            continue
+        cw, ch = frame.width, frame.height
+        ra, dec = frame.unproject([0, cw, cw, 0], [0, 0, ch, ch])
+        corners = to_cur(np.column_stack([ra, dec]))
+        if np.isnan(corners).any():
+            out.append(g)
+            continue
+        poly = [(float(x), float(y)) for x, y in corners]
+        if overlap_area(poly, w, h) <= 0:
+            continue
+        out.append({**g, "shape": "polygon", "corners": [[x, y] for x, y in poly], "center": None,
+                    "radius_px": None, "area": polygon_area(poly)})
+    out.sort(key=lambda g: -g["area"])
+    return out

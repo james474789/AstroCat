@@ -125,9 +125,12 @@ distortion and the ASTAP row flip:
   (`backend/app/api/images.py`, "calculate pixel coordinates for matches"). It is probably
   unused by the frontend now, so remove it if so;
 - `CatalogMatcher._construct_wcs` / `_is_in_image_bounds` in `backend/app/services/matching.py`,
-  which decides which objects are "in field";
-- the images-in-field footprints (`backend/app/services/field_overlaps.py`). The current image
-  could use its `SkyFrame`, with the rebuilt TAN kept only for candidates that have nothing better.
+  which decides which objects are "in field".
+
+(Done 2026-10-07: the images-in-field footprints now project through the current image's
+`SkyFrame` and redraw each outline from its own solution; see `refine_corners` in
+`backend/app/services/field_overlaps.py`. The overlap search and grouping still use the rebuilt
+TAN for candidates, which only matters at the edge of a field.)
 
 **Do**
 - Crosshair: either return the frame's linear WCS (and SIP terms) with the image detail and

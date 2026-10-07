@@ -2,6 +2,7 @@
 Field overlaps: footprints of other images inside an image's field (no DB).
 """
 
+import math
 import sys
 import types
 from datetime import datetime, timedelta
@@ -158,3 +159,85 @@ def test_route_registered():
     paths = {r.path for r in api.router.routes}
     assert "/{image_id}/field-overlaps" in paths
     assert "/{image_id}/field-overlaps/solve" in paths
+
+
+# ---- exact projection through the stored plate solution ---------------------------------------
+
+from app.services import sky_overlay as so  # noqa: E402
+
+
+def _solved_frame(ra, dec, scale_deg, w, h, crpix_offset=(0.0, 0.0), rot_deg=0.0):
+    """A SkyFrame from a linear TAN solve whose reference pixel can sit off the image centre."""
+    t = math.radians(rot_deg)
+    c, s = math.cos(t), math.sin(t)
+    header = {"CTYPE1": "RA---TAN", "CTYPE2": "DEC--TAN", "CRVAL1": ra, "CRVAL2": dec,
+              "CRPIX1": w / 2 + 0.5 + crpix_offset[0], "CRPIX2": h / 2 + 0.5 + crpix_offset[1],
+              "CD1_1": -scale_deg * c, "CD1_2": scale_deg * s, "CD2_1": scale_deg * s, "CD2_2": scale_deg * c,
+              "IMAGEW": w, "IMAGEH": h}
+    return so.resolve_frame(SimpleNamespace(wcs_header=header, raw_header=None, width_pixels=w, height_pixels=h,
+                                            file_format="FITS", pixel_scale_arcsec=scale_deg * 3600))
+
+
+def _corners_via(frame_cur, frame_cand):
+    cw, ch = frame_cand.width, frame_cand.height
+    ra, dec = frame_cand.unproject([0, cw, cw, 0], [0, 0, ch, ch])
+    x, y = frame_cur.project(ra, dec)
+    return np.column_stack([x, y])
+
+
+def test_current_frame_is_used_instead_of_rebuilt_tan():
+    # Very wide field whose reference pixel sits ~2 deg left of centre: the rebuilt TAN is turned
+    cur_frame = _solved_frame(184.0, 58.0, 72 / 3600, 2000, 1335, crpix_offset=(-110, 0))
+    cra, cdec = cur_frame.unproject([1000], [667])
+    cur = _img(1, float(cra[0]), float(cdec[0]), 72.0, 0.0, w=2000, h=1335)
+    # Small candidate near the edge, where the rotation error is largest
+    kra, kdec = cur_frame.unproject([1800], [300])
+    cand = _img(2, float(kra[0]), float(kdec[0]), 1.0, 0.0, w=3000, h=2000)
+    rebuilt = fo.compute_field_overlaps(cur, [cand])["groups"][0]
+    exact = fo.compute_field_overlaps(cur, [cand], cur_frame)["groups"][0]
+    # The candidate's centre lands where the exact solution puts it
+    cx, cy = np.mean(exact["corners"], axis=0)
+    assert (cx, cy) == pytest.approx((1800, 300), abs=0.5)
+    assert np.hypot(*(np.mean(rebuilt["corners"], axis=0) - [1800, 300])) > 5  # the old path was off
+
+
+def test_current_frame_needs_no_rotation():
+    cur_frame = _solved_frame(10.0, 40.0, 30 / 3600, 4000, 3000)
+    cur = _img(1, 10.0, 40.0, 30.0, None, w=4000, h=3000)
+    cand = _img(2, 10.2, 40.1, 1.0, 15.0)
+    assert fo.compute_field_overlaps(cur, [cand])["reason"] == "no_rotation"
+    result = fo.compute_field_overlaps(cur, [cand], cur_frame)
+    assert result["reason"] is None and len(result["groups"]) == 1
+
+
+def test_refine_corners_uses_candidate_solutions():
+    cur_frame = _solved_frame(10.0, 40.0, 30 / 3600, 4000, 3000, crpix_offset=(-200, 50), rot_deg=5)
+    cra, cdec = cur_frame.unproject([2000], [1500])
+    cur = _img(1, float(cra[0]), float(cdec[0]), 30.0, 5.0, w=4000, h=3000)
+    kra, kdec = cur_frame.unproject([1000, 3000, 1500], [1000, 1000, 2900])
+    solved = _solved_frame(float(kra[0]), float(kdec[0]), 1 / 3600, 3000, 2000, rot_deg=33)
+    unrotated = _solved_frame(float(kra[1]), float(kdec[1]), 1 / 3600, 3000, 2000, rot_deg=-20)
+    groups = [
+        {"id": 2, "shape": "polygon", "corners": [[0, 0], [1, 0], [1, 1], [0, 1]], "center": None,
+         "radius_px": None, "area": 1.0, "member_ids": [2]},
+        {"id": 3, "shape": "circle", "corners": None, "center": [3000, 1000], "radius_px": 20.0,
+         "area": 1256.0, "member_ids": [3]},
+        {"id": 4, "shape": "polygon", "corners": [[5, 5], [6, 5], [6, 6], [5, 6]], "center": None,
+         "radius_px": None, "area": 1.0, "member_ids": [4]},
+    ]
+    # Projects fine (well inside the tangent hemisphere) but falls outside the 33 x 25 deg field: dropped
+    (fra,), (fdec,) = cur_frame.unproject([-1500.0], [1500.0])
+    far = _solved_frame(float(fra), float(fdec), 1 / 3600, 3000, 2000)
+    out = fo.refine_corners(groups, cur, cur_frame, {2: solved, 3: unrotated, 5: far})
+    by_id = {g["id"]: g for g in out}
+    assert np.allclose(by_id[2]["corners"], _corners_via(cur_frame, solved), atol=1e-6)
+    assert by_id[3]["shape"] == "polygon" and by_id[3]["center"] is None
+    assert np.allclose(by_id[3]["corners"], _corners_via(cur_frame, unrotated), atol=1e-6)
+    assert by_id[4]["corners"] == [[5, 5], [6, 5], [6, 6], [5, 6]]  # no solution: rebuilt outline kept
+    assert by_id[3]["member_ids"] == [3]
+    assert [g["area"] for g in out] == sorted((g["area"] for g in out), reverse=True)
+    groups_far = [{**groups[0], "id": 5}]
+    assert fo.refine_corners(groups_far, cur, cur_frame, {5: far}) == []
+    # Can't be projected at all (other hemisphere): the rebuilt outline is kept rather than lost
+    behind = _solved_frame(200.0, -40.0, 1 / 3600, 3000, 2000)
+    assert fo.refine_corners(groups_far, cur, cur_frame, {5: behind}) == groups_far
