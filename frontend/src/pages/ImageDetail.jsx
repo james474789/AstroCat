@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchImage, updateImage, rescanImage, solveFieldOverlaps, fetchAnnotation, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
+import { fetchImage, updateImage, rescanImage, solveFieldOverlaps, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
 import useImageNav from '../hooks/useImageNav';
 import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays';
@@ -24,7 +24,6 @@ export default function ImageDetail() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
     const [imgError, setImgError] = useState(false);
-    const [annotatedImageError, setAnnotatedImageError] = useState(false);
     // Navigation through the search results this image was opened from
     const { navInfo, goToImage, goPrev, goNext, returnToSearch } = useImageNav(id);
     // Touch zoom/pan: view = {s: scale, x, y translate in px, origin top-left of the preview}
@@ -35,13 +34,10 @@ export default function ImageDetail() {
     const pointersRef = useRef(new Map());
     const gestureRef = useRef(null);
     const lastTapRef = useRef(0);
-    // Cache buster timestamp
-    const [pageLoadTimestamp] = useState(Date.now());
 
     // Reset error when ID changes
     useEffect(() => {
         setImgError(false);
-        setAnnotatedImageError(false);
         setView({ s: 1, x: 0, y: 0 });
         setCursorPos(null);
         setHoveredOverlayId(null);
@@ -49,8 +45,8 @@ export default function ImageDetail() {
         setOverlayPopover(null);
     }, [id]);
 
-    // Annotations toggle: none | astrocat (dynamic catalog overlay) | nova (solver's annotated image) | pixinsight
-    const [annotationMode, setAnnotationMode] = useState('none');
+    // AstroCat annotations: catalog objects drawn from the image's own plate solution
+    const [annotationsOn, setAnnotationsOn] = useState(false);
 
     // Crosshair State
     const [cursorPos, setCursorPos] = useState(null);
@@ -78,12 +74,8 @@ export default function ImageDetail() {
     const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
     const [hoveredOverlayId, setHoveredOverlayId] = useState(null);
     // Dynamic catalog overlay (AstroCat annotations), drawn from the image's own plate solution
-    const sky = useSkyOverlay(image, annotationMode === 'astrocat');
+    const sky = useSkyOverlay(image, annotationsOn);
     const [hoveredSkyKey, setHoveredSkyKey] = useState(null);
-    useEffect(() => {
-        // Navigated to an image without a usable WCS: fall back rather than show an empty mode
-        if (annotationMode === 'astrocat' && image && !image.sky_overlay_source) setAnnotationMode('none');
-    }, [image, annotationMode]);
     const [overlayPopover, setOverlayPopover] = useState(null);
     const mouseDownRef = useRef(null);
     const [boxSize, setBoxSize] = useState(null);
@@ -249,23 +241,6 @@ export default function ImageDetail() {
             setTimeout(() => overlays.refetch(), 5000);
         } catch (e) {
             alert('Error submitting for astrometry: ' + e.message);
-        } finally {
-            setSaving(false);
-        }
-    }
-
-    async function handleFetchAnnotation() {
-        try {
-            setSaving(true);
-            await fetchAnnotation(id);
-            // Reload image to update status
-            const updated = await fetchImage(id);
-            setImage(updated);
-            setAnnotatedImageError(false);
-            // We might need to refresh the page or update the timestamp to force reload the image
-            window.location.reload();
-        } catch (e) {
-            alert("Error fetching annotation: " + e.message);
         } finally {
             setSaving(false);
         }
@@ -627,46 +602,6 @@ export default function ImageDetail() {
                                         }}
                                         onError={() => setImgError(true)}
                                     />
-                                    {/* Annotated Overlay Image (Nova Mode) */}
-                                    {annotationMode === 'nova' && image.is_plate_solved && !annotatedImageError && (
-                                        <img
-                                            src={`${API_BASE_URL}/images/${id}/annotated?t=${pageLoadTimestamp}`}
-                                            alt="Annotated Overlay"
-                                            className="real-preview-image annotation-layer-img"
-                                            style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                objectFit: 'contain',
-                                                position: 'absolute',
-                                                top: 0,
-                                                left: 0,
-                                                zIndex: 3 // Above base layer
-                                            }}
-                                            onError={(e) => {
-                                                e.target.style.display = 'none';
-                                                setAnnotatedImageError(true);
-                                            }}
-                                        />
-                                    )}
-
-                                    {/* PixInsight Annotated Image (Replaces Base Layer visually) */}
-                                    {annotationMode === 'pixinsight' && image.has_pixinsight_annotation && (
-                                        <img
-                                            src={`${API_BASE_URL}/images/${id}/pixinsight-annotation?t=${pageLoadTimestamp}`}
-                                            alt="PixInsight Annotation"
-                                            className="real-preview-image pixinsight-layer-img"
-                                            style={{
-                                                width: '100%',
-                                                height: '100%',
-                                                objectFit: 'contain',
-                                                position: 'absolute',
-                                                top: 0,
-                                                left: 0,
-                                                zIndex: 4 // Above Nova layer
-                                            }}
-                                        />
-                                    )}
-
                                     {/* AstroCat annotations: catalog objects from the plate solution (visual only) */}
                                     {sky.active && sky.objects.length > 0 && imgRect && (
                                         <div style={{ position: 'absolute', inset: 0, zIndex: 8, pointerEvents: 'none' }}>
@@ -776,32 +711,18 @@ export default function ImageDetail() {
                                 📥 Download JPG
                             </a>
 
-                            {/* Annotation Toggle (Cycle) */}
+                            {/* AstroCat annotations on/off */}
                             <button
-                                className={`btn ${annotationMode !== 'none' ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => {
-                                    // Cycle none -> astrocat -> nova -> pixinsight, skipping unavailable modes
-                                    const available = ['none'];
-                                    if (image.sky_overlay_source) available.push('astrocat');
-                                    if (image.is_plate_solved || image.has_annotated_image) available.push('nova');
-                                    if (image.has_pixinsight_annotation) available.push('pixinsight');
-                                    const currentIdx = available.indexOf(annotationMode);
-                                    setAnnotationMode(available[(currentIdx + 1) % available.length]);
-                                }}
-                                title={annotationMode === 'astrocat' && sky.warning
-                                    ? `AstroCat annotations — approximate: ${sky.warning}`
-                                    : 'Toggle annotations: None / AstroCat (catalog objects from the plate solution) / Nova / PixInsight'}
-                                disabled={!image.sky_overlay_source && !image.is_plate_solved && !image.has_annotated_image && !image.has_pixinsight_annotation}
+                                className={`btn ${sky.active ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => setAnnotationsOn((on) => !on)}
+                                disabled={!!sky.unavailable}
+                                title={sky.unavailable
+                                    || (sky.active && sky.warning
+                                        ? `Annotations — approximate: ${sky.warning}`
+                                        : 'Annotations: catalog objects from the plate solution')}
                             >
-                                {annotationMode === 'none' && '🚫 No Annotations'}
-                                {annotationMode === 'astrocat' && (
-                                    <>
-                                        ✨ AstroCat Annotations
-                                        {sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
-                                    </>
-                                )}
-                                {annotationMode === 'nova' && '🔭 Nova Annotation'}
-                                {annotationMode === 'pixinsight' && '🎨 PixInsight Annotation'}
+                                ✨ Annotations: {sky.active ? 'On' : 'Off'}
+                                {sky.active && sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
                             </button>
 
                             <button
@@ -938,15 +859,6 @@ export default function ImageDetail() {
                                                 </a>
                                             )}
 
-                                            {image.astrometry_status === 'SOLVED' && !image.has_annotated_image && (
-                                                <button
-                                                    className="btn btn-primary btn-sm"
-                                                    onClick={handleFetchAnnotation}
-                                                    disabled={saving}
-                                                >
-                                                    🎨 Fetch Annotation
-                                                </button>
-                                            )}
                                         </div>
                                     </div>
                                 )}
