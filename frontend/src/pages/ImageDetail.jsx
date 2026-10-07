@@ -8,7 +8,11 @@ import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays
 import { hitTest, containedRect } from '../utils/fieldOverlay';
 import FieldOverlayLayer from '../components/fieldOverlay/FieldOverlayLayer';
 import FieldOverlayPopover from '../components/fieldOverlay/FieldOverlayPopover';
-import { Maximize2, Layers, Crosshair } from 'lucide-react';
+import useSkyOverlay from '../hooks/useSkyOverlay';
+import { hitTestSky, searchNameFor } from '../utils/skyOverlay';
+import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
+import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
+import { Maximize2, Layers, Crosshair, AlertTriangle } from 'lucide-react';
 import StarQualityCard from '../components/quality/StarQualityCard';
 import './ImageDetail.css';
 
@@ -41,11 +45,12 @@ export default function ImageDetail() {
         setView({ s: 1, x: 0, y: 0 });
         setCursorPos(null);
         setHoveredOverlayId(null);
+        setHoveredSkyKey(null);
         setOverlayPopover(null);
     }, [id]);
 
-    // Annotations Toggle: 0=None, 1=Nova (Image Overlay), 2=PixInsight (Full Image)
-    const [annotationMode, setAnnotationMode] = useState(0);
+    // Annotations toggle: none | astrocat (dynamic catalog overlay) | nova (solver's annotated image) | pixinsight
+    const [annotationMode, setAnnotationMode] = useState('none');
 
     // Crosshair State
     const [cursorPos, setCursorPos] = useState(null);
@@ -72,6 +77,13 @@ export default function ImageDetail() {
     const overlays = useFieldOverlays(image);
     const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
     const [hoveredOverlayId, setHoveredOverlayId] = useState(null);
+    // Dynamic catalog overlay (AstroCat annotations), drawn from the image's own plate solution
+    const sky = useSkyOverlay(image, annotationMode === 'astrocat');
+    const [hoveredSkyKey, setHoveredSkyKey] = useState(null);
+    useEffect(() => {
+        // Navigated to an image without a usable WCS: fall back rather than show an empty mode
+        if (annotationMode === 'astrocat' && image && !image.sky_overlay_source) setAnnotationMode('none');
+    }, [image, annotationMode]);
     const [overlayPopover, setOverlayPopover] = useState(null);
     const mouseDownRef = useRef(null);
     const [boxSize, setBoxSize] = useState(null);
@@ -104,6 +116,20 @@ export default function ImageDetail() {
         if (px < 0 || py < 0 || px > image.width_pixels || py > image.height_pixels) return null;
         return hitTest(overlays.groups, px, py);
     };
+
+    // Client point -> catalog object under it (point markers within a screen tolerance, else smallest ellipse)
+    const skyHit = (clientX, clientY) => {
+        if (!sky.objects.length || !imageRef.current || !imgRect) return null;
+        const rect = imageRef.current.getBoundingClientRect();
+        const s = viewRef.current.s;
+        const lx = (clientX - rect.left) / s;
+        const ly = (clientY - rect.top) / s;
+        const px = ((lx - imgRect.x) / imgRect.w) * image.width_pixels;
+        const py = ((ly - imgRect.y) / imgRect.h) * image.height_pixels;
+        if (px < 0 || py < 0 || px > image.width_pixels || py > image.height_pixels) return null;
+        return hitTestSky(sky.objects, px, py, image.width_pixels / (imgRect.w * s));
+    };
+    const openSkyObject = (obj) => navigate(`/search?object_name=${encodeURIComponent(searchNameFor(obj))}`);
 
     const openOverlay = (group, clientX, clientY) => {
         if (group.count > 1) setOverlayPopover({ group, x: clientX, y: clientY });
@@ -361,7 +387,10 @@ export default function ImageDetail() {
         );
 
         if (e.pointerType === 'mouse') {
-            const hit = overlayHit(e.clientX, e.clientY);
+            // Catalog objects take priority over the footprints they sit in
+            const skyObj = skyHit(e.clientX, e.clientY);
+            setHoveredSkyKey(skyObj ? skyObj.key : null);
+            const hit = skyObj ? null : overlayHit(e.clientX, e.clientY);
             setHoveredOverlayId(hit ? hit.id : null);
         }
 
@@ -378,6 +407,7 @@ export default function ImageDetail() {
     const handleMouseLeave = () => {
         setCursorPos(null);
         setHoveredOverlayId(null);
+        setHoveredSkyKey(null);
     };
 
     // ---- Pointer handling: mouse hover = crosshair; touch = tap to read, pinch/pan to zoom ----
@@ -449,12 +479,14 @@ export default function ImageDetail() {
 
     const handlePointerUp = (e) => {
         if (e.pointerType === 'mouse') {
-            // A click (not a drag) on a footprint opens it
+            // A click (not a drag) on a catalog object searches for it; on a footprint opens it
             const down = mouseDownRef.current;
             mouseDownRef.current = null;
             if (e.type === 'pointerup' && e.button === 0 && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 5) {
-                const hit = overlayHit(e.clientX, e.clientY);
-                if (hit) openOverlay(hit, e.clientX, e.clientY);
+                const skyObj = skyHit(e.clientX, e.clientY);
+                const hit = skyObj ? null : overlayHit(e.clientX, e.clientY);
+                if (skyObj) openSkyObject(skyObj);
+                else if (hit) openOverlay(hit, e.clientX, e.clientY);
             }
             return;
         }
@@ -473,9 +505,16 @@ export default function ImageDetail() {
                     lastTapRef.current = 0;
                 } else {
                     lastTapRef.current = now;
-                    const hit = overlayHit(e.clientX, e.clientY);
-                    if (hit) openOverlay(hit, e.clientX, e.clientY); // tap on a footprint opens it
-                    else handleMouseMove(e); // tap places the crosshair + RA/Dec readout
+                    // Tap on a catalog object highlights it (a second tap searches); on a footprint opens it
+                    const skyObj = skyHit(e.clientX, e.clientY);
+                    const hit = skyObj ? null : overlayHit(e.clientX, e.clientY);
+                    if (skyObj && skyObj.key === hoveredSkyKey) openSkyObject(skyObj);
+                    else if (skyObj) setHoveredSkyKey(skyObj.key);
+                    else if (hit) openOverlay(hit, e.clientX, e.clientY);
+                    else {
+                        setHoveredSkyKey(null);
+                        handleMouseMove(e); // tap places the crosshair + RA/Dec readout
+                    }
                 }
             } else if (e.type === 'pointerup' && !g.multi && g.startView.s === 1 && Math.abs(dx) > 70 && Math.abs(dy) < 50) {
                 // swipe (not zoomed) navigates prev/next
@@ -589,7 +628,7 @@ export default function ImageDetail() {
                                         onError={() => setImgError(true)}
                                     />
                                     {/* Annotated Overlay Image (Nova Mode) */}
-                                    {annotationMode === 1 && image.is_plate_solved && !annotatedImageError && (
+                                    {annotationMode === 'nova' && image.is_plate_solved && !annotatedImageError && (
                                         <img
                                             src={`${API_BASE_URL}/images/${id}/annotated?t=${pageLoadTimestamp}`}
                                             alt="Annotated Overlay"
@@ -611,7 +650,7 @@ export default function ImageDetail() {
                                     )}
 
                                     {/* PixInsight Annotated Image (Replaces Base Layer visually) */}
-                                    {annotationMode === 2 && image.has_pixinsight_annotation && (
+                                    {annotationMode === 'pixinsight' && image.has_pixinsight_annotation && (
                                         <img
                                             src={`${API_BASE_URL}/images/${id}/pixinsight-annotation?t=${pageLoadTimestamp}`}
                                             alt="PixInsight Annotation"
@@ -626,6 +665,19 @@ export default function ImageDetail() {
                                                 zIndex: 4 // Above Nova layer
                                             }}
                                         />
+                                    )}
+
+                                    {/* AstroCat annotations: catalog objects from the plate solution (visual only) */}
+                                    {sky.active && sky.objects.length > 0 && imgRect && (
+                                        <div style={{ position: 'absolute', inset: 0, zIndex: 8, pointerEvents: 'none' }}>
+                                            <SkyOverlayLayer
+                                                objects={sky.objects}
+                                                toScreen={overlayToScreen}
+                                                clip={imgRect}
+                                                hoveredKey={hoveredSkyKey}
+                                                labelScale={1 / view.s}
+                                            />
+                                        </div>
                                     )}
 
                                     {/* Images-in-field footprints (visual only; hit-tested by the interaction layer) */}
@@ -650,7 +702,7 @@ export default function ImageDetail() {
                                             width: '100%',
                                             height: '100%',
                                             zIndex: 10,
-                                            cursor: hoveredOverlayId != null ? 'pointer' : 'crosshair',
+                                            cursor: hoveredOverlayId != null || hoveredSkyKey != null ? 'pointer' : 'crosshair',
                                             touchAction: 'none'
                                         }}
                                         ref={imageRef}
@@ -691,6 +743,17 @@ export default function ImageDetail() {
                                     <span className="preview-text">Preview Not Available</span>
                                 </div>
                             )}
+                            {sky.active && !imgError && (
+                                <SkyOverlayLegend
+                                    className="image-sky-legend"
+                                    counts={sky.counts}
+                                    hidden={sky.hidden}
+                                    onToggle={sky.toggleCatalog}
+                                    warning={sky.warning}
+                                    isLoading={sky.isLoading}
+                                    isError={sky.isError}
+                                />
+                            )}
                         </div>
 
                         {view.s > 1 && (
@@ -715,26 +778,30 @@ export default function ImageDetail() {
 
                             {/* Annotation Toggle (Cycle) */}
                             <button
-                                className={`btn ${annotationMode !== 0 ? 'btn-primary' : 'btn-secondary'}`}
+                                className={`btn ${annotationMode !== 'none' ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => {
-                                    // Cycle Logic: 0 -> 1 -> 2 -> 0 (Skip unavailable)
-                                    // Available modes
-                                    const available = [0];
-                                    if (image.is_plate_solved || image.has_annotated_image) available.push(1);
-                                    if (image.has_pixinsight_annotation) available.push(2);
-
-                                    // Find current index
+                                    // Cycle none -> astrocat -> nova -> pixinsight, skipping unavailable modes
+                                    const available = ['none'];
+                                    if (image.sky_overlay_source) available.push('astrocat');
+                                    if (image.is_plate_solved || image.has_annotated_image) available.push('nova');
+                                    if (image.has_pixinsight_annotation) available.push('pixinsight');
                                     const currentIdx = available.indexOf(annotationMode);
-                                    // Next index
-                                    const nextIdx = (currentIdx + 1) % available.length;
-                                    setAnnotationMode(available[nextIdx]);
+                                    setAnnotationMode(available[(currentIdx + 1) % available.length]);
                                 }}
-                                title="Toggle Annotations"
-                                disabled={(!image.is_plate_solved && !image.has_annotated_image && !image.has_pixinsight_annotation)}
+                                title={annotationMode === 'astrocat' && sky.warning
+                                    ? `AstroCat annotations — approximate: ${sky.warning}`
+                                    : 'Toggle annotations: None / AstroCat (catalog objects from the plate solution) / Nova / PixInsight'}
+                                disabled={!image.sky_overlay_source && !image.is_plate_solved && !image.has_annotated_image && !image.has_pixinsight_annotation}
                             >
-                                {annotationMode === 0 && '🚫 No Annotations'}
-                                {annotationMode === 1 && '🔭 Nova Annotation'}
-                                {annotationMode === 2 && '🎨 PixInsight Annotation'}
+                                {annotationMode === 'none' && '🚫 No Annotations'}
+                                {annotationMode === 'astrocat' && (
+                                    <>
+                                        ✨ AstroCat Annotations
+                                        {sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
+                                    </>
+                                )}
+                                {annotationMode === 'nova' && '🔭 Nova Annotation'}
+                                {annotationMode === 'pixinsight' && '🎨 PixInsight Annotation'}
                             </button>
 
                             <button

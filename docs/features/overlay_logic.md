@@ -1,5 +1,11 @@
 # Overlay Rotation and Coordinate Logic
 
+> **Superseded (2026-10-07):** catalog overlays are now projected through the stored plate solution
+> (SIP included) by `backend/app/services/sky_overlay.py`. See
+> [A1 design](../design/20261007-A1-dynamic-sky-overlay.md). The TAN rebuilt from centre/scale/rotation
+> described below is still used by the legacy `pixel_x/pixel_y` in `GET /images/{id}`, catalog matching
+> bounds checks and the images-in-field footprints.
+
 This document details the logic used to calculate pixel coordinates for catalog overlays in `backend/app/api/images.py`.
 
 ## 1. Coordinate System

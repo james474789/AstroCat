@@ -119,6 +119,9 @@ class ImageDetail(ImageBase):
     plate_solve_provider: Optional[str] = None
     has_annotated_image: bool = False
     has_pixinsight_annotation: bool = False
+    # Dynamic catalog overlay (A1): "SOLVER" (stored astrometry solution) | "HEADER" (file's own WCS) | None
+    sky_overlay_source: Optional[str] = None
+    sky_overlay_warning: Optional[str] = None
     
     # Thumbnails
     thumbnail_path: Optional[str] = None
@@ -232,3 +235,36 @@ class FieldOverlapSolveResponse(BaseModel):
     queued: int
     skipped: int          # already submitted/processing/solved, or not solvable
     total_unsolved: int
+
+
+class SkyOverlayEllipse(BaseModel):
+    """Object outline in native pixels: semi-axes and the major axis' display angle (deg, clockwise from +x)."""
+    rx: float
+    ry: float
+    angle_deg: float
+    pa_known: bool                            # False: circle of the mean size (no position angle)
+
+
+class SkyOverlayObject(BaseModel):
+    """A catalog object in the image's field, merged across catalogs. x/y in native pixels, top-left origin."""
+    key: str
+    catalog: str                              # highest-priority catalog: colour and label
+    catalogs: List[str]
+    designations: List[str]
+    label: str
+    search_name: str                          # designation as stored (for /search?object_name=)
+    common_name: Optional[str] = None
+    object_type: Optional[str] = None
+    magnitude: Optional[float] = None
+    x: float
+    y: float
+    ellipse: Optional[SkyOverlayEllipse] = None
+
+
+class SkyOverlayResponse(BaseModel):
+    source: Optional[str] = None              # "SOLVER" | "HEADER"; None when the image has no usable WCS
+    accuracy_warning: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    objects: List[SkyOverlayObject] = []
+    reason: Optional[str] = None              # "no_wcs" when objects can't be placed

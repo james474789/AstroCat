@@ -11,7 +11,6 @@ bad card can never abort the extraction of the remaining metadata.
 
 import logging
 import math
-import re
 import warnings
 from typing import Dict, Any
 from datetime import datetime
@@ -23,6 +22,7 @@ from astropy.utils.exceptions import AstropyWarning
 from app.extractors.base import BaseExtractor
 from app.utils.header_values import parse_sexagesimal
 from app.utils.plate_scale import header_pixel_scale, wcs_frame, wcs_matrix_scale
+from app.utils.sky_wcs import wcs_cards
 
 logger = logging.getLogger(__name__)
 
@@ -347,30 +347,9 @@ class FITSExtractor(BaseExtractor):
 
         return None
 
-    _WCS_KEY = re.compile(
-        r"^(NAXIS[12]?|WCSAXES|CTYPE[12]|CRVAL[12]|CRPIX[12]|CDELT[12]|CUNIT[12]|CROTA[12]"
-        r"|CD[12]_[12]|PC[12]_[12]|LONPOLE|LATPOLE|EQUINOX|EPOCH|RADESYS|RADECSYS"
-        r"|(A|B|AP|BP)_ORDER|(A|B|AP|BP)_\d+_\d+)$"
-    )
-
     def _wcs_header(self, header) -> fits.Header:
-        """
-        A clean astropy Header holding only the WCS cards, for WCS(). Works for
-        both an astropy Header and a raw_header dict (XISF keywords, stored
-        rows), whose COMMENT/HISTORY lists and odd values WCS() can't take.
-        """
-        clean = fits.Header()
-        for key in list(header.keys()):
-            if not isinstance(key, str) or not self._WCS_KEY.match(key):
-                continue
-            value = self._safe_get(header, key)
-            if isinstance(value, str):
-                num = self._parse_float(value)
-                if num is not None and not key.startswith(("CTYPE", "CUNIT", "RADESYS", "RADECSYS")):
-                    value = num
-            if isinstance(value, (int, float, str)) and not isinstance(value, bool):
-                clean[key] = value
-        return clean
+        """A clean astropy Header holding only the WCS cards, for WCS() (see app.utils.sky_wcs)."""
+        return wcs_cards(header)
 
     def _parse_coord_or_hms(self, val, is_ra: bool = True) -> float:
         """Parse a coordinate that might be float degrees or HMS/DMS string."""

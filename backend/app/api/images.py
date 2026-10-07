@@ -16,13 +16,14 @@ import math
 
 from app.database import get_db
 from app.models.image import Image, ImageFormat, ImageSubtype, FrameType
-from app.schemas.image import ImageDetail, ImageList, UpdateImageRequest, FieldOverlapResponse, FieldOverlapSolveResponse
+from app.schemas.image import ImageDetail, ImageList, UpdateImageRequest, FieldOverlapResponse, FieldOverlapSolveResponse, SkyOverlayResponse
 from app.schemas.image import ImageDetail, ImageList
 from app.schemas.common import PaginatedResponse
 from app.services.thumbnails import ThumbnailGenerator
 from app.utils.path_security import validate_path_safety, sanitize_filename
 from app.services.quality_filters import QualityFilters, fwhm_arcsec_expr
 from app.services.field_overlaps import compute_field_overlaps, SIZE_RATIO_MAX
+from app.services import sky_overlay
 from app.utils.field_geometry import effective_field_radius
 
 import io
@@ -654,6 +655,9 @@ async def get_image(image_id: int, db: AsyncSession = Depends(get_db)):
     image.has_pixinsight_annotation = False
     if image.pixinsight_annotation_path and os.path.exists(image.pixinsight_annotation_path):
         image.has_pixinsight_annotation = True
+
+    # Dynamic catalog overlay availability (A1)
+    image.sky_overlay_source, image.sky_overlay_warning = sky_overlay.describe(image)
 
     # If image is plate solved, calculate pixel coordinates for matches
     if image.is_plate_solved and image.catalog_matches:
@@ -1889,6 +1893,93 @@ async def _load_field_overlap_groups(db: AsyncSession, image_id: int, mode: str)
         groups = sorted(groups, key=lambda g: g["area"])[:FIELD_OVERLAP_MAX_GROUPS]
         groups.sort(key=lambda g: -g["area"])
     return groups, truncated, result["reason"]
+
+
+# Catalog rows for the sky overlay, one query per table, normalised to the same columns.
+# Messier sizes are a diameter string plus axis ratio; NGC-table rows are split into NGC/IC.
+_SKY_CATALOG_SQL = {
+    "MESSIER": """SELECT 'MESSIER' AS catalog, designation, ngc_designation AS alias, NULL AS aliases,
+                         common_name, object_type, apparent_magnitude AS mag, angular_size_arcmin AS size,
+                         axis_ratio, NULL::float AS major, NULL::float AS minor, position_angle AS pa,
+                         ra_degrees AS ra, dec_degrees AS dec
+                  FROM messier_catalog""",
+    "NGC": """SELECT CASE WHEN designation ILIKE 'IC%' THEN 'IC' ELSE 'NGC' END AS catalog, designation,
+                     messier_designation AS alias, ic_designation AS aliases, common_name, object_type,
+                     apparent_magnitude AS mag, NULL AS size, NULL::float AS axis_ratio,
+                     major_axis_arcmin AS major, minor_axis_arcmin AS minor, position_angle AS pa,
+                     ra_degrees AS ra, dec_degrees AS dec
+              FROM ngc_catalog
+              WHERE (object_type IS NULL OR object_type NOT IN ('Dup', 'NonEx'))""",
+    "CALDWELL": """SELECT 'CALDWELL' AS catalog, designation, source_designation AS alias, aliases,
+                          common_name, object_type, apparent_magnitude AS mag, NULL AS size,
+                          NULL::float AS axis_ratio, major_axis_arcmin AS major, minor_axis_arcmin AS minor,
+                          NULL::float AS pa, ra_degrees AS ra, dec_degrees AS dec
+                   FROM caldwell_catalog""",
+    "SH2": """SELECT 'SH2' AS catalog, designation, source_designation AS alias, aliases, common_name,
+                     COALESCE(object_definition, object_type) AS object_type, apparent_magnitude AS mag,
+                     NULL AS size, NULL::float AS axis_ratio, major_axis_arcmin AS major,
+                     minor_axis_arcmin AS minor, NULL::float AS pa, ra_degrees AS ra, dec_degrees AS dec
+              FROM sh2_catalog""",
+    "NAMED_STAR": """SELECT 'NAMED_STAR' AS catalog, designation, NULL AS alias, NULL AS aliases, common_name,
+                            spectral_type AS object_type, magnitude AS mag, NULL AS size,
+                            NULL::float AS axis_ratio, NULL::float AS major, NULL::float AS minor,
+                            NULL::float AS pa, ra_degrees AS ra, dec_degrees AS dec
+                     FROM named_star_catalog""",
+}
+
+
+def _sky_catalog_row(r) -> dict:
+    major, minor = r.major, r.minor
+    if r.size is not None:
+        major = sky_overlay.parse_size(r.size)
+        if major and r.axis_ratio and r.axis_ratio >= 1:
+            minor = major / r.axis_ratio
+    aliases = sky_overlay.split_aliases(r.aliases)
+    if r.alias:
+        aliases.append(r.alias)
+    return {
+        "catalog": r.catalog, "designation": r.designation, "aliases": aliases,
+        "common_name": r.common_name, "object_type": r.object_type, "magnitude": r.mag,
+        "ra": r.ra, "dec": r.dec, "major": major, "minor": minor, "pa": r.pa,
+    }
+
+
+async def _load_sky_catalog_rows(db: AsyncSession, ra: float, dec: float, radius_deg: float) -> list:
+    rows = []
+    for sql in _SKY_CATALOG_SQL.values():
+        where = "WHERE" if "WHERE" not in sql else "AND"
+        stmt = text(
+            f"{sql} {where} ST_DWithin(location, ST_SetSRID(ST_MakePoint(:ra, :dec), 4326)::geography, "
+            ":meters, false)"
+        ).bindparams(ra=ra, dec=dec, meters=radius_deg * 111195.0 * 1.02)
+        rows.extend(_sky_catalog_row(r) for r in (await db.execute(stmt)).all())
+    return rows
+
+
+@router.get("/{image_id}/sky-overlay", response_model=SkyOverlayResponse)
+async def get_sky_overlay(image_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Every catalog object (Messier, Caldwell, NGC, IC, Sh2, named stars) in this image's field,
+    projected through the image's own plate solution (SIP included), merged across catalogs.
+    Coordinates are in the image's native pixels, top-left origin.
+    """
+    image = await db.get(Image, image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    frame = sky_overlay.resolve_frame(image)
+    if frame is None:
+        return SkyOverlayResponse(reason="no_wcs")
+    ra, dec, radius = frame.field_circle()
+    if not all(math.isfinite(v) for v in (ra, dec, radius)):
+        return SkyOverlayResponse(reason="no_wcs")
+    rows = await _load_sky_catalog_rows(db, ra, dec, radius + sky_overlay.QUERY_MARGIN_DEG)
+    return SkyOverlayResponse(
+        source=frame.source,
+        accuracy_warning=frame.accuracy_warning,
+        width=frame.width,
+        height=frame.height,
+        objects=sky_overlay.build_objects(frame, rows),
+    )
 
 
 @router.get("/{image_id}/field-overlaps", response_model=FieldOverlapResponse)
