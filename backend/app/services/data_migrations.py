@@ -147,6 +147,11 @@ def _backfill_pixinsight_wcs():
     return backfill_pixinsight_wcs(dry_run=False)
 
 
+def _repair_empty_nova_solves():
+    from app.scripts.repair_empty_nova_solves import repair_empty_nova_solves
+    return repair_empty_nova_solves(dry_run=False)
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -233,6 +238,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0017_pixinsight_wcs_distortion",
         "Redo PixInsight XISF solves imported by 0016: keep PixInsight's top-down row order (the overlay was mirrored) and fit its distortion model as SIP, so centre, radius and overlay match PixInsight.",
         _backfill_pixinsight_wcs,
+    ),
+    DataMigrationSpec(
+        "0018_repair_empty_nova_solves",
+        "Fix images a Nova job marked SOLVED with an empty calibration (solved but no RA/Dec): restore the position from the file's own WCS where it has one, otherwise mark unsolved and queue a fresh solve.",
+        _repair_empty_nova_solves,
     ),
 ]
 

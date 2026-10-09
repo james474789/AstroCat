@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 import os
 import time
 from datetime import datetime, timedelta
@@ -16,6 +17,17 @@ import redis
 import json
 
 logger = logging.getLogger(__name__)
+
+def calibration_has_solution(cal) -> bool:
+    """True when an astrometry.net calibration carries a usable centre."""
+    if not isinstance(cal, dict):
+        return False
+    try:
+        ra, dec = float(cal["ra"]), float(cal["dec"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return math.isfinite(ra) and math.isfinite(dec)
+
 
 @celery_app.task(bind=True, name="app.tasks.astrometry.astrometry_task", autoretry_for=(Exception,), retry_backoff=True, max_retries=None)
 def astrometry_task(self, image_id: int):
@@ -245,7 +257,19 @@ async def _monitor_logic(submission_id: str | int, image_id: int):
     # Get Results (WCS)
     try:
         cal = await AstrometryService.get_calibration(job_id, base_url)
-        
+
+        # A "success" job can still return an empty calibration; writing it
+        # would null out an existing (e.g. PixInsight) solution while marking
+        # the image SOLVED.
+        if not calibration_has_solution(cal):
+            logger.error(f"[ASTROMETRY] Job {job_id} returned no usable calibration ({cal!r}); not applying.")
+            async with AsyncSessionLocal() as session:
+                stmt = select(Image).where(Image.id == image_id)
+                image = (await session.execute(stmt)).scalar_one()
+                image.astrometry_status = "FAILED"
+                await session.commit()
+            return {"status": "failed", "job_id": job_id, "reason": "empty_calibration"}
+
         async with AsyncSessionLocal() as session:
             stmt = select(Image).where(Image.id == image_id)
             image = (await session.execute(stmt)).scalar_one()
