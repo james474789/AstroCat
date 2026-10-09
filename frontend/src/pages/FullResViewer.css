@@ -3,8 +3,8 @@
     position: fixed;
     inset: 0;
     z-index: 1000;
-    background: #000;
-    color: var(--color-text-primary, #f1f5f9);
+    background: var(--color-black);
+    color: var(--color-text-primary);
     overflow: hidden;
     user-select: none;
 }
@@ -17,7 +17,7 @@
     touch-action: none;
 }
 
-.fullres-osd { background: #000; }
+.fullres-osd { background: var(--color-black); }
 
 .fullres-bar {
     position: absolute;
@@ -60,7 +60,7 @@
     align-items: center;
     gap: 0.3rem;
     padding: 0.35rem 0.6rem;
-    border: 1px solid var(--color-border, #2d3a4f);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     background: rgba(20, 27, 45, 0.85);
     color: inherit;
@@ -70,13 +70,13 @@
 
 .fr-btn.icon { padding: 0.35rem; }
 @media (hover: hover) {
-  .fr-btn:hover:not(:disabled) { background: var(--color-surface-hover, #232d42); }
+  .fr-btn:hover:not(:disabled) { background: var(--color-surface-hover); }
 }
 .fr-btn:disabled { opacity: 0.4; cursor: default; }
 
 .fr-select {
     padding: 0.35rem 0.5rem;
-    border: 1px solid var(--color-border, #2d3a4f);
+    border: 1px solid var(--color-border);
     border-radius: 6px;
     background: rgba(20, 27, 45, 0.9);
     color: inherit;
@@ -88,7 +88,7 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
     font-size: 0.85rem;
-    color: var(--color-text-secondary, #94a3b8);
+    color: var(--color-text-secondary);
 }
 
 /* Thin lines drawn in CSS (not OSD overlays) so they stay 1 px at any zoom */
@@ -126,12 +126,12 @@
     padding: 0.4rem 0.8rem;
     border-radius: 999px;
     background: rgba(20, 27, 45, 0.92);
-    border: 1px solid var(--color-border, #2d3a4f);
+    border: 1px solid var(--color-border);
     font-size: 0.85rem;
     pointer-events: auto;
 }
-.fullres-chip.error { border-color: var(--color-error, #ef4444); }
-.fullres-chip.subtle { color: var(--color-text-secondary, #94a3b8); }
+.fullres-chip.error { border-color: var(--color-error); }
+.fullres-chip.subtle { color: var(--color-text-secondary); }
 .fullres-chip .spin { animation: fr-spin 1s linear infinite; }
 
 @keyframes fr-spin { to { transform: rotate(360deg); } }
@@ -166,10 +166,10 @@
     top: calc(3.75rem + var(--safe-top, 0px));
     z-index: 20;
 }
-.fr-warn-icon { margin-left: 4px; color: var(--color-warning, #eab308); }
+.fr-warn-icon { margin-left: 4px; color: var(--color-warning); }
 .fullres-osd.fo-hover,
 .fullres-osd.fo-hover * { cursor: pointer; }
-.fr-btn.active { background: var(--color-primary, #5b8dee); border-color: var(--color-primary, #5b8dee); color: #fff; }
+.fr-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: white; }
 
 /* Touch: viewer toolbar controls meet the 44px target size */
 @media (pointer: coarse) {

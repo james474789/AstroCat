@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Camera as CameraIcon, Aperture, SlidersHorizontal, MapPin,
-    Plus, Pencil, Trash2, ChevronDown, ChevronRight, MoreVertical, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon,
+    Plus, Pencil, Trash2, ChevronDown, ChevronRight, MoreVertical, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon, X,
 } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -98,7 +98,7 @@ function samplingClass(verdict) {
 
 function scaleCheckText(check) {
     if (!check || check.verdict === 'unknown') return null;
-    if (check.verdict === 'ok') return `measured ${check.measured.toFixed(2)}″ ✓`;
+    if (check.verdict === 'ok') return `measured ${check.measured.toFixed(2)}″`;
     const sign = check.delta_pct >= 0 ? '+' : '';
     return `declared ${check.declared.toFixed(2)}″ vs measured ${check.measured.toFixed(2)}″ (${sign}${check.delta_pct.toFixed(0)}% off, reducer?)`;
 }
@@ -124,7 +124,7 @@ function ModalShell({ title, onClose, children, wide }) {
             <div className={`modal-content equipment-modal${wide ? ' wide' : ''}`} onClick={(e) => e.stopPropagation()}>
                 <header className="modal-header">
                     <h2>{title}</h2>
-                    <button className="close-button" onClick={onClose}>×</button>
+                    <button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
                 </header>
                 <div className="modal-body">{children}</div>
             </div>
@@ -1040,7 +1040,7 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
     if (sites.length === 0) {
         return (
             <div className="empty-state">
-                <div className="empty-state-icon">🗺️</div>
+                <div className="empty-state-icon"><MapPin size={64} strokeWidth={1.5} /></div>
                 <h3 className="empty-state-title">No sites yet</h3>
                 <p className="empty-state-text">Add an observing site to enable horizon-aware planning.</p>
                 <button className="btn btn-primary" onClick={onAdd} disabled={!isAdmin}><Plus size={16} /> Add site</button>
@@ -1250,7 +1250,7 @@ function UnassignedImagesSection({ rigs, isAdmin, showToast }) {
     return (
         <div className="unassigned-section">
             <button type="button" className="unassigned-header" onClick={toggleOpen} aria-expanded={open}>
-                <span className="unassigned-caret">{open ? '▾' : '▸'}</span>
+                <span className="unassigned-caret">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
                 <h3>Unassigned images</h3>
                 <span className="badge badge-warning">{total}</span>
                 <span className="muted small">
@@ -1581,7 +1581,7 @@ export default function Equipment() {
             {activeTab === 'rigs' && (
                 rigs.length === 0 ? (
                     <div className="empty-state">
-                        <div className="empty-state-icon">🔭</div>
+                        <div className="empty-state-icon"><TelescopeIcon size={64} strokeWidth={1.5} /></div>
                         <h3 className="empty-state-title">No rigs yet</h3>
                         <p className="empty-state-text">Add a rig manually, or review AstroCat's detected setups above once your library has been scanned.</p>
                         <button className="btn btn-primary" onClick={() => setRigModal({ rig: null })} disabled={!isAdmin || cameras.length === 0 || optics.length === 0}>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react';
 import { fetchNightTimeline, fetchQualityNights } from '../api/client';
 import SessionQualityChart from '../components/quality/SessionQualityChart';
 import SessionSummary from '../components/quality/SessionSummary';
@@ -207,7 +207,7 @@ export default function NightReport() {
                                         {COLUMNS.map((c) => (
                                             <th key={c.key} aria-sort={sort.key === c.key ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none'}>
                                                 <button type="button" className="th-sort" onClick={() => setSort((s) => ({ key: c.key, dir: s.key === c.key ? -s.dir : 1 }))}>
-                                                    {c.label}{sort.key === c.key ? (sort.dir > 0 ? ' ↑' : ' ↓') : ''}
+                                                    {c.label}{sort.key === c.key ? (sort.dir > 0 ? <ArrowUp size={12} style={{ verticalAlign: '-1px', marginLeft: 4 }} /> : <ArrowDown size={12} style={{ verticalAlign: '-1px', marginLeft: 4 }} />) : ''}
                                                 </button>
                                             </th>
                                         ))}
@@ -224,7 +224,7 @@ export default function NightReport() {
                                             <td>{p.eccentricity != null ? p.eccentricity.toFixed(2) : <span className="text-muted">—</span>}</td>
                                             <td>{p.star_count ?? <span className="text-muted">—</span>}</td>
                                             <td>{p.alt_deg != null ? `${Math.round(p.alt_deg)}°` : <span className="text-muted">—</span>}</td>
-                                            <td>{p.flag ? <span className="night-flag">⚠ {FLAG_LABELS[p.flag] || p.flag}</span> : ''}</td>
+                                            <td>{p.flag ? <span className="night-flag"><AlertTriangle size={12} style={{ verticalAlign: '-1px', marginRight: 4 }} />{FLAG_LABELS[p.flag] || p.flag}</span> : ''}</td>
                                         </tr>
                                     ))}
                                 </tbody>

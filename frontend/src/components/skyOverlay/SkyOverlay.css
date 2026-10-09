@@ -55,9 +55,9 @@
     padding: 6px;
     min-width: 140px;
     background: rgba(10, 14, 23, 0.82);
-    border: 1px solid var(--color-border, #2d3a4f);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
-    color: var(--color-text-primary, #f1f5f9);
+    color: var(--color-text-primary);
     font-size: 0.75rem;
     backdrop-filter: blur(4px);
 }
@@ -76,7 +76,7 @@
 }
 @media (hover: hover) {
   .so-legend-row:hover {
-      background: var(--color-surface-hover, #232d42);
+      background: var(--color-surface-hover);
   }
 }
 .so-legend-row.off {
@@ -93,12 +93,12 @@
     flex: 1;
 }
 .so-legend-count {
-    color: var(--color-text-secondary, #94a3b8);
+    color: var(--color-text-secondary);
     font-variant-numeric: tabular-nums;
 }
 .so-legend-note {
     padding: 3px 6px;
-    color: var(--color-text-secondary, #94a3b8);
+    color: var(--color-text-secondary);
 }
 .so-legend-warning {
     display: flex;
@@ -106,7 +106,7 @@
     gap: 5px;
     margin-top: 2px;
     padding: 4px 6px 2px;
-    border-top: 1px solid var(--color-border, #2d3a4f);
-    color: var(--color-warning, #eab308);
+    border-top: 1px solid var(--color-border);
+    color: var(--color-warning);
     cursor: help;
 }

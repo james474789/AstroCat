@@ -498,11 +498,11 @@ export default function FullResViewer() {
                 <span className="fr-title" title={image?.file_name}>{image?.file_name || '…'}</span>
                 {navInfo.currentIndex !== -1 && (
                     <span className="fr-nav">
-                        <button className="fr-btn icon" onClick={goPrev} disabled={!navInfo.prevId} title="Previous (←)">
+                        <button className="fr-btn icon" onClick={goPrev} disabled={!navInfo.prevId} title="Previous (←)" aria-label="Previous image">
                             <ChevronLeft size={16} />
                         </button>
                         <span>{navInfo.currentIndex} / {navInfo.total}</span>
-                        <button className="fr-btn icon" onClick={goNext} disabled={!navInfo.nextId} title="Next (→)">
+                        <button className="fr-btn icon" onClick={goNext} disabled={!navInfo.nextId} title="Next (→)" aria-label="Next image">
                             <ChevronRight size={16} />
                         </button>
                     </span>
@@ -551,7 +551,7 @@ export default function FullResViewer() {
                 <button className="fr-btn" onClick={fit} title="Fit (0)"><Frame size={16} /> Fit</button>
                 <button className="fr-btn" onClick={oneToOne} title="100% native pixels (1)"><ScanSearch size={16} /> 1:1</button>
                 <span className="fr-zoom">{zoomPct != null ? `${zoomPct < 10 ? zoomPct.toFixed(1) : Math.round(zoomPct)}%` : ''}</span>
-                <button className="fr-btn icon" onClick={toggleFullscreen} title="Fullscreen (F)">
+                <button className="fr-btn icon" onClick={toggleFullscreen} title="Fullscreen (F)" aria-label="Toggle fullscreen">
                     {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
                 </button>
             </div>

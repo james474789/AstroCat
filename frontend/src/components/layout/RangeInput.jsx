@@ -1,3 +1,4 @@
+import { ArrowRight } from 'lucide-react';
 import './RangeInput.css';
 
 /**
@@ -34,7 +35,7 @@ export default function RangeInput({
                     {minLabel && <span className="range-field-label">{minLabel}</span>}
                 </div>
 
-                <span className="range-separator">→</span>
+                <span className="range-separator"><ArrowRight size={14} aria-hidden="true" /></span>
 
                 <div className="range-input-field">
                     <input

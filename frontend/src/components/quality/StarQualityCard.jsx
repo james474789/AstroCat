@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ArrowRight } from 'lucide-react';
 import { fetchImage, fetchNightTimeline, remeasureStarMetrics } from '../../api/client';
 import { useQualityUnits } from '../../context/QualityUnitsContext';
 import {
@@ -213,7 +213,7 @@ export default function StarQualityCard({ image, onImageUpdated }) {
                     <div className="quality-grid-caption" style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                         <strong>FWHM through the night</strong>
                         <Link to={`/nights/${nightKey}${image.target_key ? `?target=${encodeURIComponent(image.target_key)}` : ''}${image.rig_id != null ? `${image.target_key ? '&' : '?'}rig=${image.rig_id}` : ''}`}>
-                            View night →
+                            View night <ArrowRight size={14} style={{ verticalAlign: '-2px' }} />
                         </Link>
                     </div>
                     <SessionQualityChart timeline={nightTimeline} compact highlightId={image.id} />

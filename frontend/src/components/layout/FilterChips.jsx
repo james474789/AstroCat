@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import './FilterChips.css';
 
 // R0c: Unassigned bucket key `{cam_key|none}|b{bin}|{focal:.1f or -}` as a chip label.
@@ -24,8 +25,7 @@ export default function FilterChips({ filters, onRemove, rigNames = {} }) {
         format: { label: 'Format', format: (v) => v },
         rating: {
             label: 'Min Rating', format: (v) => {
-                const stars = ['', '★', '★★', '★★★', '★★★★', '★★★★★'];
-                return stars[v] || v;
+                return v ? `${v}+ stars` : v;
             }
         },
         object_name: { label: 'Object', format: (v) => v },
@@ -102,9 +102,10 @@ export default function FilterChips({ filters, onRemove, rigNames = {} }) {
                             className="filter-chip-remove"
                             onClick={() => onRemove(key)}
                             title="Remove filter"
+                            aria-label="Remove filter"
                             type="button"
                         >
-                            ✕
+                            <X size={10} aria-hidden="true" />
                         </button>
                     </div>
                 ))}

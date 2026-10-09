@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, Clock, Image as ImageIcon, Zap, Hash } from 'lucide-react';
 import {
     BarChart, Bar, PieChart, Pie, Cell, ScatterChart, Scatter,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList
@@ -11,9 +12,10 @@ import { CONSTELLATION_LINES } from '../data/constellations_data';
 import { CONSTELLATION_LABELS } from '../data/constellations_labels';
 import RigStarSizeChart from '../components/quality/RigStarSizeChart';
 import QualityStatsSection from '../components/quality/QualityStatsSection';
+import { SERIES, CHART_PRIMARY, CHART_SECONDARY, CHART_ACCENT, CHART_SUCCESS, CHART_AXIS, CHART_TEXT, CHART_TOOLTIP, HEAT, FILTER_SERIES } from '../utils/chartColors';
 import './FitsStats.css';
 
-const COLORS = ['#5b8dee', '#8b5cf6', '#22c55e', '#eab308', '#ef4444', '#22d3ee'];
+const COLORS = SERIES;
 
 // Helper to interpolate colors
 const interpolateColor = (value, minColor, maxColor) => {
@@ -39,10 +41,10 @@ const interpolateColor = (value, minColor, maxColor) => {
 const getHeatmapColor = (density) => {
     // Density is 0 to 1
     // Gradient: Blue (Low) -> Cyan -> Green -> Yellow -> Red (High)
-    if (density < 0.25) return interpolateColor(density * 4, '#3b82f6', '#06b6d4'); // Blue -> Cyan
-    if (density < 0.5) return interpolateColor((density - 0.25) * 4, '#06b6d4', '#22c55e'); // Cyan -> Green
-    if (density < 0.75) return interpolateColor((density - 0.5) * 4, '#22c55e', '#eab308'); // Green -> Yellow
-    return interpolateColor((density - 0.75) * 4, '#eab308', '#ef4444'); // Yellow -> Red
+    if (density < 0.25) return interpolateColor(density * 4, HEAT.blue, HEAT.cyan); // Blue -> Cyan
+    if (density < 0.5) return interpolateColor((density - 0.25) * 4, HEAT.cyan, HEAT.green); // Cyan -> Green
+    if (density < 0.75) return interpolateColor((density - 0.5) * 4, HEAT.green, HEAT.yellow); // Green -> Yellow
+    return interpolateColor((density - 0.75) * 4, HEAT.yellow, HEAT.red); // Yellow -> Red
 };
 
 const formatRaToTime = (degrees) => {
@@ -57,11 +59,9 @@ const CustomTooltip = ({ active, payload, label }) => {
         const data = payload[0].payload;
         return (
             <div className="custom-tooltip" style={{
-                background: '#1e293b',
-                border: '1px solid #334155',
+                ...CHART_TOOLTIP,
                 borderRadius: '8px',
                 padding: '10px',
-                color: '#f1f5f9'
             }}>
                 <p style={{ margin: 0, fontWeight: 'bold' }}>{`RA: ${formatRaToTime(data.x)}`}</p>
                 <p style={{ margin: 0 }}>{`Dec: ${data.y.toFixed(2)}°`}</p>
@@ -120,7 +120,7 @@ export default function FitsStats() {
     if (isError) {
         return (
             <div className="fits-stats-page empty-state">
-                <div className="empty-state-icon">⚠️</div>
+                <div className="empty-state-icon"><AlertTriangle size={40} aria-hidden="true" /></div>
                 <h3 className="empty-state-title">Failed to load statistics</h3>
                 <p className="empty-state-text">Please check your connection or try again later.</p>
             </div>
@@ -183,18 +183,7 @@ export default function FitsStats() {
     // Helper to get semantic color
     const getFilterColor = (name) => {
         const lower = name.toLowerCase();
-        if (lower === 'red') return '#ef4444';      // Red
-        if (lower === 'green') return '#22c55e';    // Green
-        if (lower === 'blue') return '#3b82f6';     // Blue
-        if (lower === 'luminance') return '#cbd5e1'; // Light Grey
-        if (lower === 'h-alpha') return '#b91c1c';  // Deep Red
-        if (lower === 'oiii') return '#06b6d4';     // Cyan
-        if (lower === 'sii') return '#be185d';      // Pink/Magenta
-        if (lower === 'dark') return '#0f172a';     // Very Dark Slate
-        if (lower === 'flat') return '#94a3b8';     // Slate
-        if (lower === 'bias') return '#475569';     // Dark Slate
-        if (lower === 'other') return '#64748b';    // Grey
-        return null; // Fallback to palette
+        return FILTER_SERIES[lower] || null; // Fallback to palette
     };
 
     // Process filter data with normalization and grouping
@@ -354,8 +343,6 @@ export default function FitsStats() {
 
     return (
         <div className="fits-stats-page">
-            <div className="starfield" />
-
             <div className="stats-header">
                 <h1 className="stats-title">Statistics</h1>
                 <p className="stats-subtitle">Deep dive into technical metadata from your FITS headers.</p>
@@ -431,22 +418,22 @@ export default function FitsStats() {
                 <div className="stat-card highlight">
                     <div className="stat-value">{totalHours}h</div>
                     <div className="stat-label">Total Integration</div>
-                    <div className="stat-icon">⏱️</div>
+                    <div className="stat-icon"><Clock size={24} aria-hidden="true" /></div>
                 </div>
                 <div className="stat-card">
                     <div className="stat-value">{totalImages.toLocaleString()}</div>
                     <div className="stat-label">Total Images</div>
-                    <div className="stat-icon">🖼️</div>
+                    <div className="stat-icon"><ImageIcon size={24} aria-hidden="true" /></div>
                 </div>
                 <div className="stat-card">
                     <div className="stat-value">{avgExposure}s</div>
                     <div className="stat-label">Avg Exposure</div>
-                    <div className="stat-icon">⚡</div>
+                    <div className="stat-icon"><Zap size={24} aria-hidden="true" /></div>
                 </div>
                 <div className="stat-card">
                     <div className="stat-value">{overview.total_subs ?? 'N/A'}</div>
                     <div className="stat-label">Total Subs</div>
-                    <div className="stat-icon">🔢</div>
+                    <div className="stat-icon"><Hash size={24} aria-hidden="true" /></div>
                 </div>
             </div>
 
@@ -473,7 +460,7 @@ export default function FitsStats() {
                                 reversed={true}
                                 ticks={[0, 45, 90, 135, 180, 225, 270, 315, 360]}
                                 tickFormatter={(val) => `${val / 15}h`}
-                                stroke="#94a3b8"
+                                stroke={CHART_AXIS}
                                 fontSize={12}
                             />
                             <YAxis
@@ -482,7 +469,7 @@ export default function FitsStats() {
                                 name="Dec"
                                 unit="°"
                                 domain={[-90, 90]}
-                                stroke="#94a3b8"
+                                stroke={CHART_AXIS}
                                 fontSize={12}
                             />
                             <Tooltip
@@ -555,7 +542,7 @@ export default function FitsStats() {
                                 style={{ cursor: 'pointer' }}
                             >
                                 {skyCoverage.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color || "#22d3ee"} />
+                                    <Cell key={`cell-${index}`} fill={entry.color || CHART_ACCENT} />
                                 ))}
                             </Scatter>
                         </ScatterChart>
@@ -586,12 +573,10 @@ export default function FitsStats() {
                             </Pie>
                             <Tooltip
                                 contentStyle={{
-                                    background: '#1e293b',
-                                    border: '1px solid #334155',
+                                    ...CHART_TOOLTIP,
                                     borderRadius: '8px',
-                                    color: '#f1f5f9'
                                 }}
-                                itemStyle={{ color: '#f1f5f9' }}
+                                itemStyle={{ color: CHART_TEXT }}
                             />
                             <Legend />
                         </PieChart>
@@ -608,13 +593,13 @@ export default function FitsStats() {
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
                             <XAxis
                                 dataKey="range"
-                                stroke="#94a3b8"
+                                stroke={CHART_AXIS}
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
                             />
                             <YAxis
-                                stroke="#94a3b8"
+                                stroke={CHART_AXIS}
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
@@ -622,16 +607,14 @@ export default function FitsStats() {
                             <Tooltip
                                 cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                                 contentStyle={{
-                                    background: '#1e293b',
-                                    border: '1px solid #334155',
+                                    ...CHART_TOOLTIP,
                                     borderRadius: '8px',
-                                    color: '#f1f5f9'
                                 }}
                             />
 
                             <Bar
                                 dataKey="count"
-                                fill="#5b8dee"
+                                fill={CHART_PRIMARY}
                                 radius={[4, 4, 0, 0]}
                                 onClick={handleExposureClick}
                                 style={{ cursor: 'pointer' }}
@@ -665,12 +648,10 @@ export default function FitsStats() {
                             </Pie>
                             <Tooltip
                                 contentStyle={{
-                                    background: '#1e293b',
-                                    border: '1px solid #334155',
+                                    ...CHART_TOOLTIP,
                                     borderRadius: '8px',
-                                    color: '#f1f5f9'
                                 }}
-                                itemStyle={{ color: '#f1f5f9' }}
+                                itemStyle={{ color: CHART_TEXT }}
                             />
                             <Legend />
                         </PieChart>
@@ -687,14 +668,14 @@ export default function FitsStats() {
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
                             <XAxis
                                 dataKey="range"
-                                stroke="#94a3b8"
+                                stroke={CHART_AXIS}
                                 fontSize={10}
                                 tickLine={false}
                                 axisLine={false}
                                 interval={1}
                             />
                             <YAxis
-                                stroke="#94a3b8"
+                                stroke={CHART_AXIS}
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
@@ -702,15 +683,13 @@ export default function FitsStats() {
                             <Tooltip
                                 cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                                 contentStyle={{
-                                    background: '#1e293b',
-                                    border: '1px solid #334155',
+                                    ...CHART_TOOLTIP,
                                     borderRadius: '8px',
-                                    color: '#f1f5f9'
                                 }}
                             />
                             <Bar
                                 dataKey="count"
-                                fill="#8b5cf6"
+                                fill={CHART_SECONDARY}
                                 radius={[4, 4, 0, 0]}
                                 onClick={handleRotationClick}
                                 style={{ cursor: 'pointer' }}
@@ -729,13 +708,13 @@ export default function FitsStats() {
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
                             <XAxis
                                 dataKey="range"
-                                stroke="#94a3b8"
+                                stroke={CHART_AXIS}
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
                             />
                             <YAxis
-                                stroke="#94a3b8"
+                                stroke={CHART_AXIS}
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
@@ -743,15 +722,13 @@ export default function FitsStats() {
                             <Tooltip
                                 cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                                 contentStyle={{
-                                    background: '#1e293b',
-                                    border: '1px solid #334155',
+                                    ...CHART_TOOLTIP,
                                     borderRadius: '8px',
-                                    color: '#f1f5f9'
                                 }}
                             />
                             <Bar
                                 dataKey="count"
-                                fill="#10b981"
+                                fill={CHART_SUCCESS}
                                 radius={[4, 4, 0, 0]}
                                 onClick={handleScaleClick}
                                 style={{ cursor: 'pointer' }}

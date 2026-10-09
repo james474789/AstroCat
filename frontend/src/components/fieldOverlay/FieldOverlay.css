@@ -18,11 +18,11 @@
 }
 .fo-shape.hovered {
     fill: rgba(255, 255, 255, 0.14);
-    stroke: #fff;
+    stroke: white;
 }
 
 .fo-label {
-    fill: #fff;
+    fill: white;
     stroke: rgba(0, 0, 0, 0.8);
     paint-order: stroke;
     font-family: inherit;
@@ -36,11 +36,11 @@
     max-height: 300px;
     display: flex;
     flex-direction: column;
-    background: var(--color-surface-elevated, #1a2435);
-    border: 1px solid var(--color-border-light, #3d4a5f);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-light);
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-    color: var(--color-text-primary, #f1f5f9);
+    color: var(--color-text-primary);
     font-size: 0.8rem;
 }
 .fo-pop-header {
@@ -49,17 +49,17 @@
     justify-content: space-between;
     gap: 8px;
     padding: 8px 10px;
-    border-bottom: 1px solid var(--color-border, #2d3a4f);
+    border-bottom: 1px solid var(--color-border);
     font-weight: 600;
 }
 .fo-pop-note {
     font-weight: 400;
-    color: var(--color-text-muted, #64748b);
+    color: var(--color-text-muted);
 }
 .fo-pop-close {
     background: none;
     border: none;
-    color: var(--color-text-secondary, #94a3b8);
+    color: var(--color-text-secondary);
     cursor: pointer;
     padding: 2px;
     display: flex;
@@ -79,7 +79,7 @@
 }
 @media (hover: hover) {
   .fo-pop-list a:hover {
-      background: var(--color-surface-hover, #232d42);
+      background: var(--color-surface-hover);
   }
 }
 .fo-pop-name {
@@ -88,13 +88,13 @@
     text-overflow: ellipsis;
 }
 .fo-pop-meta {
-    color: var(--color-text-secondary, #94a3b8);
+    color: var(--color-text-secondary);
     font-size: 0.72rem;
 }
 .fo-pop-more {
     padding: 6px 10px;
-    border-top: 1px solid var(--color-border, #2d3a4f);
-    color: var(--color-text-muted, #64748b);
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
 }
 .fo-pop-list li.master .fo-pop-name {
     color: rgb(251, 191, 36);
@@ -106,7 +106,7 @@
 .so-legend-title {
     padding: 2px 6px 4px;
     font-weight: 600;
-    color: var(--color-text-secondary, #94a3b8);
+    color: var(--color-text-secondary);
 }
 .fo-swatch {
     width: 10px;

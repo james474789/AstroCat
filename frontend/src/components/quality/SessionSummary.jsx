@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react';
 import { useQualityUnits } from '../../context/QualityUnitsContext';
 import { filterColor } from '../../utils/filterColors';
 import './Quality.css';
@@ -44,7 +45,7 @@ export default function SessionSummary({ summary, rigId }) {
                                 <div>Best {fmt(s, 'best_fwhm', units)} · worst {fmt(s, 'worst_fwhm', units)}</div>
                                 <div title="Theil–Sen slope of FWHM over the run: steady growth usually means focus drift">
                                     Drift {d ?? <span className="text-muted">run too short</span>}
-                                    {s.flagged > 0 && <> · <span style={{ color: 'var(--color-warning)' }}>⚠ {s.flagged} suspect</span></>}
+                                    {s.flagged > 0 && <> · <span style={{ color: 'var(--color-warning)' }}><AlertTriangle size={12} style={{ verticalAlign: '-2px' }} /> {s.flagged} suspect</span></>}
                                 </div>
                             </>
                         ) : <div className="text-muted">Not measured yet</div>}

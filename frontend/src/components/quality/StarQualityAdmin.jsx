@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Star } from 'lucide-react';
 import { fetchStarMetricsStatus, requestStarMetricsRemeasure, updateSettings } from '../../api/client';
 import './Quality.css';
 
@@ -12,7 +13,7 @@ const COUNT_LABELS = [
 
 function Toggle({ checked, onChange, disabled, label }) {
     return (
-        <div className="toggle-group" style={{ display: 'flex', gap: '0.5rem', background: '#2d3748', padding: '0.25rem', borderRadius: '0.5rem' }} role="group" aria-label={label}>
+        <div className="toggle-group" style={{ display: 'flex', gap: '0.5rem', background: 'var(--color-border)', padding: '0.25rem', borderRadius: '0.5rem' }} role="group" aria-label={label}>
             <button type="button" className={`btn btn-sm ${checked ? 'btn-primary' : 'btn-ghost'}`} onClick={() => onChange(true)} disabled={disabled} aria-pressed={checked}>On</button>
             <button type="button" className={`btn btn-sm ${!checked ? 'btn-primary' : 'btn-ghost'}`} onClick={() => onChange(false)} disabled={disabled} aria-pressed={!checked}>Off</button>
         </div>
@@ -21,7 +22,7 @@ function Toggle({ checked, onChange, disabled, label }) {
 
 function SettingRow({ title, description, children, first }) {
     return (
-        <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem', flexWrap: 'wrap', borderTop: first ? 'none' : '1px solid #2d3748' }}>
+        <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem', flexWrap: 'wrap', borderTop: first ? 'none' : '1px solid var(--color-border)' }}>
             <div style={{ flex: '1 1 260px', minWidth: 0 }}>
                 <div className="setting-label" style={{ fontWeight: 'bold' }}>{title}</div>
                 <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>{description}</div>
@@ -78,11 +79,11 @@ export default function StarQualityAdmin({ systemSettings, onSettingsChange }) {
 
     return (
         <section className="settings-section">
-            <h2 className="section-title">⭐ Star Quality (HFR / FWHM)</h2>
+            <h2 className="section-title"><Star size={18} aria-hidden="true" style={{ verticalAlign: '-3px', marginRight: '0.4rem' }} /> Star Quality (HFR / FWHM)</h2>
             <div className="card">
                 <SettingRow first title="Default units"
                     description="How FWHM and HFR are shown until a viewer picks their own with the ″ / px switch (bottom of the sidebar).">
-                    <div className="toggle-group" style={{ display: 'flex', gap: '0.5rem', background: '#2d3748', padding: '0.25rem', borderRadius: '0.5rem' }}>
+                    <div className="toggle-group" style={{ display: 'flex', gap: '0.5rem', background: 'var(--color-border)', padding: '0.25rem', borderRadius: '0.5rem' }}>
                         <button type="button" className={`btn btn-sm ${systemSettings.quality_units !== 'PX' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => save({ quality_units: 'ARCSEC' })} disabled={saving}>Arcseconds</button>
                         <button type="button" className={`btn btn-sm ${systemSettings.quality_units === 'PX' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => save({ quality_units: 'PX' })} disabled={saving}>Pixels</button>
                     </div>
@@ -98,19 +99,19 @@ export default function StarQualityAdmin({ systemSettings, onSettingsChange }) {
                         onChange={(v) => save({ star_metrics_backfill: v })} />
                 </SettingRow>
                 {envOff && (
-                    <div style={{ padding: '0 1rem 1rem', color: '#fbbf24', fontSize: '0.85rem' }}>
+                    <div style={{ padding: '0 1rem 1rem', color: 'var(--color-warning)', fontSize: '0.85rem' }}>
                         Switched off by the server’s STAR_METRICS_* environment settings, which override these switches.
                     </div>
                 )}
 
-                <div style={{ padding: '1rem', borderTop: '1px solid #2d3748' }}>
+                <div style={{ padding: '1rem', borderTop: '1px solid var(--color-border)' }}>
                     <div className="setting-label" style={{ fontWeight: 'bold' }}>Progress</div>
                     {status ? (
                         <>
                             <div className="quality-progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
                                 <div style={{ width: `${pct}%` }} />
                             </div>
-                            <div className="text-sm" style={{ color: '#e2e8f0', marginBottom: '0.5rem' }}>
+                            <div className="text-sm" style={{ color: 'var(--color-text-primary)', marginBottom: '0.5rem' }}>
                                 {status.done.toLocaleString()} of {status.eligible.toLocaleString()} Light images ({pct}%)
                                 {remaining > 0 && days != null && status.settings.star_metrics_backfill && (
                                     <span className="text-muted"> · about {days < 1 ? `${Math.max(1, Math.round(days * 24))} h` : `${days.toFixed(1)} days`} to go</span>

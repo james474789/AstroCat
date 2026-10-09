@@ -33,6 +33,9 @@
 
 .tab-icon {
     font-size: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .tab-label {
@@ -141,8 +144,6 @@
 @media (hover: hover) {
   .catalog-card:hover {
       border-color: var(--color-primary);
-      box-shadow: var(--shadow-glow);
-      transform: translateY(-2px);
   }
 }
 
@@ -163,6 +164,8 @@
 
 .object-type-icon {
     font-size: 2rem;
+    display: inline-flex;
+    align-items: center;
 }
 
 .object-designation h3 {
@@ -218,6 +221,9 @@
 }
 
 .view-images-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
     font-size: var(--font-size-sm);
     color: var(--color-primary);
     font-weight: 500;

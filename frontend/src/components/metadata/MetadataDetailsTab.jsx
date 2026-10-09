@@ -1,4 +1,5 @@
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, ChevronDown, FileText, MapPin, BarChart3, Video, Star, Globe } from 'lucide-react';
+import TelescopeIcon from '../icons/TelescopeIcon';
 import { useState } from 'react';
 import './MetadataTab.css';
 
@@ -45,7 +46,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
     const detailSections = [
         {
             id: 'file',
-            title: '📄 File Information',
+            icon: FileText, title: 'File Information',
             fields: [
                 ['File Name', image.file_name],
                 ['Format', image.file_format],
@@ -64,7 +65,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
         },
         {
             id: 'observation',
-            title: '🔭 Observational Data',
+            icon: TelescopeIcon, title: 'Observational Data',
             fields: [
                 ['Object Name', image.object_name],
                 ['Observer', image.observer_name],
@@ -76,7 +77,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
         },
         {
             id: 'plate',
-            title: '📍 Plate Solving & WCS',
+            icon: MapPin, title: 'Plate Solving & WCS',
             fields: [
                 ['Plate Solved', image.is_plate_solved ? 'Yes' : 'No'],
                 ['Provider', image.plate_solve_provider === 'LOCAL' ? 'Local' : image.plate_solve_provider || null],
@@ -90,7 +91,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
         },
         {
             id: 'exposure',
-            title: '📊 Exposure & Imaging Settings',
+            icon: BarChart3, title: 'Exposure & Imaging Settings',
             fields: [
                 ['Exposure Time', image.exposure_time_seconds ? `${image.exposure_time_seconds.toFixed(3)}s` : null],
                 ['Gain', image.gain],
@@ -102,7 +103,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
         },
         {
             id: 'equipment',
-            title: '🎥 Equipment',
+            icon: Video, title: 'Equipment',
             fields: [
                 ['Camera', image.camera_name],
                 ['Telescope/Lens', image.telescope_name],
@@ -114,7 +115,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
         },
         {
             id: 'quality',
-            title: '⭐ Quality & Classification',
+            icon: Star, title: 'Quality & Classification',
             fields: [
                 ['Classification', image.subtype],
                 ['Rating', image.rating ? `${image.rating} stars` : null],
@@ -125,7 +126,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
         },
         {
             id: 'astrometry',
-            title: '🌐 Astrometry.net Status',
+            icon: Globe, title: 'Astrometry.net Status',
             fields: [
                 ['Status', image.astrometry_status],
                 ['Submission ID', image.astrometry_submission_id],
@@ -148,8 +149,8 @@ export default function MetadataDetailsTab({ image, headerData }) {
                                 className={`section-header ${expandedSection === section.id ? 'expanded' : ''}`}
                                 onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
                             >
-                                <span className="section-title">{section.title}</span>
-                                <span className="expand-icon">▼</span>
+                                <span className="section-title"><section.icon size={16} />{section.title}</span>
+                                <ChevronDown className="expand-icon" size={14} aria-hidden="true" />
                             </button>
                             {expandedSection === section.id && (
                                 <div className="section-content">

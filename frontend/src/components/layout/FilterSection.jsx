@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import './FilterSection.css';
 
 /**
@@ -27,7 +28,7 @@ export default function FilterSection({
                     {badge && <span className="filter-section-badge">{badge}</span>}
                 </div>
                 <span className={`filter-section-toggle ${isOpen ? 'open' : ''}`}>
-                    ▼
+                    <ChevronDown size={14} aria-hidden="true" />
                 </span>
             </button>
             

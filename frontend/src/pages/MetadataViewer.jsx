@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Microscope, Camera, Image as ImageIcon, Orbit, FileText, Check, X, Star, ClipboardList, BarChart3, Search, Save } from 'lucide-react';
 import { fetchImage, API_BASE_URL, formatSubtype } from '../api/client';
 import MetadataSummaryTab from '../components/metadata/MetadataSummaryTab';
 import MetadataDetailsTab from '../components/metadata/MetadataDetailsTab';
@@ -61,21 +61,23 @@ export default function MetadataViewer() {
         );
     }
 
-    const fileTypeLabel = {
-        'FITS': '🔬 FITS',
-        'FIT': '🔬 FIT',
-        'CR2': '📷 Canon RAW',
-        'CR3': '📷 Canon RAW',
-        'ARW': '📷 Sony RAW',
-        'NEF': '📷 Nikon RAW',
-        'DNG': '📷 DNG',
-        'JPG': '🖼️ JPEG',
-        'JPEG': '🖼️ JPEG',
-        'PNG': '🖼️ PNG',
-        'TIFF': '🖼️ TIFF',
-        'TIF': '🖼️ TIFF',
-        'XISF': '🌌 XISF',
-    }[image.file_format] || `📄 ${image.file_format}`;
+    const FILE_TYPE_INFO = {
+        'FITS': [Microscope, 'FITS'],
+        'FIT': [Microscope, 'FIT'],
+        'CR2': [Camera, 'Canon RAW'],
+        'CR3': [Camera, 'Canon RAW'],
+        'ARW': [Camera, 'Sony RAW'],
+        'NEF': [Camera, 'Nikon RAW'],
+        'DNG': [Camera, 'DNG'],
+        'JPG': [ImageIcon, 'JPEG'],
+        'JPEG': [ImageIcon, 'JPEG'],
+        'PNG': [ImageIcon, 'PNG'],
+        'TIFF': [ImageIcon, 'TIFF'],
+        'TIF': [ImageIcon, 'TIFF'],
+        'XISF': [Orbit, 'XISF'],
+    };
+    const [FileTypeIcon, fileTypeText] = FILE_TYPE_INFO[image.file_format] || [FileText, image.file_format];
+    const fileTypeLabel = <><FileTypeIcon size={14} /> {fileTypeText}</>;
 
     return (
         <div className="metadata-viewer-page">
@@ -97,7 +99,7 @@ export default function MetadataViewer() {
                     <div className="status-item">
                         <span className="status-label">Plate Solved:</span>
                         <span className={`status-value ${image.is_plate_solved ? 'solved' : 'unsolved'}`}>
-                            {image.is_plate_solved ? '✓ Yes' : '✗ No'}
+                            {image.is_plate_solved ? <><Check size={14} /> Yes</> : <><X size={14} /> No</>}
                         </span>
                     </div>
                     <div className="status-item">
@@ -107,7 +109,7 @@ export default function MetadataViewer() {
                     <div className="status-item">
                         <span className="status-label">Rating:</span>
                         <span className="status-value">
-                            {image.rating ? `⭐ ${image.rating}` : '—'}
+                            {image.rating ? <><Star size={14} /> {image.rating}</> : '—'}
                         </span>
                     </div>
                     {image.capture_date && (
@@ -128,25 +130,25 @@ export default function MetadataViewer() {
                         className={`tab-button ${activeTab === 'summary' ? 'active' : ''}`}
                         onClick={() => setActiveTab('summary')}
                     >
-                        📋 Summary
+                        <ClipboardList size={14} /> Summary
                     </button>
                     <button
                         className={`tab-button ${activeTab === 'details' ? 'active' : ''}`}
                         onClick={() => setActiveTab('details')}
                     >
-                        📊 Details
+                        <BarChart3 size={14} /> Details
                     </button>
                     <button
                         className={`tab-button ${activeTab === 'raw' ? 'active' : ''}`}
                         onClick={() => setActiveTab('raw')}
                     >
-                        🔍 Raw Headers
+                        <Search size={14} /> Raw Headers
                     </button>
                     <button
                         className={`tab-button ${activeTab === 'export' ? 'active' : ''}`}
                         onClick={() => setActiveTab('export')}
                     >
-                        💾 Export
+                        <Save size={14} /> Export
                     </button>
                 </div>
             </div>

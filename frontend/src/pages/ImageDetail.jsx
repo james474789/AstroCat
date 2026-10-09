@@ -15,7 +15,8 @@ import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
 import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
 import useSeenIn from '../hooks/useSeenIn';
 import SeenInPanel from '../components/seenIn/SeenInPanel';
-import { Maximize2, Layers, Crosshair, AlertTriangle, Frame } from 'lucide-react';
+import { Maximize2, Layers, Crosshair, AlertTriangle, Frame, Orbit, Download, Sparkles, RefreshCw, ClipboardList, Hourglass, Rocket, Pencil, Check, Star, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityCard from '../components/quality/StarQualityCard';
 import './ImageDetail.css';
 
@@ -548,8 +549,9 @@ export default function ImageDetail() {
                             onClick={goPrev}
                             disabled={!navInfo.prevId}
                             title="Previous Image (Left Arrow)"
+                            aria-label="Previous image"
                         >
-                            &larr;
+                            <ChevronLeft size={18} aria-hidden="true" />
                         </button>
                         <span className="nav-index">
                             Image {navInfo.currentIndex} of {navInfo.total}
@@ -559,8 +561,9 @@ export default function ImageDetail() {
                             onClick={goNext}
                             disabled={!navInfo.nextId}
                             title="Next Image (Right Arrow)"
+                            aria-label="Next image"
                         >
-                            &rarr;
+                            <ChevronRight size={18} aria-hidden="true" />
                         </button>
                     </div>
                 )}
@@ -666,7 +669,7 @@ export default function ImageDetail() {
                                             >
                                                 X: {Math.round(cursorPos.imgX)} Y: {Math.round(cursorPos.imgY)}
                                                 {cursorPos.ra !== undefined && (
-                                                    <div style={{ fontSize: '0.8em', marginTop: '4px', color: '#ccc' }}>
+                                                    <div style={{ fontSize: '0.8em', marginTop: '4px', color: 'var(--color-text-secondary)' }}>
                                                         {formatRA(cursorPos.ra)}<br />
                                                         {formatDec(cursorPos.dec)}
                                                     </div>
@@ -678,7 +681,7 @@ export default function ImageDetail() {
                                 </div>
                             ) : (
                                 <div className="preview-placeholder">
-                                    <span className="preview-icon">🌌</span>
+                                    <span className="preview-icon"><Orbit size={64} strokeWidth={1.5} /></span>
                                     <span className="preview-text">Preview Not Available</span>
                                 </div>
                             )}
@@ -715,7 +718,8 @@ export default function ImageDetail() {
                                 className="btn btn-secondary"
                                 download // Hint to browser
                             >
-                                📥 Download JPG
+                                <Download size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                                Download JPG
                             </a>
 
                             {/* AstroCat annotations on/off */}
@@ -728,7 +732,8 @@ export default function ImageDetail() {
                                         ? `Annotations — approximate: ${sky.warning}`
                                         : 'Annotations: catalog objects from the plate solution')}
                             >
-                                ✨ Annotations: {sky.active ? 'On' : 'Off'}
+                                <Sparkles size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                                Annotations: {sky.active ? 'On' : 'Off'}
                                 {sky.active && sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
                             </button>
 
@@ -772,13 +777,15 @@ export default function ImageDetail() {
                                 disabled={saving}
                                 title="Force backend to regenerate the linear thumbnail"
                             >
-                                🔄 Regenerate
+                                <RefreshCw size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                                Regenerate
                             </button>
                             <button
                                 className="btn btn-secondary"
                                 onClick={() => navigate(`/images/${id}/metadata`)}
                             >
-                                📋 View Metadata
+                                <ClipboardList size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                                View Metadata
                             </button>
                         </div>
                     </div>
@@ -863,7 +870,9 @@ export default function ImageDetail() {
                                                 onClick={handleRescan}
                                                 disabled={['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status) || saving}
                                             >
-                                                {['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status) ? '⏳ Processing...' : '🔭 Start Rescan'}
+                                                {['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status)
+                                                    ? <><Hourglass size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Processing...</>
+                                                    : <><TelescopeIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Start Rescan</>}
                                             </button>
 
                                             {image.astrometry_url && (
@@ -873,7 +882,7 @@ export default function ImageDetail() {
                                                     rel="noopener noreferrer"
                                                     className="btn btn-secondary btn-sm"
                                                 >
-                                                    🚀 View Results
+                                                    <Rocket size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />View Results
                                                 </a>
                                             )}
 
@@ -905,8 +914,10 @@ export default function ImageDetail() {
                                         onClick={() => handleRatingChange(0)}
                                         style={{ cursor: 'pointer', opacity: image.rating ? 0.6 : 1 }}
                                         title="Clear rating (or press 0)"
+                                        role="button"
+                                        aria-label="Clear rating"
                                     >
-                                        ✕
+                                        <X size={16} aria-hidden="true" />
                                     </span>
                                     {[...Array(5)].map((_, i) => (
                                         <span
@@ -916,7 +927,7 @@ export default function ImageDetail() {
                                             style={{ cursor: 'pointer' }}
                                             title={`Rate ${i + 1}/5 (or press ${i + 1})`}
                                         >
-                                            {i < (image.rating || 0) ? '★' : '☆'}
+                                            <Star size={18} fill={i < (image.rating || 0) ? 'currentColor' : 'none'} />
                                         </span>
                                     ))}
                                 </span>
@@ -929,7 +940,7 @@ export default function ImageDetail() {
                                     ({image.rating || 0}/5)
                                 </span>
                                 {ratingManuallyEdited && (
-                                    <span className="badge badge-info" style={{ marginLeft: '0.5rem' }} title="Rating was manually edited">✏️ Edited</span>
+                                    <span className="badge badge-info" style={{ marginLeft: '0.5rem' }} title="Rating was manually edited"><Pencil size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />Edited</span>
                                 )}
                             </div>
                         </div>
@@ -1049,8 +1060,9 @@ export default function ImageDetail() {
                                                 className="btn btn-ghost btn-sm"
                                                 onClick={() => { setTargetInput(image.target_key || ''); setEditingTarget(true); }}
                                                 title="Edit target"
+                                                aria-label="Edit target"
                                             >
-                                                ✏️
+                                                <Pencil size={14} aria-hidden="true" />
                                             </button>
                                         </span>
                                     )}
@@ -1064,7 +1076,7 @@ export default function ImageDetail() {
                         <section className="metadata-section">
                             <h3 className="section-title">
                                 <span className="badge badge-success">
-                                    {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? '✓ Solve Imported' : '✓ Plate Solved'}
+                                    {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? <><Check size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Solve Imported</> : <><Check size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Plate Solved</>}
                                 </span>
                             </h3>
                             <dl className="metadata-grid">

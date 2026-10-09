@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { ChevronDown, ChevronRight, Loader2, Folder, FolderOpen, Home, MoreHorizontal, Image as ImageIcon, FileText, RefreshCw } from 'lucide-react';
+import TelescopeIcon from '../icons/TelescopeIcon';
 import { fetchDirectoryListing, triggerBulkThumbnails, triggerBulkMetadata, triggerMountRescan, triggerFolderScan } from '../../api/client';
 import './FolderTree.css';
 
@@ -83,11 +85,11 @@ function FolderNode({ item, level, selectedPath, onSelect, onContextMenu, showMe
                 >
                     {item.has_children ? (
                         <span className="toggle-icon">
-                            {loading ? '⏳' : (isExpanded ? '▼' : '▶')}
+                            {loading ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" /> : (isExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />)}
                         </span>
                     ) : <span className="toggle-spacer"></span>}
                 </div>
-                <span className="folder-icon">{isExpanded ? '📂' : '📁'}</span>
+                <span className="folder-icon">{isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />}</span>
                 <span className="folder-name">{item.name}</span>
                 {item.image_count > 0 && (
                     <span className="folder-count">
@@ -104,7 +106,9 @@ function FolderNode({ item, level, selectedPath, onSelect, onContextMenu, showMe
                         const r = e.currentTarget.getBoundingClientRect();
                         onContextMenu({ preventDefault() {}, clientX: r.left, clientY: r.bottom }, item.path);
                     }}
-                >⋯</button>}
+                >
+                    <MoreHorizontal size={18} aria-hidden="true" />
+                </button>}
             </div>
             {error && <div className="folder-error" style={{ paddingLeft: `${(level + 1) * 16}px` }}>{error}</div>}
             {isExpanded && (
@@ -218,7 +222,7 @@ export default function FolderTree({ selectedPath, onSelect, showContextMenu = t
                 className={`folder-item root-item ${!selectedPath ? 'selected' : ''}`}
                 onClick={() => onSelect('')}
             >
-                <span className="folder-icon">🏠</span>
+                <span className="folder-icon"><Home size={16} /></span>
                 <span className="folder-name">All Folders</span>
             </div>
             {roots.map(root => (
@@ -250,16 +254,16 @@ export default function FolderTree({ selectedPath, onSelect, showContextMenu = t
                     onClick={e => e.stopPropagation()}
                 >
                     <div className="menu-item" onClick={() => handleAction('thumbnails')}>
-                        🖼️ Update thumbnails
+                        <ImageIcon size={14} /> Update thumbnails
                     </div>
                     <div className="menu-item" onClick={() => handleAction('metadata')}>
-                        📄 Pull Metadata from files
+                        <FileText size={14} /> Pull Metadata from files
                     </div>
                     <div className="menu-item" onClick={() => handleAction('scan')}>
-                        🔄 Rescan folder
+                        <RefreshCw size={14} /> Rescan folder
                     </div>
                     <div className="menu-item" onClick={() => handleAction('astrometry')}>
-                        🔭 Bulk Astrometry
+                        <TelescopeIcon size={14} /> Bulk Astrometry
                     </div>
                 </div>
             )}

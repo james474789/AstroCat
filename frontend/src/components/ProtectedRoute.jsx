@@ -14,8 +14,8 @@ const ProtectedRoute = ({ children }) => {
                 justifyContent: 'center',
                 alignItems: 'center',
                 height: '100vh',
-                backgroundColor: '#0d1117',
-                color: '#58a6ff'
+                backgroundColor: 'var(--color-background)',
+                color: 'var(--color-primary)'
             }}>
                 <Loader2 className="spinner" size={48} />
             </div>

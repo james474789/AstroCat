@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -98,7 +99,7 @@ function SubTooltip({ active, payload, fmtTime, unitLabel, metric }) {
                 {p.alt_deg != null && ` · alt ${Math.round(p.alt_deg)}°`}
                 {p.guide_rms != null && ` · guide ${p.guide_rms}″`}
             </div>
-            {p.flag && <div className="session-tooltip-flag">⚠ {FLAG_LABELS[p.flag] || p.flag}</div>}
+            {p.flag && <div className="session-tooltip-flag"><AlertTriangle size={12} style={{ verticalAlign: '-2px' }} /> {FLAG_LABELS[p.flag] || p.flag}</div>}
             <div className="session-tooltip-muted">Click to open</div>
         </div>
     );

@@ -13,11 +13,11 @@
     max-height: min(680px, 100%);
     display: flex;
     flex-direction: column;
-    background: var(--color-surface-elevated, #1a2435);
-    border: 1px solid var(--color-border-light, #3d4a5f);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-light);
     border-radius: 10px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
-    color: var(--color-text-primary, #f1f5f9);
+    color: var(--color-text-primary);
     font-size: 0.85rem;
 }
 .seen-in-header {
@@ -25,7 +25,7 @@
     align-items: center;
     gap: 12px;
     padding: 12px 14px;
-    border-bottom: 1px solid var(--color-border-light, #3d4a5f);
+    border-bottom: 1px solid var(--color-border-light);
 }
 .seen-in-header h3 {
     margin: 0;
@@ -34,7 +34,7 @@
 }
 .seen-in-filter {
     display: inline-flex;
-    border: 1px solid var(--color-border-light, #3d4a5f);
+    border: 1px solid var(--color-border-light);
     border-radius: 6px;
     overflow: hidden;
 }
@@ -47,8 +47,8 @@
     font-size: 0.8rem;
 }
 .seen-in-filter button.active {
-    background: var(--color-primary, #3b82f6);
-    color: #fff;
+    background: var(--color-primary);
+    color: white;
 }
 .seen-in-close {
     display: inline-flex;
@@ -65,7 +65,7 @@
 .seen-in-note {
     padding: 14px 0;
     text-align: center;
-    color: var(--color-text-muted, #94a3b8);
+    color: var(--color-text-muted);
 }
 .seen-in-list,
 .seen-in-members {
@@ -74,7 +74,7 @@
     padding: 0;
 }
 .seen-in-row {
-    border-bottom: 1px solid var(--color-border-light, #3d4a5f);
+    border-bottom: 1px solid var(--color-border-light);
 }
 .seen-in-row:last-child {
     border-bottom: 0;
@@ -93,7 +93,7 @@
     flex: none;
     object-fit: cover;
     border-radius: 4px;
-    background: #000;
+    background: var(--color-black);
 }
 .seen-in-info {
     display: flex;
@@ -108,14 +108,14 @@
     font-weight: 600;
 }
 .seen-in-row.master .seen-in-name {
-    color: #fbbf24;
+    color: var(--color-warning);
 }
 .seen-in-meta {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 0.75rem;
-    color: var(--color-text-muted, #94a3b8);
+    color: var(--color-text-muted);
 }
 .seen-in-coverage {
     flex: none;
@@ -130,7 +130,7 @@
     padding: 0;
     background: transparent;
     border: 0;
-    color: var(--color-text-muted, #94a3b8);
+    color: var(--color-text-muted);
     cursor: pointer;
     font-size: 0.75rem;
 }
@@ -147,5 +147,5 @@
 .seen-in-more {
     padding: 3px 0;
     font-size: 0.75rem;
-    color: var(--color-text-muted, #94a3b8);
+    color: var(--color-text-muted);
 }

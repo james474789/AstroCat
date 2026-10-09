@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Download, RefreshCw, Contrast, Search as SearchIcon, FolderOpen, Image as ImageIcon, Settings, Sparkles, Moon, Check, X, ArrowRight } from 'lucide-react';
+import TelescopeIcon from '../components/icons/TelescopeIcon';
 import { useQuery } from '@tanstack/react-query';
 import {
     fetchImages, API_BASE_URL, bulkUpdateImageType, bulkSyncMetadata, bulkUpdateFrameType,
@@ -518,7 +520,7 @@ export default function Search() {
                         onClick={handleExportCsv}
                         title="Export current results to CSV"
                     >
-                        ⬇ Export CSV
+                        <Download size={14} /> Export CSV
                     </button>
                     <button
                         className="btn btn-secondary"
@@ -526,7 +528,7 @@ export default function Search() {
                         title="Queue metadata sync for all matching search results"
                         disabled={syncMetadataLoading || totalCount === 0}
                     >
-                        {syncMetadataLoading ? 'Syncing...' : '⟳ Sync Metadata'}
+                        {syncMetadataLoading ? 'Syncing...' : <><RefreshCw size={14} /> Sync Metadata</>}
                     </button>
                     <button
                         className="btn btn-secondary"
@@ -537,7 +539,7 @@ export default function Search() {
                         title="Change image type for all results"
                         disabled={images.length === 0}
                     >
-                        🔄 Bulk Change Type
+                        <RefreshCw size={14} /> Bulk Change Type
                     </button>
                     <button
                         className="btn btn-secondary"
@@ -548,7 +550,7 @@ export default function Search() {
                         title="Set frame type for all results"
                         disabled={images.length === 0}
                     >
-                        🌓 Set Frame Type…
+                        <Contrast size={14} /> Set Frame Type…
                     </button>
                     <button
                         className="btn btn-secondary"
@@ -559,7 +561,7 @@ export default function Search() {
                         title="Assign a rig to every light sub-frame and master in the results"
                         disabled={images.length === 0}
                     >
-                        🔭 Assign Rig…
+                        <TelescopeIcon size={14} /> Assign Rig…
                     </button>
                     <button
                         className="btn btn-primary header-filters-btn"
@@ -569,7 +571,7 @@ export default function Search() {
                     </button>
                 </div>
                 {syncMetadataMessage && (
-                    <div style={{ marginTop: '0.75rem', color: syncMetadataMessage.startsWith('Metadata sync failed') ? '#fda4af' : '#86efac' }}>
+                    <div style={{ marginTop: '0.75rem', color: syncMetadataMessage.startsWith('Metadata sync failed') ? 'var(--color-error)' : 'var(--color-success)' }}>
                         {syncMetadataMessage}
                     </div>
                 )}
@@ -583,7 +585,7 @@ export default function Search() {
                 {showFilters && (
                     <form className="filters-sidebar"onSubmit={(e) => { e.preventDefault(); applyFilters(); }}>
                         <div className="filters-header">
-                            <h3>🔍 Search & Filter</h3>
+                            <h3><SearchIcon size={16} /> Search & Filter</h3>
                             <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>
                                 Clear All
                             </button>
@@ -621,7 +623,7 @@ export default function Search() {
                         />
 
                         {/* Folder Structure */}
-                        <FilterSection title="Folder Structure" icon="📂" defaultOpen={!isMobile}>
+                        <FilterSection title="Folder Structure" icon={<FolderOpen size={16} />} defaultOpen={!isMobile}>
                             <FolderTree
                                 selectedPath={filters.path}
                                 onSelect={(path) => {
@@ -633,7 +635,7 @@ export default function Search() {
                         </FilterSection>
 
                         {/* Image Properties Section */}
-                        <FilterSection title="Image Properties" icon="🖼️" defaultOpen={true}>
+                        <FilterSection title="Image Properties" icon={<ImageIcon size={16} />} defaultOpen={true}>
                             <div className="filter-group">
                                 <label className="label">Image Type</label>
                                 <select
@@ -726,11 +728,11 @@ export default function Search() {
                                     }}
                                 >
                                     <option value="">All Ratings</option>
-                                    <option value="1">★ 1 Star or higher</option>
-                                    <option value="2">★★ 2 Stars or higher</option>
-                                    <option value="3">★★★ 3 Stars or higher</option>
-                                    <option value="4">★★★★ 4 Stars or higher</option>
-                                    <option value="5">★★★★★ 5 Stars</option>
+                                    <option value="1">1 star or higher</option>
+                                    <option value="2">2 stars or higher</option>
+                                    <option value="3">3 stars or higher</option>
+                                    <option value="4">4 stars or higher</option>
+                                    <option value="5">5 stars</option>
                                 </select>
                             </div>
 
@@ -747,7 +749,7 @@ export default function Search() {
                         </FilterSection>
 
                         {/* Capture Settings Section */}
-                        <FilterSection title="Capture Settings" icon="⚙️" defaultOpen={false}>
+                        <FilterSection title="Capture Settings" icon={<Settings size={16} />} defaultOpen={false}>
                             <div className="filter-group">
                                 <RangeInput
                                     label="Exposure Time (seconds)"
@@ -796,7 +798,7 @@ export default function Search() {
                         </FilterSection>
 
                         {/* Star Quality Section (Q1d) */}
-                        <FilterSection title="Star Quality" icon="✦" defaultOpen={QUALITY_KEYS.some((k) => k !== 'quality_units' && filters[k])}>
+                        <FilterSection title="Star Quality" icon={<Sparkles size={16} />} defaultOpen={QUALITY_KEYS.some((k) => k !== 'quality_units' && filters[k])}>
                             <div className="filter-group">
                                 <label className="label">Suspect subs</label>
                                 <select className="input select" value={filters.quality_flag}
@@ -850,7 +852,7 @@ export default function Search() {
                         </FilterSection>
 
                         {/* Observation Data Section */}
-                        <FilterSection title="Observation Data" icon="🌙" defaultOpen={false}>
+                        <FilterSection title="Observation Data" icon={<Moon size={16} />} defaultOpen={false}>
                             <div className="filter-group">
                                 <label className="label">Object Name</label>
                                 <input
@@ -874,7 +876,7 @@ export default function Search() {
                                             onChange={(e) => handleFilterChange('start_date', e.target.value)}
                                         />
                                     </div>
-                                    <span className="range-separator">→</span>
+                                    <span className="range-separator"><ArrowRight size={14} aria-hidden="true" /></span>
                                     <div>
                                         <label className="text-xs text-muted">To</label>
                                         <input
@@ -889,7 +891,7 @@ export default function Search() {
                         </FilterSection>
 
                         {/* Advanced Search Section */}
-                        <FilterSection title="Advanced Search" icon="🔭" defaultOpen={false}>
+                        <FilterSection title="Advanced Search" icon={<TelescopeIcon size={16} />} defaultOpen={false}>
                             <div className="filter-group">
                                 <SpatialSearchInput
                                     raHms={raInput}
@@ -945,7 +947,7 @@ export default function Search() {
                         </div>
 
                         <button type="submit" className="btn btn-primary btn-lg btn-apply-filters">
-                            ✓ Apply Filters
+                            <Check size={16} /> Apply Filters
                         </button>
                     </form>
                 )}
@@ -1020,7 +1022,7 @@ export default function Search() {
                     ) : images.length === 0 && totalCount === 0 && searchParams.get('rig_bucket') ? (
                         // R0c: a bucket link whose images have since been assigned (or regrouped).
                         <div className="empty-state">
-                            <div className="empty-state-icon">🔭</div>
+                            <div className="empty-state-icon"><TelescopeIcon size={64} strokeWidth={1.5} /></div>
                             <h3 className="empty-state-title">No images found</h3>
                             <p className="empty-state-text">
                                 This bucket no longer exists. Its images may have been assigned to a rig, or the rig list changed.
@@ -1029,7 +1031,7 @@ export default function Search() {
                         </div>
                     ) : images.length === 0 ? (
                         <div className="empty-state">
-                            <div className="empty-state-icon">🔭</div>
+                            <div className="empty-state-icon"><TelescopeIcon size={64} strokeWidth={1.5} /></div>
                             <h3 className="empty-state-title">No images found</h3>
                             <p className="empty-state-text">
                                 Try adjusting your filters or search criteria
@@ -1096,7 +1098,7 @@ export default function Search() {
                     onClick={e => e.stopPropagation()}
                 >
                     <div className="menu-item" onClick={handleExpandPath}>
-                        📂 Expand Path
+                        <FolderOpen size={14} /> Expand Path
                     </div>
                 </div>
             )}
@@ -1164,10 +1166,10 @@ export default function Search() {
                                 marginBottom: '16px',
                                 borderRadius: '4px',
                                 backgroundColor: bulkChangeMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
-                                color: bulkChangeMessage.includes('✓') ? '#4CAF50' : '#F44336',
+                                color: bulkChangeMessage.includes('✓') ? 'var(--color-success)' : 'var(--color-error)',
                                 fontSize: '0.9rem'
                             }}>
-                                {bulkChangeMessage}
+                                {bulkChangeMessage.startsWith('✓') ? <Check size={14} /> : <X size={14} />}{' '}{bulkChangeMessage.slice(1).trim()}
                             </div>
                         )}
 
@@ -1258,10 +1260,10 @@ export default function Search() {
                                 marginBottom: '16px',
                                 borderRadius: '4px',
                                 backgroundColor: bulkFrameTypeMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
-                                color: bulkFrameTypeMessage.includes('✓') ? '#4CAF50' : '#F44336',
+                                color: bulkFrameTypeMessage.includes('✓') ? 'var(--color-success)' : 'var(--color-error)',
                                 fontSize: '0.9rem'
                             }}>
-                                {bulkFrameTypeMessage}
+                                {bulkFrameTypeMessage.startsWith('✓') ? <Check size={14} /> : <X size={14} />}{' '}{bulkFrameTypeMessage.slice(1).trim()}
                             </div>
                         )}
 
@@ -1347,10 +1349,10 @@ export default function Search() {
                                 marginBottom: '16px',
                                 borderRadius: '4px',
                                 backgroundColor: bulkRigMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
-                                color: bulkRigMessage.includes('✓') ? '#4CAF50' : '#F44336',
+                                color: bulkRigMessage.includes('✓') ? 'var(--color-success)' : 'var(--color-error)',
                                 fontSize: '0.9rem'
                             }}>
-                                {bulkRigMessage}
+                                {bulkRigMessage.startsWith('✓') ? <Check size={14} /> : <X size={14} />}{' '}{bulkRigMessage.slice(1).trim()}
                             </div>
                         )}
 

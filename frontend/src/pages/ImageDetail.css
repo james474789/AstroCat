@@ -217,21 +217,21 @@
 .image-rating .rating-stars .rating-star {
     display: inline-block;
     font-size: 1.2rem;
-    color: #4b5563;
+    color: var(--color-text-muted);
     /* Default gray for empty stars */
     transition: color 0.2s ease, transform 0.2s ease;
 }
 
 @media (hover: hover) {
   .image-rating .rating-stars .rating-star:hover {
-      color: #fbbf24;
+      color: var(--color-warning);
       /* Gold on hover */
       transform: scale(1.15);
   }
 }
 
 .image-rating .rating-stars .rating-star.filled {
-    color: #fbbf24;
+    color: var(--color-warning);
     /* Gold for filled stars */
 }
 

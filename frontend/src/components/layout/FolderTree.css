@@ -110,7 +110,7 @@
 
 /* Context Menu Styles */
 .folder-context-menu {
-    background-color: #1a2435;
+    background-color: var(--color-surface-elevated);
     /* Using solid color to ensure no transparency */
     border: 1px solid var(--color-border);
     border-radius: var(--border-radius);

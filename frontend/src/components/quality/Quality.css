@@ -30,7 +30,7 @@
 
 .quality-units-toggle button.active {
     background: var(--color-primary);
-    color: #fff;
+    color: white;
 }
 
 .quality-units-toggle button:focus-visible {
@@ -283,7 +283,7 @@
 
 .session-metric button.active {
     background: var(--color-primary);
-    color: #fff;
+    color: white;
 }
 
 .session-normalize {

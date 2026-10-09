@@ -1,4 +1,5 @@
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, FileText, MapPin, BarChart3, Video, Star } from 'lucide-react';
+import TelescopeIcon from '../icons/TelescopeIcon';
 import { useState } from 'react';
 import { formatSubtype } from '../../api/client';
 import './MetadataTab.css';
@@ -22,7 +23,7 @@ export default function MetadataSummaryTab({ image }) {
     // Curated list of important fields in display order
     const summaryGroups = [
         {
-            title: '📷 File Information',
+            icon: FileText, title: 'File Information',
             fields: [
                 { label: 'File Name', value: image.file_name },
                 { label: 'Format', value: image.file_format },
@@ -34,7 +35,7 @@ export default function MetadataSummaryTab({ image }) {
             ]
         },
         {
-            title: '🔭 Observational Data',
+            icon: TelescopeIcon, title: 'Observational Data',
             fields: [
                 { label: 'Object Name', value: image.object_name },
                 { label: 'Observer', value: image.observer_name },
@@ -43,9 +44,9 @@ export default function MetadataSummaryTab({ image }) {
             ]
         },
         {
-            title: '📍 Plate Solving',
+            icon: MapPin, title: 'Plate Solving',
             fields: [
-                { label: 'Status', value: image.is_plate_solved ? '✓ Solved' : 'Not Solved', highlight: image.is_plate_solved },
+                { label: 'Status', value: image.is_plate_solved ? 'Solved' : 'Not Solved', highlight: image.is_plate_solved },
                 { label: 'Provider', value: image.plate_solve_provider === 'LOCAL' ? 'Local Server' : image.plate_solve_provider === 'NOVA' ? 'Astrometry.net (Nova)' : null },
                 { label: 'Right Ascension', value: image.ra_center_degrees ? `${image.ra_center_degrees.toFixed(4)}°` : null },
                 { label: 'Declination', value: image.dec_center_degrees ? `${image.dec_center_degrees.toFixed(4)}°` : null },
@@ -55,7 +56,7 @@ export default function MetadataSummaryTab({ image }) {
             ]
         },
         {
-            title: '📊 Exposure Settings',
+            icon: BarChart3, title: 'Exposure Settings',
             fields: [
                 { label: 'Exposure Time', value: image.exposure_time_seconds ? `${image.exposure_time_seconds.toFixed(2)}s` : null },
                 { label: 'Gain', value: image.gain },
@@ -65,7 +66,7 @@ export default function MetadataSummaryTab({ image }) {
             ]
         },
         {
-            title: '🎥 Equipment',
+            icon: Video, title: 'Equipment',
             fields: [
                 { label: 'Camera', value: image.camera_name },
                 { label: 'Telescope/Lens', value: image.telescope_name },
@@ -75,7 +76,7 @@ export default function MetadataSummaryTab({ image }) {
             ]
         },
         {
-            title: '⭐ Quality & Classification',
+            icon: Star, title: 'Quality & Classification',
             fields: [
                 { label: 'Rating', value: image.rating ? `${image.rating} stars` : null },
                 { label: 'Classification', value: formatSubtype(image.subtype) },
@@ -91,7 +92,7 @@ export default function MetadataSummaryTab({ image }) {
 
                 return (
                     <div key={idx} className="metadata-group">
-                        <h3 className="group-title">{group.title}</h3>
+                        <h3 className="group-title"><group.icon size={14} />{group.title}</h3>
                         <div className="metadata-items">
                             {filteredFields.map((field, fidx) => (
                                 <div key={fidx} className={`metadata-row ${field.highlight ? 'highlight' : ''}`}>

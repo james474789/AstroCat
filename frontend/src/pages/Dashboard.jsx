@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { Camera, Clock, Target, Star, Moon, Circle, Square, Contrast } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { fetchStatsOverview, fetchImages, fetchStatsByMonth, fetchTopObjects, fetchRecommendations } from '../api/client';
+import { CHART_PRIMARY, CHART_AXIS_MUTED, CHART_TOOLTIP_DASHBOARD } from '../utils/chartColors';
 import ImageCard from '../components/images/ImageCard';
 import LastNightTile from '../components/quality/LastNightTile';
 import './Dashboard.css';
@@ -168,25 +170,25 @@ export default function Dashboard() {
                 <div className="stat-card">
                     <div className="stat-card-value">{stats?.total_images?.toLocaleString()}</div>
                     <div className="stat-card-label">Total Images</div>
-                    <div className="stat-card-icon">📸</div>
+                    <div className="stat-card-icon"><Camera size={32} aria-hidden="true" /></div>
                 </div>
 
                 <div className="stat-card">
                     <div className="stat-card-value">{stats?.total_exposure_hours?.toLocaleString(undefined, { maximumFractionDigits: 1 })}</div>
                     <div className="stat-card-label">Hours of Exposure</div>
-                    <div className="stat-card-icon">⏱️</div>
+                    <div className="stat-card-icon"><Clock size={32} aria-hidden="true" /></div>
                 </div>
 
                 <div className="stat-card">
                     <div className="stat-card-value">{stats?.plate_solved_percentage}%</div>
                     <div className="stat-card-label">Plate Solved</div>
-                    <div className="stat-card-icon">🎯</div>
+                    <div className="stat-card-icon"><Target size={32} aria-hidden="true" /></div>
                 </div>
 
                 <div className="stat-card">
                     <div className="stat-card-value">{stats?.unique_objects_imaged}</div>
                     <div className="stat-card-label">Unique Objects</div>
-                    <div className="stat-card-icon">⭐</div>
+                    <div className="stat-card-icon"><Star size={32} aria-hidden="true" /></div>
                 </div>
             </div>
 
@@ -207,8 +209,8 @@ export default function Dashboard() {
                             <BarChart data={monthlyData}>
                                 <defs>
                                     <linearGradient id="colorImages" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#5b8dee" stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor="#5b8dee" stopOpacity={0} />
+                                        <stop offset="5%" stopColor={CHART_PRIMARY} stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor={CHART_PRIMARY} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <XAxis
@@ -219,16 +221,14 @@ export default function Dashboard() {
                                         const date = new Date(parseInt(y), parseInt(m) - 1);
                                         return date.toLocaleDateString('default', { month: 'short', year: '2-digit' });
                                     }}
-                                    stroke="#64748b"
+                                    stroke={CHART_AXIS_MUTED}
                                     fontSize={10}
                                 />
-                                <YAxis stroke="#64748b" fontSize={12} />
+                                <YAxis stroke={CHART_AXIS_MUTED} fontSize={12} />
                                 <Tooltip
                                     contentStyle={{
-                                        background: '#1a2435',
-                                        border: '1px solid #2d3a4f',
-                                        borderRadius: '8px',
-                                        color: '#f1f5f9'
+                                        ...CHART_TOOLTIP_DASHBOARD,
+                                        borderRadius: '8px'
                                     }}
                                     formatter={(value, name) => [value.toLocaleString(), name === 'count' ? 'Images' : 'Hours']}
                                     labelFormatter={(label) => {
@@ -293,10 +293,10 @@ export default function Dashboard() {
                     </div>
                     <div className="top-objects-list">
                         {[
-                            { type: 'DARK', label: 'Darks', icon: '🌑' },
-                            { type: 'FLAT', label: 'Flats', icon: '⚪' },
-                            { type: 'BIAS', label: 'Bias', icon: '⬛' },
-                            { type: 'DARK_FLAT', label: 'Dark Flats', icon: '🌗' },
+                            { type: 'DARK', label: 'Darks', icon: <Moon size={18} aria-hidden="true" /> },
+                            { type: 'FLAT', label: 'Flats', icon: <Circle size={18} aria-hidden="true" /> },
+                            { type: 'BIAS', label: 'Bias', icon: <Square size={18} aria-hidden="true" /> },
+                            { type: 'DARK_FLAT', label: 'Dark Flats', icon: <Contrast size={18} aria-hidden="true" /> },
                         ].map(({ type, label, icon }) => (
                             <Link
                                 key={type}

@@ -16,8 +16,8 @@
     background: var(--color-surface-elevated);
 }
 
-.equip-toast.success { background: #065f46; }
-.equip-toast.error { background: #7f1d1d; }
+.equip-toast.success { background: color-mix(in srgb, var(--color-success) 40%, var(--color-background)); }
+.equip-toast.error { background: color-mix(in srgb, var(--color-error) 40%, var(--color-background)); }
 
 .detect-banner {
     display: flex;

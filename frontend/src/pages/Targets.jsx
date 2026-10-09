@@ -1,22 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchTargets, fetchUnassignedTargetsSummary, formatHours, formatDate, API_BASE_URL } from '../api/client';
+import { FolderOpen, X, ArrowUp, ArrowDown } from 'lucide-react';
 import FilterSection from '../components/layout/FilterSection';
 import FolderTree from '../components/layout/FolderTree';
 import QualityValue from '../components/quality/QualityValue';
+import { filterColor } from '../utils/filterColors';
 import './Targets.css';
-
-const FILTER_COLORS = {
-    L: '#d0d4dc', R: '#e05050', G: '#50c070', B: '#5080e0',
-    Ha: '#c8283c', OIII: '#2f80ed', SII: '#a83246', Hb: '#3cc8ff',
-    Duo: '#b060c0', None: '#a0a0a0', Other: '#707070',
-};
-
-function filterColor(name) {
-    if (FILTER_COLORS[name]) return FILTER_COLORS[name];
-    if (name && name.startsWith('Other:')) return FILTER_COLORS.Other;
-    return FILTER_COLORS.Other;
-}
 
 function FilterBar({ filters, totalSeconds }) {
     if (!filters || filters.length === 0 || !totalSeconds) {
@@ -136,7 +126,7 @@ export default function Targets() {
 
             <div className="targets-layout">
                 <div className="targets-sidebar">
-                    <FilterSection title="Folders" icon="📂" defaultOpen={true}>
+                    <FilterSection title="Folders" icon={<FolderOpen size={16} />} defaultOpen={true}>
                         <FolderTree
                             selectedPath={path}
                             onSelect={handleSelectPath}
@@ -148,15 +138,16 @@ export default function Targets() {
                 <div className="targets-main">
                     {path && (
                         <div className="targets-folder-crumb">
-                            <span className="targets-folder-crumb-icon">📂</span>
+                            <span className="targets-folder-crumb-icon"><FolderOpen size={16} /></span>
                             <span className="targets-folder-crumb-path" title={path}>{folderLabel(path)}</span>
                             <button
                                 type="button"
                                 className="targets-folder-crumb-clear"
                                 onClick={() => handleSelectPath('')}
                                 title="Clear folder filter"
+                                aria-label="Clear folder filter"
                             >
-                                ✕
+                                <X size={14} />
                             </button>
                         </div>
                     )}
@@ -201,8 +192,9 @@ export default function Targets() {
                             className="btn btn-icon"
                             onClick={() => setOrder(order === 'asc' ? 'desc' : 'asc')}
                             title={order === 'asc' ? 'Ascending' : 'Descending'}
+                            aria-label={order === 'asc' ? 'Sort ascending' : 'Sort descending'}
                         >
-                            {order === 'asc' ? '↑' : '↓'}
+                            {order === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
                         </button>
 
                         <div className="catalog-chip-group">

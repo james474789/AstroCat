@@ -150,8 +150,8 @@
 
 @media (hover: hover) {
   .logout-button:hover {
-      background: rgba(248, 81, 73, 0.1) !important;
-      color: #f85149 !important;
+      background: rgba(248, 113, 113, 0.1) !important;
+      color: var(--color-error) !important;
   }
 }
 

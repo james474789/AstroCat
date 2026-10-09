@@ -36,6 +36,9 @@
 }
 
 .group-title {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
     font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--color-text-secondary);
@@ -143,6 +146,9 @@
 }
 
 .section-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-sm);
     font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--color-text-primary);
@@ -339,11 +345,11 @@
 }
 
 .cell-key code {
-    color: #a8d8ff;
+    color: var(--fill-tint-text);
 }
 
 .cell-value code {
-    color: #a8f4a8;
+    color: var(--color-success);
 }
 
 .cell-action {
@@ -466,7 +472,7 @@
     background: rgba(0, 0, 0, 0.5);
     padding: var(--spacing-md);
     border-radius: var(--border-radius-md);
-    color: #a8f4a8;
+    color: var(--color-success);
     font-family: 'Monaco', 'Courier New', monospace;
     font-size: 12px;
     line-height: 1.5;

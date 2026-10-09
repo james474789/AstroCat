@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea,
 } from 'recharts';
-import { Pin, PinOff, Clock, EyeOff, Camera, ChevronDown, X } from 'lucide-react';
+import { Pin, PinOff, Clock, EyeOff, Camera, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
     fetchEquipment, fetchTargets,
@@ -729,7 +729,7 @@ function ReplayPanel() {
     return (
         <div className="replay-panel">
             <button type="button" className="replay-toggle" onClick={() => setOpen((o) => !o)}>
-                {open ? '▾' : '▸'} Replay report{report.generated_at ? ` (${formatDateTime(report.generated_at)})` : ''}
+                {open ? <ChevronDown size={14} style={{ verticalAlign: '-2px' }} /> : <ChevronRight size={14} style={{ verticalAlign: '-2px' }} />} Replay report{report.generated_at ? ` (${formatDateTime(report.generated_at)})` : ''}
             </button>
             {open && (
                 <div className="replay-body">
@@ -823,7 +823,7 @@ function OutcomesPanel() {
     return (
         <div className="outcomes-panel">
             <button type="button" className="replay-toggle" onClick={() => setOpen((o) => !o)}>
-                {open ? '▾' : '▸'} Advice outcomes (last 90 days)
+                {open ? <ChevronDown size={14} style={{ verticalAlign: '-2px' }} /> : <ChevronRight size={14} style={{ verticalAlign: '-2px' }} />} Advice outcomes (last 90 days)
             </button>
             {open && (
                 <div className="outcomes-body">

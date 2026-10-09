@@ -1,4 +1,5 @@
 import './SpatialSearchInput.css';
+import { Star, Diamond, Circle, Lightbulb } from 'lucide-react';
 
 /**
  * Improved spatial search component for celestial coordinates
@@ -19,7 +20,7 @@ export default function SpatialSearchInput({
                 <div className="spatial-coords">
                     <div className="spatial-field">
                         <label className="spatial-field-label">
-                            <span className="spatial-icon">☆</span>
+                            <span className="spatial-icon"><Star size={14} /></span>
                             RA (HH:MM)
                         </label>
                         <input
@@ -33,7 +34,7 @@ export default function SpatialSearchInput({
 
                     <div className="spatial-field">
                         <label className="spatial-field-label">
-                            <span className="spatial-icon">◆</span>
+                            <span className="spatial-icon"><Diamond size={14} /></span>
                             Dec (°)
                         </label>
                         <input
@@ -49,7 +50,7 @@ export default function SpatialSearchInput({
 
                 <div className="spatial-radius">
                     <label className="spatial-field-label">
-                        <span className="spatial-icon">◯</span>
+                        <span className="spatial-icon"><Circle size={14} /></span>
                         Search Radius (°)
                     </label>
                     <div className="spatial-radius-input">
@@ -67,7 +68,7 @@ export default function SpatialSearchInput({
                 </div>
 
                 <div className="spatial-hint">
-                    💡 Enter RA/Dec coordinates and radius to search nearby observations
+                    <Lightbulb size={14} /> Enter RA/Dec coordinates and radius to search nearby observations
                 </div>
             </div>
         </div>

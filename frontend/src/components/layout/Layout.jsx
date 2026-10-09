@@ -116,9 +116,6 @@ export default function Layout({ children }) {
 
     return (
         <div className={`layout ${isPinned ? 'is-pinned' : 'is-collapsed'}`}>
-            {/* Starfield background effect */}
-            <div className="starfield" />
-
             {/* Sidebar Navigation */}
             <aside className="sidebar">
                 <div className="sidebar-header">

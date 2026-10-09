@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchMessierCatalog, fetchNGCCatalog, fetchCaldwellCatalog, fetchNamedStarCatalog, fetchSh2Catalog, fetchTargetKeys, formatRA, formatDec } from '../api/client';
+import { Orbit, Sparkles, Star, Cloud, CloudFog, CircleDot, Circle, Zap, Search, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
+import TelescopeIcon from '../components/icons/TelescopeIcon';
 import './Catalogs.css';
 
 // Mirrors the backend's app.services.targets.normalize_designation just
@@ -122,22 +124,23 @@ export default function Catalogs() {
 
     // Object type icons
     const getTypeIcon = (type) => {
+        const iconProps = { size: 32, strokeWidth: 1.5 };
         if (!type) {
-            if (activeTab === 'stars') return '⭐';
-            return '🔭';
+            if (activeTab === 'stars') return <Star {...iconProps} />;
+            return <TelescopeIcon {...iconProps} />;
         }
         const types = {
-            'Spiral Galaxy': '🌀',
-            'Elliptical Galaxy': '⚪',
-            'Globular Cluster': '✨',
-            'Open Cluster': '⭐',
-            'Diffuse Nebula': '☁️',
-            'Planetary Nebula': '💫',
-            'Emission Nebula': '🌫️',
-            'Supernova Remnant': '💥',
-            'SHARPLESS': '🌫️',
+            'Spiral Galaxy': <Orbit {...iconProps} />,
+            'Elliptical Galaxy': <Circle {...iconProps} />,
+            'Globular Cluster': <Sparkles {...iconProps} />,
+            'Open Cluster': <Star {...iconProps} />,
+            'Diffuse Nebula': <Cloud {...iconProps} />,
+            'Planetary Nebula': <CircleDot {...iconProps} />,
+            'Emission Nebula': <CloudFog {...iconProps} />,
+            'Supernova Remnant': <Zap {...iconProps} />,
+            'SHARPLESS': <CloudFog {...iconProps} />,
         };
-        return types[type] || '🔭';
+        return types[type] || <TelescopeIcon {...iconProps} />;
     };
 
     return (
@@ -155,7 +158,7 @@ export default function Catalogs() {
                     className={`catalog-tab ${activeTab === 'messier' ? 'active' : ''}`}
                     onClick={() => handleTabChange('messier')}
                 >
-                    <span className="tab-icon">🌌</span>
+                    <span className="tab-icon"><Orbit size={32} strokeWidth={1.5} /></span>
                     <span className="tab-label">Messier</span>
                     <span className="tab-count">{counts.messier.toLocaleString()} objects</span>
                 </button>
@@ -163,7 +166,7 @@ export default function Catalogs() {
                     className={`catalog-tab ${activeTab === 'ngc' ? 'active' : ''}`}
                     onClick={() => handleTabChange('ngc')}
                 >
-                    <span className="tab-icon">🔭</span>
+                    <span className="tab-icon"><TelescopeIcon size={32} strokeWidth={1.5} /></span>
                     <span className="tab-label">NGC</span>
                     <span className="tab-count">{counts.ngc.toLocaleString()} objects</span>
                 </button>
@@ -171,7 +174,7 @@ export default function Catalogs() {
                     className={`catalog-tab ${activeTab === 'caldwell' ? 'active' : ''}`}
                     onClick={() => handleTabChange('caldwell')}
                 >
-                    <span className="tab-icon">🌠</span>
+                    <span className="tab-icon"><Sparkles size={32} strokeWidth={1.5} /></span>
                     <span className="tab-label">Caldwell</span>
                     <span className="tab-count">{counts.caldwell.toLocaleString()} objects</span>
                 </button>
@@ -179,7 +182,7 @@ export default function Catalogs() {
                     className={`catalog-tab ${activeTab === 'stars' ? 'active' : ''}`}
                     onClick={() => handleTabChange('stars')}
                 >
-                    <span className="tab-icon">⭐</span>
+                    <span className="tab-icon"><Star size={32} strokeWidth={1.5} /></span>
                     <span className="tab-label">Stars</span>
                     <span className="tab-count">{counts.stars.toLocaleString()} objects</span>
                 </button>
@@ -187,7 +190,7 @@ export default function Catalogs() {
                     className={`catalog-tab ${activeTab === 'sh2' ? 'active' : ''}`}
                     onClick={() => handleTabChange('sh2')}
                 >
-                    <span className="tab-icon">🌫️</span>
+                    <span className="tab-icon"><CloudFog size={32} strokeWidth={1.5} /></span>
                     <span className="tab-label">Sharpless</span>
                     <span className="tab-count">{counts.sh2.toLocaleString()} objects</span>
                 </button>
@@ -238,12 +241,13 @@ export default function Catalogs() {
                         <button
                             className="btn btn-icon sort-order-btn"
                             title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                            aria-label={sortOrder === 'asc' ? 'Sort ascending' : 'Sort descending'}
                             onClick={() => {
                                 setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                 setCurrentPage(1);
                             }}
                         >
-                            {sortOrder === 'asc' ? '↑' : '↓'}
+                            {sortOrder === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
                         </button>
                     </div>
                 </div>
@@ -317,14 +321,14 @@ export default function Catalogs() {
                                         to={`/search?object_name=${encodeURIComponent(obj.designation)}`}
                                         className="view-images-link"
                                     >
-                                        View Images →
+                                        View Images <ArrowRight size={14} />
                                     </Link>
                                     {obj.image_count > 0 && targetKeySet.has(normalizeDesignation(obj.designation)) && (
                                         <Link
                                             to={`/targets/${encodeURIComponent(normalizeDesignation(obj.designation))}`}
                                             className="view-images-link"
                                         >
-                                            Target page →
+                                            Target page <ArrowRight size={14} />
                                         </Link>
                                     )}
                                 </div>
@@ -361,7 +365,7 @@ export default function Catalogs() {
 
             {objects.length === 0 && !loading && (
                 <div className="empty-state">
-                    <div className="empty-state-icon">🔍</div>
+                    <div className="empty-state-icon"><Search size={64} strokeWidth={1.5} /></div>
                     <h3 className="empty-state-title">No objects found</h3>
                     <p className="empty-state-text">
                         Try a different search term

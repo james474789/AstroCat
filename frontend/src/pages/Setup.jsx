@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { UserPlus, Loader2 } from 'lucide-react';
+import { UserPlus, Loader2, Orbit } from 'lucide-react';
 import './Login.css'; // Reuse Login styles
 
 const Setup = () => {
@@ -37,7 +37,7 @@ const Setup = () => {
         <div className="login-container">
             <div className="login-card">
                 <div className="login-header">
-                    <div className="logo-icon">🌌</div>
+                    <div className="logo-icon"><Orbit size={48} strokeWidth={1.5} /></div>
                     <h1>Welcome to {import.meta.env.VITE_LOGO_TITLE || 'AstroCat'}</h1>
                     <p>Create your admin account to get started</p>
                 </div>

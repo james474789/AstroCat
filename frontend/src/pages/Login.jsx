@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, Loader2 } from 'lucide-react';
+import { LogIn, Loader2, Orbit } from 'lucide-react';
 import './Login.css';
 
 const Login = () => {
@@ -31,7 +31,7 @@ const Login = () => {
         <div className="login-container">
             <div className="login-card">
                 <div className="login-header">
-                    <div className="logo-icon">🌌</div>
+                    <div className="logo-icon"><Orbit size={48} strokeWidth={1.5} /></div>
                     <h1>{import.meta.env.VITE_LOGO_TITLE || 'AstroCat'}</h1>
                     <p>Astronomical Image Database</p>
                 </div>

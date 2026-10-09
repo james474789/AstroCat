@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchNightTimeline, fetchQualityNights } from '../../api/client';
+import { AlertTriangle, ArrowRight } from 'lucide-react';
 import QualityValue from './QualityValue';
 import './Quality.css';
 
@@ -62,10 +63,10 @@ export default function LastNightTile() {
                 {last.measured === 0 && <p className="text-muted text-sm">Not measured yet: star quality appears once these subs are processed.</p>}
                 {drifting && drifting.rel >= 0.1 && (
                     <p className="text-sm last-night-warn">
-                        ⚠ {drifting.filter && drifting.filter !== 'None' ? `${drifting.filter} ` : ''}FWHM grew {drifting.drift_arcsec_per_hour.toFixed(2)}″ per hour: focus drift?
+                        <AlertTriangle size={14} style={{ verticalAlign: '-2px' }} /> {drifting.filter && drifting.filter !== 'None' ? `${drifting.filter} ` : ''}FWHM grew {drifting.drift_arcsec_per_hour.toFixed(2)}″ per hour: focus drift?
                     </p>
                 )}
-                <Link to={`/nights/${last.night}`} className="link text-sm">Open night report →</Link>
+                <Link to={`/nights/${last.night}`} className="link text-sm">Open night report <ArrowRight size={14} style={{ verticalAlign: '-2px' }} /></Link>
             </div>
         </div>
     );

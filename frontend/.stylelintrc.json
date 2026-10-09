@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "color-no-hex": true
+  },
+  "ignoreFiles": ["dist/**", "node_modules/**", "src/index.css"],
+  "overrides": [
+    {
+      "//": "TEMPORARY P0 allowlist: migrate in P1/P2 (intentional palettes: sky-overlay catalogue colours, dashboard medal gradients)",
+      "files": ["src/components/skyOverlay/SkyOverlay.css", "src/pages/Dashboard.css"],
+      "rules": { "color-no-hex": null }
+    }
+  ]
+}

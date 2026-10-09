@@ -5,8 +5,10 @@ import axios from 'axios';
 import { fetchImages } from '../api/client';
 import {
     Search, Filter, X, ChevronLeft, ChevronRight, Settings,
-    Download, Eye, Zap, Plus, Minus, RotateCcw
+    Download, Eye, Zap, Plus, Minus, RotateCcw,
+    Video, Timer, MapPin, Star, Calendar, Check, ArrowUp, ArrowDown
 } from 'lucide-react';
+import TelescopeIcon from '../components/icons/TelescopeIcon';
 import { API_BASE_URL } from '../api/client';
 import './MetadataSearch.css';
 
@@ -242,7 +244,7 @@ const MetadataSearch = () => {
 
                         {/* Equipment Filters */}
                         <div className="filter-group">
-                            <label className="filter-label">🎥 Equipment</label>
+                            <label className="filter-label"><Video size={14} /> Equipment</label>
                             <input
                                 type="text"
                                 className="filter-input filter-input-sm"
@@ -268,7 +270,7 @@ const MetadataSearch = () => {
 
                         {/* Exposure Filters */}
                         <div className="filter-group">
-                            <label className="filter-label">⏱️ Exposure (seconds)</label>
+                            <label className="filter-label"><Timer size={14} /> Exposure (seconds)</label>
                             <div className="filter-range">
                                 <input
                                     type="number"
@@ -290,7 +292,7 @@ const MetadataSearch = () => {
 
                         {/* Gain Filters */}
                         <div className="filter-group">
-                            <label className="filter-label">⚡ Gain</label>
+                            <label className="filter-label"><Zap size={14} /> Gain</label>
                             <div className="filter-range">
                                 <input
                                     type="number"
@@ -312,7 +314,7 @@ const MetadataSearch = () => {
 
                         {/* Object Filter */}
                         <div className="filter-group">
-                            <label className="filter-label">🔭 Object Name</label>
+                            <label className="filter-label"><TelescopeIcon size={14} /> Object Name</label>
                             <input
                                 type="text"
                                 className="filter-input filter-input-sm"
@@ -324,21 +326,21 @@ const MetadataSearch = () => {
 
                         {/* Plate Solved Filter */}
                         <div className="filter-group">
-                            <label className="filter-label">📍 Plate Solve Status</label>
+                            <label className="filter-label"><MapPin size={14} /> Plate Solve Status</label>
                             <select
                                 className="filter-input"
                                 value={filters.plateSolved}
                                 onChange={(e) => handleFilterChange('plateSolved', e.target.value)}
                             >
                                 <option value="all">All</option>
-                                <option value="solved">Solved ✓</option>
-                                <option value="unsolved">Not Solved ✗</option>
+                                <option value="solved">Solved</option>
+                                <option value="unsolved">Not Solved</option>
                             </select>
                         </div>
 
                         {/* Classification Filter */}
                         <div className="filter-group">
-                            <label className="filter-label">⭐ Classification</label>
+                            <label className="filter-label"><Star size={14} /> Classification</label>
                             <select
                                 className="filter-input"
                                 value={filters.subtype}
@@ -356,7 +358,7 @@ const MetadataSearch = () => {
 
                         {/* Date Range Filter */}
                         <div className="filter-group">
-                            <label className="filter-label">📅 Capture Date</label>
+                            <label className="filter-label"><Calendar size={14} /> Capture Date</label>
                             <input
                                 type="date"
                                 className="filter-input filter-input-sm"
@@ -442,28 +444,28 @@ const MetadataSearch = () => {
                                                     />
                                                 </th>
                                                 <th className="sortable" onClick={() => handleSort('file_name')}>
-                                                    File Name {sortBy === 'file_name' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    File Name {sortBy === 'file_name' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                                                 </th>
                                                 <th className="sortable" onClick={() => handleSort('object_name')}>
-                                                    Object {sortBy === 'object_name' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    Object {sortBy === 'object_name' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                                                 </th>
                                                 <th className="sortable" onClick={() => handleSort('camera_name')}>
-                                                    Camera {sortBy === 'camera_name' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    Camera {sortBy === 'camera_name' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                                                 </th>
                                                 <th className="sortable" onClick={() => handleSort('telescope_name')}>
-                                                    Telescope {sortBy === 'telescope_name' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    Telescope {sortBy === 'telescope_name' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                                                 </th>
                                                 <th className="sortable" onClick={() => handleSort('exposure_time_seconds')}>
-                                                    Exposure (s) {sortBy === 'exposure_time_seconds' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    Exposure (s) {sortBy === 'exposure_time_seconds' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                                                 </th>
                                                 <th className="sortable" onClick={() => handleSort('capture_date')}>
-                                                    Date {sortBy === 'capture_date' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    Date {sortBy === 'capture_date' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                                                 </th>
                                                 <th className="sortable" onClick={() => handleSort('is_plate_solved')}>
-                                                    Plate Solved {sortBy === 'is_plate_solved' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    Plate Solved {sortBy === 'is_plate_solved' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                                                 </th>
                                                 <th className="sortable" onClick={() => handleSort('rating')}>
-                                                    Rating {sortBy === 'rating' && (sortOrder === 'asc' ? '▲' : '▼')}
+                                                    Rating {sortBy === 'rating' && (sortOrder === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                                                 </th>
                                                 <th>Actions</th>
                                             </tr>
@@ -498,11 +500,11 @@ const MetadataSearch = () => {
                                                     </td>
                                                     <td className="td-centered">
                                                         <span className={`badge ${img.is_plate_solved ? 'badge-solved' : 'badge-unsolved'}`}>
-                                                            {img.is_plate_solved ? '✓' : '✗'}
+                                                            {img.is_plate_solved ? <Check size={14} aria-label="Solved" /> : <X size={14} aria-label="Not solved" />}
                                                         </span>
                                                     </td>
                                                     <td className="td-centered">
-                                                        {img.rating ? `⭐ ${img.rating}` : '-'}
+                                                        {img.rating ? <><Star size={14} /> {img.rating}</> : '-'}
                                                     </td>
                                                     <td className="td-actions" onClick={(e) => e.stopPropagation()}>
                                                         <button

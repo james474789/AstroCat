@@ -1,14 +1,14 @@
 .admin-page {
     padding: 2rem;
-    color: #e0e6ed;
-    font-family: 'Inter', sans-serif;
+    color: var(--color-text-primary);
+    font-family: var(--font-family);
     min-height: 100vh;
 }
 
 /* Header */
 .admin-header {
     margin-bottom: 3rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--color-border);
     padding-bottom: 1rem;
     display: flex;
     align-items: center;
@@ -19,16 +19,12 @@
     font-size: 2rem;
     font-weight: 700;
     margin: 0;
-    background: linear-gradient(90deg, #60a5fa, #a78bfa);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 20px rgba(96, 165, 250, 0.3);
+    color: var(--color-text-primary);
 }
 
 .admin-subtitle {
     margin: 0;
-    color: #94a3b8;
+    color: var(--color-text-secondary);
     font-size: 1rem;
 }
 
@@ -47,46 +43,42 @@
 
 /* Connecting Arrows */
 .pipeline-card:not(:last-child)::after {
-    content: "→";
+    content: "";
     position: absolute;
-    right: -1.5rem;
+    right: -1.25rem;
     top: 50%;
-    transform: translateY(-50%);
-    color: rgba(255, 255, 255, 0.2);
-    font-size: 1.5rem;
+    width: 8px;
+    height: 8px;
+    border-top: 2px solid var(--color-border-light);
+    border-right: 2px solid var(--color-border-light);
+    transform: translateY(-50%) rotate(45deg);
 }
 
 .pipeline-card {
-    background: rgba(15, 23, 42, 0.6);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-xl);
     padding: 1.5rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transition: border-color var(--transition-base);
 }
 
 @media (hover: hover) {
   .pipeline-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-      border-color: rgba(96, 165, 250, 0.3);
+      border-color: var(--color-border-light);
   }
 }
 
 /* Status States */
 .pipeline-card.active {
-    border-color: #f97316;
-    box-shadow: 0 0 15px rgba(249, 115, 22, 0.2) inset;
+    border-color: var(--color-warning-strong);
 }
 
 .pipeline-card.processing {
-    border-color: #3b82f6;
-    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2) inset;
+    border-color: var(--color-info);
 }
 
 .card-icon {
@@ -99,7 +91,7 @@
     font-size: 0.875rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    color: #94a3b8;
+    color: var(--color-text-secondary);
     margin-bottom: 0.5rem;
 }
 
@@ -107,14 +99,15 @@
     font-size: 2rem;
     font-weight: 700;
     margin-bottom: 0.5rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
 }
 
 .card-status {
     font-size: 0.875rem;
     padding: 0.25rem 0.75rem;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--color-surface-elevated);
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -141,29 +134,26 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background-color: #94a3b8;
+    background-color: var(--color-text-secondary);
 }
 
 .admin-page .status-dot.green {
-    background-color: #22c55e;
-    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    background-color: var(--color-success);
 }
 
 .admin-page .status-dot.orange {
-    background-color: #f97316;
-    box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
+    background-color: var(--color-warning-strong);
 }
 
 .admin-page .status-dot.blue {
-    background-color: #3b82f6;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+    background-color: var(--color-info);
 }
 
 /* Progress Bar */
 .progress-container {
     width: 100%;
     height: 6px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--color-surface-elevated);
     border-radius: 3px;
     margin-top: 1rem;
     overflow: hidden;
@@ -171,7 +161,7 @@
 
 .progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, #f97316, #fb923c);
+    background: var(--color-warning-strong);
     width: 0%;
     /* Dynamic */
     transition: width 0.5s ease;
@@ -185,22 +175,12 @@
 }
 
 .tech-card {
-    background: rgba(30, 41, 59, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
     padding: 1.5rem;
     position: relative;
     overflow: hidden;
-}
-
-.tech-card::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
 }
 
 .tech-header {
@@ -212,12 +192,12 @@
 
 .tech-name {
     font-weight: 600;
-    color: #e2e8f0;
+    color: var(--color-text-primary);
 }
 
 .tech-status-badge {
     font-size: 0.75rem;
-    color: #22c55e;
+    color: var(--color-success);
     background: rgba(34, 197, 94, 0.1);
     padding: 2px 8px;
     border-radius: 4px;
@@ -232,12 +212,13 @@
 .tech-metric {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #f1f5f9;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
 }
 
 .tech-label {
     font-size: 0.875rem;
-    color: #64748b;
+    color: var(--color-text-muted);
 }
 
 /* Modal Styles */
@@ -248,7 +229,6 @@
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -257,19 +237,19 @@
 }
 
 .modal-content.admin-modal {
-    background: #0f172a;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-xl);
     width: 90%;
     max-width: 800px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-xl);
     display: flex;
     flex-direction: column;
 }
 
 .modal-header {
     padding: 1.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--color-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -278,7 +258,7 @@
 .close-button {
     background: transparent;
     border: none;
-    color: #94a3b8;
+    color: var(--color-text-secondary);
     font-size: 2rem;
     cursor: pointer;
     line-height: 1;
@@ -290,10 +270,10 @@
 
 /* Admin Tables (within modal) */
 .admin-modal .table-wrapper {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 12px;
+    background: var(--color-surface-elevated);
+    border-radius: var(--border-radius-lg);
     overflow-y: auto;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--color-border);
     max-height: 40vh;
     /* Default max-height, can be overridden */
 }
@@ -309,18 +289,19 @@
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #64748b;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
     position: sticky;
     top: 0;
-    background: #111827;
+    background: var(--color-surface-elevated);
     /* Match modal background to hide scrolling content */
     z-index: 10;
 }
 
 .admin-modal .admin-table td {
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    border-bottom: 1px solid var(--color-border);
+    font-variant-numeric: tabular-nums;
 }
 
 .pipeline-card.clickable {
@@ -330,7 +311,7 @@
 
 @media (hover: hover) {
   .pipeline-card.clickable:hover {
-      border-color: #f97316;
+      border-color: var(--color-warning-strong);
   }
 }
 
@@ -362,4 +343,112 @@
 
 @media (max-width: 560px) {
     .pipeline-container { grid-template-columns: 1fr; }
+}
+
+/* Active bulk operations (replaces dead Tailwind utility classes) */
+.admin-page .active-bulk-ops {
+    margin-top: var(--spacing-lg);
+}
+
+.admin-page .bulk-op-item {
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+    border-radius: var(--border-radius);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border);
+}
+
+.admin-page .bulk-op-item > .flex {
+    margin-bottom: var(--spacing-sm);
+}
+
+.admin-page .bulk-op-label {
+    font-size: var(--fs-footnote);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-primary);
+}
+
+.admin-page .bulk-track {
+    flex: 1;
+    height: 8px;
+    border-radius: var(--border-radius-full);
+    background: var(--color-surface-hover);
+    overflow: hidden;
+}
+
+.admin-page .bulk-fill {
+    height: 100%;
+    background: var(--color-primary);
+    transition: width var(--transition-base);
+}
+
+.admin-page .bulk-fill-rescan {
+    background: var(--color-accent);
+}
+
+.admin-page .tech-status-error {
+    color: var(--color-error);
+    background: rgba(248, 113, 113, 0.12);
+}
+
+/* Queue inspector modal */
+.admin-modal .modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.admin-modal .queue-tables {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xl);
+}
+
+.admin-modal .queue-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    font-size: var(--fs-callout);
+    font-weight: 700;
+}
+
+.admin-modal .queue-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.admin-modal .queue-heading-active,
+.admin-modal .queue-cell-active { color: var(--color-primary); }
+.admin-modal .queue-dot-active { background: var(--color-primary); }
+
+.admin-modal .queue-heading-pending,
+.admin-modal .queue-cell-pending { color: var(--color-warning-strong); }
+.admin-modal .queue-dot-pending { background: var(--color-warning-strong); }
+
+.admin-modal .queue-heading-scheduled,
+.admin-modal .queue-cell-scheduled { color: var(--color-secondary); }
+.admin-modal .queue-dot-scheduled { background: var(--color-secondary); }
+
+.admin-modal .queue-args {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-modal .queue-empty {
+    text-align: center;
+    padding: var(--spacing-md);
+    font-style: italic;
+    color: var(--color-text-muted);
+}
+
+.admin-page .card-icon,
+.admin-page .logo-glow {
+    display: flex;
+    justify-content: center;
+    color: var(--color-text-secondary);
 }

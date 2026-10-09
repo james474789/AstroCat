@@ -19,7 +19,7 @@ class ErrorBoundary extends React.Component {
     render() {
         if (this.state.hasError) {
             return (
-                <div style={{ padding: '2rem', color: '#ef4444', backgroundColor: '#1f2937', minHeight: '100vh' }}>
+                <div style={{ padding: '2rem', color: 'var(--color-error)', backgroundColor: 'var(--color-surface)', minHeight: '100vh' }}>
                     <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>Something went wrong.</h1>
                     <details style={{ whiteSpace: 'pre-wrap' }}>
                         <summary>Error Details</summary>
@@ -29,7 +29,7 @@ class ErrorBoundary extends React.Component {
                     </details>
                     <button
                         onClick={() => window.location.reload()}
-                        style={{ marginTop: '1rem', padding: '0.5rem 1rem', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }}
+                        style={{ marginTop: '1rem', padding: '0.5rem 1rem', backgroundColor: 'var(--color-fill)', color: 'white', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }}
                     >
                         Reload Page
                     </button>

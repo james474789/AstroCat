@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatExposure, formatBytes, formatDate, formatFrameTypeBadge, API_BASE_URL } from '../../api/client';
+import { MoreHorizontal, Orbit, Timer, Camera, Sparkle, Check } from 'lucide-react';
 import RatingStars from './RatingStars';
 import './ImageCard.css';
 import QualityValue from '../quality/QualityValue';
@@ -50,7 +51,7 @@ export default function ImageCard({ image, onContextMenu, showQuality = false })
                         onContextMenu({ preventDefault() {}, clientX: r.left, clientY: r.bottom }, image);
                     }}
                 >
-                    ⋯
+                    <MoreHorizontal size={16} />
                 </button>
             )}
             <div className="image-card-thumbnail">
@@ -59,7 +60,7 @@ export default function ImageCard({ image, onContextMenu, showQuality = false })
                         className="image-placeholder"
                         style={{ background: generatePlaceholder(image.id) }}
                     >
-                        <div className="image-placeholder-icon">🌌</div>
+                        <div className="image-placeholder-icon"><Orbit size={48} strokeWidth={1.5} /></div>
                     </div>
                 )}
 
@@ -95,7 +96,7 @@ export default function ImageCard({ image, onContextMenu, showQuality = false })
                         )}
                         {image.is_plate_solved && image.subtype !== 'PLANETARY' && image.subtype !== 'ALLSKY' && image.subtype !== 'AURORA' && (
                             <span className="image-badge badge-solved">
-                                {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? '✓ Solve Imported' : '✓ Solved'}
+                                {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? <><Check size={12} style={{ verticalAlign: '-2px' }} /> Solve Imported</> : <><Check size={12} style={{ verticalAlign: '-2px' }} /> Solved</>}
                             </span>
                         )}
                     </div>
@@ -112,16 +113,16 @@ export default function ImageCard({ image, onContextMenu, showQuality = false })
 
                 <div className="image-card-meta">
                     <span className="meta-item">
-                        <span className="meta-icon">⏱</span>
+                        <span className="meta-icon"><Timer size={14} /></span>
                         {formatExposure(image.exposure_time_seconds || 0)}
                     </span>
                     <span className="meta-item">
-                        <span className="meta-icon">📷</span>
+                        <span className="meta-icon"><Camera size={14} /></span>
                         {image.camera?.split(' ')[0] || 'Unknown'}
                     </span>
                     {showQuality && image.star_metrics_status === 'OK' && image.fwhm_px != null && (
                         <span className="meta-item" title={`FWHM${image.eccentricity != null ? ` · eccentricity ${image.eccentricity.toFixed(2)}` : ''}${image.star_count != null ? ` · ${image.star_count} stars` : ''}`}>
-                            <span className="meta-icon">✦</span>
+                            <span className="meta-icon"><Sparkle size={14} /></span>
                             <QualityValue px={image.fwhm_px}
                                 arcsec={image.pixel_scale_arcsec > 0 ? image.fwhm_px * image.pixel_scale_arcsec : null} />
                         </span>

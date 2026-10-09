@@ -27,6 +27,8 @@ import {
     updateUserRole,
     fetchSystemVersion
 } from '../api/client';
+import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info } from 'lucide-react';
+import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityAdmin from '../components/quality/StarQualityAdmin';
 import './Admin.css';
 import './Settings.css';
@@ -578,7 +580,7 @@ function Admin() {
     if (loading && !stats) return <div className="admin-page center">Loading System Telemetry...</div>;
     if (error && !stats) return (
         <div className="admin-page">
-            <div style={{ color: '#ef4444', padding: '2rem', textAlign: 'center' }}>
+            <div style={{ color: 'var(--color-error)', padding: '2rem', textAlign: 'center' }}>
                 <p>{error}</p>
                 <button className="btn btn-primary" onClick={() => window.location.reload()} style={{ marginTop: '1rem' }}>Retry</button>
             </div>
@@ -598,7 +600,7 @@ function Admin() {
     return (
         <div className="admin-page">
             <header className="admin-header">
-                <div className="logo-glow">🪐</div>
+                <div className="logo-glow"><Orbit size={32} /></div>
                 <div>
                     <h1 className="admin-title">System Administration</h1>
                     <p className="admin-subtitle">Real-time Pipeline Observability</p>
@@ -607,11 +609,11 @@ function Admin() {
 
             {/* PIPELINE VISUALIZATION */}
             <section className="pipeline-section">
-                <h2 className="text-xl font-semibold mb-4 text-slate-300">Indexing Pipeline</h2>
+                <h2 className="text-title-2 mb-md text-secondary">Indexing Pipeline</h2>
                 <div className="pipeline-container">
                     {/* 1. File Scanner */}
                     <div className={`pipeline-card ${scannerClass}`}>
-                        <div className="card-icon">📂</div>
+                        <div className="card-icon"><FolderOpen size={32} /></div>
                         <div className="card-title">File Scanner</div>
                         <div className="card-value">
                             {indexerStatus?.files_scanned?.toLocaleString() || 0}
@@ -624,7 +626,7 @@ function Admin() {
 
                     {/* 2. Job Queue */}
                     <div className={`pipeline-card clickable ${queueClass}`} onClick={handleOpenQueueModal}>
-                        <div className="card-icon">📚</div>
+                        <div className="card-icon"><Library size={32} /></div>
                         <div className="card-title">Job Queue</div>
                         <div className="card-value text-orange-400">
                             {pendingTasks}
@@ -638,30 +640,30 @@ function Admin() {
                                 <div className="progress-bar infinite-loader" style={{ width: '100%' }}></div>
                             </div>
                         )}
-                        <div className="text-[10px] text-slate-500 mt-2 opacity-50">Click to inspect</div>
+                        <div className="text-caption text-muted mt-sm">Click to inspect</div>
                     </div>
 
                     {/* 3. Processors */}
                     <div className={`pipeline-card ${processorClass}`}>
-                        <div className="card-icon">⚙️</div>
+                        <div className="card-icon"><Settings size={32} /></div>
                         <div className="card-title">Processors</div>
-                        <div className="card-value text-blue-400">
-                            <span className="text-2xl">{activeTaskCount}</span>
-                            <span className="text-sm text-slate-500 mx-1">/</span>
-                            <span className="text-lg text-slate-400">{activeWorkers}</span>
+                        <div className="card-value text-primary">
+                            <span className="text-title-1">{activeTaskCount}</span>
+                            <span className="text-sm text-muted">/</span>
+                            <span className="text-lg text-secondary">{activeWorkers}</span>
                         </div>
                         <div className="card-status">
                             <div className={`status-dot ${activeTaskCount > 0 ? 'blue pulse' : 'gray'}`} />
                             {activeTaskCount > 0 ? 'Active' : 'Idle'}
                         </div>
-                        <div className="text-xs text-left w-full mt-2 text-slate-400 truncate h-4">
+                        <div className="text-footnote mt-sm text-secondary">
                             {taskSummary || 'System Ready'}
                         </div>
                     </div>
 
                     {/* 4. Database */}
                     <div className="pipeline-card">
-                        <div className="card-icon">🗄️</div>
+                        <div className="card-icon"><Database size={32} /></div>
                         <div className="card-title">Database</div>
                         <div className="card-value">
                             {stats?.database?.record_count?.toLocaleString() || 0}
@@ -671,8 +673,8 @@ function Admin() {
                             {stats?.database?.status === 'connected' ? 'Online' : 'Offline'}
                         </div>
                         {stats?.database?.astrometry_counts && (
-                            <div className="text-[10px] text-slate-400 mt-2 text-left w-full leading-tight border-t border-slate-700/50 pt-2">
-                                <span className="text-slate-500 uppercase font-bold text-[8px] block mb-1">Astrometry Status</span>
+                            <div className="text-caption text-secondary mt-sm">
+                                <span className="text-muted font-bold text-caption">Astrometry Status</span>
                                 {Object.entries(stats.database.astrometry_counts)
                                     .sort(([a], [b]) => {
                                         const order = ['SOLVED', 'IMPORTED', 'SUBMITTED', 'PROCESSING', 'FAILED', 'UNSOLVED'];
@@ -693,20 +695,20 @@ function Admin() {
                                             }>
                                                 {String(status)}:
                                             </span>
-                                            <span className="font-mono text-slate-300">
+                                            <span className="font-mono text-secondary">
                                                 {typeof count === 'object' ? JSON.stringify(count) : String(count)}
                                             </span>
                                         </div>
                                     ))}
                             </div>
                         )}
-                        <div className="text-[10px] text-slate-500 mt-2 text-center">
-                            <div className="flex gap-2 justify-center">
+                        <div className="text-caption text-muted mt-sm text-center">
+                            <div className="flex gap-sm justify-center">
                                 <button className="btn btn-sm btn-ghost" onClick={handleOpenBackupModal}>
-                                    💾 Backup
+                                    <DatabaseBackup size={16} /> Backup
                                 </button>
                                 <button className="btn btn-sm btn-ghost" onClick={handleOpenRestoreModal}>
-                                    ♻️ Restore
+                                    <RotateCcw size={16} /> Restore
                                 </button>
                             </div>
                         </div>
@@ -714,40 +716,40 @@ function Admin() {
 
                     {/* ACTIVE BULK OPERATIONS */}
                     {isBulkRunning && (
-                        <div className="active-bulk-ops mt-6">
+                        <div className="active-bulk-ops mt-lg">
                             {indexerStatus?.mount_points?.filter(m => m.bulk_match?.status === 'running' || m.bulk_rescan?.status === 'running').map(mount => (
-                                <div key={mount.path} className="bulk-op-item p-3 mb-2 rounded bg-slate-800/50 border border-slate-700">
-                                    <div className="flex justify-between mb-2">
-                                        <span className="text-sm font-mono text-slate-400">{mount.path}</span>
-                                        <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">
+                                <div key={mount.path} className="bulk-op-item">
+                                    <div className="flex justify-between mb-sm">
+                                        <span className="text-sm font-mono text-secondary">{mount.path}</span>
+                                        <span className="bulk-op-label">
                                             {mount.bulk_match?.status === 'running' ? 'Recalculating Matches' : 'Bulk Rescanning'}
                                         </span>
                                     </div>
                                     {mount.bulk_match?.status === 'running' && (
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                        <div className="flex items-center gap-md">
+                                            <div className="bulk-track">
                                                 <div
-                                                    className="h-full bg-blue-500 transition-all duration-300"
+                                                    className="bulk-fill"
                                                     style={{ width: `${(mount.bulk_match.processed / (mount.bulk_match.total || 1)) * 100}%` }}
                                                 />
                                             </div>
-                                            <span className="text-xs text-slate-300 whitespace-nowrap">
+                                            <span className="text-footnote text-secondary">
                                                 {mount.bulk_match.processed} / {mount.bulk_match.total}
-                                                <span className="opacity-50 ml-1">({mount.bulk_match.errors || 0} errors, {mount.bulk_match.skipped || 0} skipped)</span>
+                                                <span className="text-muted">({mount.bulk_match.errors || 0} errors, {mount.bulk_match.skipped || 0} skipped)</span>
                                             </span>
                                         </div>
                                     )}
                                     {mount.bulk_rescan?.status === 'running' && (
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                        <div className="flex items-center gap-md">
+                                            <div className="bulk-track">
                                                 <div
-                                                    className="h-full bg-cyan-500 transition-all duration-300"
+                                                    className="bulk-fill bulk-fill-rescan"
                                                     style={{ width: `${(mount.bulk_rescan.processed / (mount.bulk_rescan.total || 1)) * 100}%` }}
                                                 />
                                             </div>
-                                            <span className="text-xs text-slate-300 whitespace-nowrap">
+                                            <span className="text-footnote text-secondary">
                                                 {mount.bulk_rescan.processed} / {mount.bulk_rescan.total}
-                                                <span className="opacity-50 ml-1">({mount.bulk_rescan.queued} queued, {mount.bulk_rescan.skipped || 0} skipped)</span>
+                                                <span className="text-muted">({mount.bulk_rescan.queued} queued, {mount.bulk_rescan.skipped || 0} skipped)</span>
                                             </span>
                                         </div>
                                     )}
@@ -760,7 +762,7 @@ function Admin() {
 
             {/* TECH STACK & HEALTH */}
             <section className="health-section">
-                <h2 className="text-xl font-semibold mb-4 text-slate-300">System Health</h2>
+                <h2 className="text-title-2 mb-md text-secondary">System Health</h2>
                 <div className="tech-grid">
                     <div className="tech-card">
                         <div className="tech-header">
@@ -775,7 +777,7 @@ function Admin() {
                     <div className="tech-card">
                         <div className="tech-header">
                             <span className="tech-name">Redis Broker</span>
-                            <span className={`tech-status-badge ${stats?.redis?.status === 'connected' ? '' : 'bg-red-900 text-red-200'}`}>
+                            <span className={`tech-status-badge ${stats?.redis?.status === 'connected' ? '' : 'tech-status-error'}`}>
                                 {stats?.redis?.status === 'connected' ? 'CONNECTED' : 'ERROR'}
                             </span>
                         </div>
@@ -812,7 +814,7 @@ function Admin() {
                 <div className="settings-page" style={{ padding: 0, marginTop: '4rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4rem' }}>
                     {/* Toast */}
                     {toast && (
-                        <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 1000, background: toast.type === 'error' ? '#7f1d1d' : toast.type === 'success' ? '#065f46' : '#1f2937', color: 'white', padding: '10px 14px', borderRadius: '6px', boxShadow: '0 6px 18px rgba(0,0,0,0.25)' }} role="status" aria-live="polite">
+                        <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 1000, background: toast.type === 'error' ? 'color-mix(in srgb, var(--color-error) 40%, var(--color-background))' : toast.type === 'success' ? 'color-mix(in srgb, var(--color-success) 40%, var(--color-background))' : 'var(--color-surface-elevated)', color: 'white', padding: '10px 14px', borderRadius: '6px', boxShadow: '0 6px 18px rgba(0,0,0,0.25)' }} role="status" aria-live="polite">
                             {toast.message}
                         </div>
                     )}
@@ -820,17 +822,17 @@ function Admin() {
                     {/* Bulk Rescan Confirm Modal */}
                     {rescanModal.open && (
                         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999 }}>
-                            <div style={{ width: 'min(480px, 92vw)', margin: '10vh auto', background: '#111827', color: 'white', borderRadius: '8px', border: '1px solid #374151', boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
-                                <div style={{ padding: '16px 18px', borderBottom: '1px solid #374151', fontWeight: 600 }}>Confirm Bulk Rescan</div>
+                            <div style={{ width: 'min(480px, 92vw)', margin: '10vh auto', background: 'var(--color-surface)', color: 'white', borderRadius: '8px', border: '1px solid var(--color-border)', boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
+                                <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--color-border)', fontWeight: 600 }}>Confirm Bulk Rescan</div>
                                 <div style={{ padding: '16px 18px' }}>
                                     <p style={{ marginBottom: '10px' }}>Start bulk rescan for <span className="font-mono">{rescanModal.path}</span>?</p>
-                                    <p style={{ marginBottom: '12px', color: '#9CA3AF' }}>Force Re-solve: {rescanModal.force ? 'YES' : 'NO'} · Unsolved/Failed only: {rescanModal.onlyUnsolved ? 'YES' : 'NO'}</p>
+                                    <p style={{ marginBottom: '12px', color: 'var(--color-text-secondary)' }}>Force Re-solve: {rescanModal.force ? 'YES' : 'NO'} · Unsolved/Failed only: {rescanModal.onlyUnsolved ? 'YES' : 'NO'}</p>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95em' }}>
                                         <input type="checkbox" checked={rescanModal.dontShowAgain} onChange={(e) => setRescanModal(prev => ({ ...prev, dontShowAgain: e.target.checked }))} />
                                         Don't show again
                                     </label>
                                 </div>
-                                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #374151' }}>
+                                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--color-border)' }}>
                                     <button className="btn btn-secondary btn-sm" onClick={() => setRescanModal({ open: false, path: null, force: false, dontShowAgain: false })}>Cancel</button>
                                     <button className="btn btn-primary btn-sm" onClick={() => { if (rescanModal.dontShowAgain) localStorage.setItem('suppressBulkRescanConfirm', '1'); const { path, force, onlyUnsolved } = rescanModal; setRescanModal({ open: false, path: null, force: false, onlyUnsolved: false, dontShowAgain: false }); startBulkRescan(path, force, onlyUnsolved); }}>Start</button>
                                 </div>
@@ -841,25 +843,25 @@ function Admin() {
                     {/* Backup/Restore Confirm Modal */}
                     {backupModal.open && (
                         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999 }}>
-                            <div style={{ width: 'min(480px, 92vw)', margin: '10vh auto', background: '#111827', color: 'white', borderRadius: '8px', border: '1px solid #374151', boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
-                                <div style={{ padding: '16px 18px', borderBottom: '1px solid #374151', fontWeight: 600 }}>
+                            <div style={{ width: 'min(480px, 92vw)', margin: '10vh auto', background: 'var(--color-surface)', color: 'white', borderRadius: '8px', border: '1px solid var(--color-border)', boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
+                                <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--color-border)', fontWeight: 600 }}>
                                     {backupModal.type === 'backup' ? 'Confirm Database Backup' : 'Confirm Database Restore'}
                                 </div>
                                 <div style={{ padding: '16px 18px' }}>
                                     {backupModal.type === 'backup' ? (
                                         <>
                                             <p style={{ marginBottom: '12px' }}>This will create a backup of the AstroCat database and download it as a .sql.gz file.</p>
-                                            <p style={{ marginBottom: '8px', color: '#EAB308', fontSize: '0.9em' }}>
+                                            <p style={{ marginBottom: '8px', color: 'var(--color-warning)', fontSize: '0.9em' }}>
                                                 <strong>Warning:</strong> Depending on database size, this may take a moment and temporarily affect performance.
                                             </p>
                                         </>
                                     ) : (
                                         <>
                                             <p style={{ marginBottom: '12px' }}>This will restore the AstroCat database from the selected backup file.</p>
-                                            <p style={{ marginBottom: '8px', color: '#EF4444', fontSize: '0.9em' }}>
+                                            <p style={{ marginBottom: '8px', color: 'var(--color-error)', fontSize: '0.9em' }}>
                                                 <strong>Warning:</strong> This will REPLACE ALL existing data in the database. This action cannot be undone!
                                             </p>
-                                            <p style={{ marginBottom: '12px', color: '#9CA3AF', fontSize: '0.9em' }}>
+                                            <p style={{ marginBottom: '12px', color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>
                                                 Only select .sql or .sql.gz files that were exported from this AstroCat instance.
                                             </p>
                                             <div style={{ marginBottom: '16px' }}>
@@ -869,10 +871,10 @@ function Admin() {
                                                     id="backup-restore-file-input"
                                                     accept=".sql,.sql.gz"
                                                     onChange={handleRestoreFileSelected}
-                                                    style={{ width: '100%', padding: '10px', background: '#2d3748', border: '1px solid #4a5568', borderRadius: '4px', color: 'white' }}
+                                                    style={{ width: '100%', padding: '10px', background: 'var(--color-border)', border: '1px solid var(--color-border-light)', borderRadius: '4px', color: 'white' }}
                                                 />
                                                 {backupModal.file && (
-                                                    <p style={{ marginTop: '8px', fontSize: '0.9em', color: '#10b981' }}>
+                                                    <p style={{ marginTop: '8px', fontSize: '0.9em', color: 'var(--color-success)' }}>
                                                         Selected: {backupModal.file.name}
                                                     </p>
                                                 )}
@@ -880,7 +882,7 @@ function Admin() {
                                         </>
                                     )}
                                 </div>
-                                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #374151' }}>
+                                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--color-border)' }}>
                                     <button className="btn btn-secondary btn-sm" onClick={() => setBackupModal({ open: false, type: '', file: null })}>Cancel</button>
                                     <button
                                         className="btn btn-primary btn-sm"
@@ -909,7 +911,7 @@ function Admin() {
 
                     {/* Indexer Section */}
                     <section className="settings-section">
-                        <h2 className="section-title">🔍 Indexer</h2>
+                        <h2 className="section-title"><Search size={20} /> Indexer</h2>
                         <div className="indexer-card">
                             <div className="indexer-status">
                                 <div className={`status-indicator ${scanning ? 'running' : 'idle'}`}>
@@ -936,28 +938,28 @@ function Admin() {
 
                     {/* Plate Solving Section */}
                     <section className="settings-section">
-                        <h2 className="section-title">🔭 Plate Solving</h2>
+                        <h2 className="section-title"><TelescopeIcon size={20} /> Plate Solving</h2>
                         <div className="card">
                             <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem' }}>
                                 <div>
                                     <div className="setting-label" style={{ fontWeight: 'bold' }}>Astrometry Provider</div>
                                     <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>Choose between the public Nova.astrometry.net service or a local Astrometry server.</div>
                                 </div>
-                                <div className="toggle-group" style={{ display: 'flex', gap: '0.5rem', background: '#2d3748', padding: '0.25rem', borderRadius: '0.5rem' }}>
-                                    <button className={`btn btn-sm ${systemSettings.astrometry_provider === 'nova' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => handleProviderChange('nova')} disabled={settingsLoading}>☁️ Nova Web</button>
-                                    <button className={`btn btn-sm ${systemSettings.astrometry_provider === 'local' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => handleProviderChange('local')} disabled={settingsLoading}>🏠 Local Server</button>
+                                <div className="toggle-group" style={{ display: 'flex', gap: '0.5rem', background: 'var(--color-border)', padding: '0.25rem', borderRadius: '0.5rem' }}>
+                                    <button className={`btn btn-sm ${systemSettings.astrometry_provider === 'nova' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => handleProviderChange('nova')} disabled={settingsLoading}><Cloud size={16} /> Nova Web</button>
+                                    <button className={`btn btn-sm ${systemSettings.astrometry_provider === 'local' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => handleProviderChange('local')} disabled={settingsLoading}><HardDrive size={16} /> Local Server</button>
                                 </div>
                             </div>
                             {systemSettings.astrometry_provider === 'local' && (
-                                <div style={{ padding: '0 1rem 1rem 1rem', fontSize: '0.9em', color: '#a0aec0' }}>Using configured local URL. Ensure your local server is running.</div>
+                                <div style={{ padding: '0 1rem 1rem 1rem', fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>Using configured local URL. Ensure your local server is running.</div>
                             )}
-                            <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderTop: '1px solid #2d3748' }}>
+                            <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderTop: '1px solid var(--color-border)' }}>
                                 <div>
                                     <div className="setting-label" style={{ fontWeight: 'bold' }}>Astrometry Max Submissions</div>
                                     <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>Limit concurrent submissions to the astrometry server.</div>
                                 </div>
                                 <div>
-                                    <input type="number" min="1" max="50" className="input" style={{ width: '80px', background: '#2d3748', border: '1px solid #4a5568', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }} value={systemSettings.astrometry_max_submissions || 8} onChange={(e) => { const val = parseInt(e.target.value) || 1; updateSettings({ ...systemSettings, astrometry_max_submissions: val }).then(setSystemSettings).catch(err => alert("Failed to update: " + err.message)); }} disabled={settingsLoading} />
+                                    <input type="number" min="1" max="50" className="input" style={{ width: '80px', background: 'var(--color-border)', border: '1px solid var(--color-border-light)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }} value={systemSettings.astrometry_max_submissions || 8} onChange={(e) => { const val = parseInt(e.target.value) || 1; updateSettings({ ...systemSettings, astrometry_max_submissions: val }).then(setSystemSettings).catch(err => alert("Failed to update: " + err.message)); }} disabled={settingsLoading} />
                                 </div>
                             </div>
                         </div>
@@ -965,7 +967,7 @@ function Admin() {
 
                     {/* Mount Points Section */}
                     <section className="settings-section">
-                        <h2 className="section-title">📁 Mount Points</h2>
+                        <h2 className="section-title"><Folder size={20} /> Mount Points</h2>
                         <div className="mount-points-list">
                             {indexerStatus?.mount_points?.map((mount) => (
                                 <div key={mount.path} className="mount-point-card">
@@ -993,11 +995,11 @@ function Admin() {
                                                     }}
                                                     disabled={settingsLoading}
                                                 >
-                                                    💾 Save
+                                                    <Save size={16} /> Save
                                                 </button>
                                             </div>
                                         </div>
-                                        <span className={`mount-status ${mount.status}`}>{mount.status === 'connected' ? '✓ Connected' : '✗ Disconnected'}</span>
+                                        <span className={`mount-status ${mount.status}`}>{mount.status === 'connected' ? <><Check size={14} /> Connected</> : <><X size={14} /> Disconnected</>}</span>
                                     </div>
                                     <div className="mount-stats">
                                         <div className="mount-stat"><span className="stat-value">{mount.file_count.toLocaleString()}</span><span className="stat-label">Files</span></div>
@@ -1033,18 +1035,18 @@ function Admin() {
                                         );
                                     })()}
                                     <div className="mount-actions-footer">
-                                        <div className="action-group"><button className="btn btn-sm btn-secondary" onClick={() => handleBulkMatch(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}>🔄 Recalc Matches</button></div>
-                                        <div className="action-group right"><label className="checkbox-label"><input type="checkbox" checked={forceRescan[mount.path] || false} onChange={() => toggleForceRescan(mount.path)} />Force</label><label className="checkbox-label" title="Submit only UNSOLVED and FAILED images"><input type="checkbox" checked={onlyUnsolvedRescan[mount.path] || false} onChange={() => toggleOnlyUnsolvedRescan(mount.path)} />Unsolved/Failed only</label><button className="btn btn-sm btn-primary" onClick={() => handleBulkRescan(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}>{bulkActionLoading[mount.path] === 'rescan' ? '⏳ Starting...' : '🔭 Bulk Rescan'}</button></div>
+                                        <div className="action-group"><button className="btn btn-sm btn-secondary" onClick={() => handleBulkMatch(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}><RefreshCw size={16} /> Recalc Matches</button></div>
+                                        <div className="action-group right"><label className="checkbox-label"><input type="checkbox" checked={forceRescan[mount.path] || false} onChange={() => toggleForceRescan(mount.path)} />Force</label><label className="checkbox-label" title="Submit only UNSOLVED and FAILED images"><input type="checkbox" checked={onlyUnsolvedRescan[mount.path] || false} onChange={() => toggleOnlyUnsolvedRescan(mount.path)} />Unsolved/Failed only</label><button className="btn btn-sm btn-primary" onClick={() => handleBulkRescan(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}>{bulkActionLoading[mount.path] === 'rescan' ? 'Starting...' : <><TelescopeIcon size={16} /> Bulk Rescan</>}</button></div>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                        <div className="mount-actions"><button className="btn btn-secondary" onClick={() => alert("To add a new mount point:\n\n1. Add the path to your .env file (IMAGE_PATH_X)\n2. Add the volume mapping in docker-compose.yml\n3. Restart the application")}>+ Add Mount Point</button><p className="text-sm text-muted mt-2">Note: Mount points are configured in docker-compose.yml</p></div>
+                        <div className="mount-actions"><button className="btn btn-secondary" onClick={() => alert("To add a new mount point:\n\n1. Add the path to your .env file (IMAGE_PATH_X)\n2. Add the volume mapping in docker-compose.yml\n3. Restart the application")}>+ Add Mount Point</button><p className="text-sm text-muted mt-sm">Note: Mount points are configured in docker-compose.yml</p></div>
                     </section>
 
                     {/* Thumbnail Cache Section */}
                     <section className="settings-section">
-                        <h2 className="section-title">🖼️ Thumbnail Cache</h2>
+                        <h2 className="section-title"><ImageIcon size={20} /> Thumbnail Cache</h2>
                         <div className="cache-card">
                             <div className="cache-info">
                                 <div className="cache-stat">{cacheStats ? <span className="cache-value">{cacheStats.count.toLocaleString()}</span> : <span className="cache-value">--</span>}<span className="cache-label">Cached Thumbnails</span></div>
@@ -1068,7 +1070,7 @@ function Admin() {
 
                     {/* Data Maintenance Section (F1/F2) */}
                     <section className="settings-section">
-                        <h2 className="section-title">🌓 Data Maintenance</h2>
+                        <h2 className="section-title"><Contrast size={20} /> Data Maintenance</h2>
                         <div className="cache-card">
                             <div className="cache-info">
                                 <div className="cache-stat">
@@ -1077,7 +1079,7 @@ function Admin() {
                             </div>
                             <div className="cache-actions">
                                 <button className="btn btn-secondary" onClick={handleReclassifyFrameTypes} disabled={reclassifyLoading}>
-                                    {reclassifyLoading ? 'Starting...' : '🌓 Reclassify frame types'}
+                                    {reclassifyLoading ? 'Starting...' : <><Contrast size={16} /> Reclassify frame types</>}
                                 </button>
                             </div>
                         </div>
@@ -1089,7 +1091,7 @@ function Admin() {
                             </div>
                             <div className="cache-actions">
                                 <button className="btn btn-secondary" onClick={handleBackfillTargets} disabled={backfillTargetsLoading}>
-                                    {backfillTargetsLoading ? 'Starting...' : '🎯 Re-resolve all targets'}
+                                    {backfillTargetsLoading ? 'Starting...' : <><Target size={16} /> Re-resolve all targets</>}
                                 </button>
                             </div>
                         </div>
@@ -1101,12 +1103,12 @@ function Admin() {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
                                 {dataMigrations.items.map(m => {
-                                    const statusColor = m.status === 'applied' ? '#4ade80' : m.status === 'failed' ? '#f87171' : '#fbbf24';
+                                    const statusColor = m.status === 'applied' ? 'var(--color-success)' : m.status === 'failed' ? 'var(--color-error)' : 'var(--color-warning)';
                                     return (
-                                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: '#1e293b', borderRadius: '0.4rem', flexWrap: 'wrap' }}>
+                                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: 'var(--color-surface-elevated)', borderRadius: '0.4rem', flexWrap: 'wrap' }}>
                                             <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                                                <div style={{ color: '#e2e8f0', fontSize: '0.85rem' }}>{m.description}</div>
-                                                <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '0.2rem', wordBreak: 'break-word' }}>
+                                                <div style={{ color: 'var(--color-text-primary)', fontSize: '0.85rem' }}>{m.description}</div>
+                                                <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', marginTop: '0.2rem', wordBreak: 'break-word' }}>
                                                     <code>{m.id}</code>
                                                     {m.applied_at && <> · {new Date(m.applied_at).toLocaleString()}</>}
                                                     {m.duration_seconds != null && <> · {m.duration_seconds.toFixed(1)}s</>}
@@ -1125,7 +1127,7 @@ function Admin() {
                                     );
                                 })}
                                 {dataMigrations.running && (
-                                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Running in background...</span>
+                                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>Running in background...</span>
                                 )}
                             </div>
                         </div>
@@ -1133,39 +1135,39 @@ function Admin() {
 
                     {/* User Management Section */}
                     <section className="settings-section">
-                        <h2 className="section-title">👥 User Management</h2>
+                        <h2 className="section-title"><Users size={20} /> User Management</h2>
                         <div className="card" style={{ padding: '1.5rem' }}>
                             <div style={{ marginBottom: '2rem' }}>
-                                <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: '#e2e8f0' }}>Register New User</h3>
+                                <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text-primary)' }}>Register New User</h3>
                                 <form onSubmit={handleCreateUser} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
                                     <div className="form-group" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Email Address</label>
+                                        <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Email Address</label>
                                         <input
                                             type="email"
                                             className="input"
-                                            style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
+                                            style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
                                             value={newUser.email}
                                             onChange={e => setNewUser({ ...newUser, email: e.target.value })}
                                             required
                                         />
                                     </div>
                                     <div className="form-group" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Password</label>
+                                        <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Password</label>
                                         <input
                                             type="password"
                                             className="input"
-                                            style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
+                                            style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
                                             value={newUser.password}
                                             onChange={e => setNewUser({ ...newUser, password: e.target.value })}
                                             required
                                         />
                                     </div>
                                     <div className="form-group" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Confirm Password</label>
+                                        <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Confirm Password</label>
                                         <input
                                             type="password"
                                             className="input"
-                                            style={{ width: '100%', background: '#1e293b', border: '1px solid #334155', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
+                                            style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
                                             value={newUser.confirmPassword}
                                             onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })}
                                             required
@@ -1195,7 +1197,7 @@ function Admin() {
                                     <tbody>
                                         {users.map(u => (
                                             <tr key={u.id}>
-                                                <td className="text-blue-300">{u.email}</td>
+                                                <td className="text-primary">{u.email}</td>
                                                 <td>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                         <span style={{
@@ -1203,7 +1205,7 @@ function Admin() {
                                                             borderRadius: '12px',
                                                             fontSize: '0.75rem',
                                                             background: u.is_admin ? 'rgba(59, 130, 246, 0.2)' : 'rgba(148, 163, 184, 0.1)',
-                                                            color: u.is_admin ? '#60a5fa' : '#94a3b8',
+                                                            color: u.is_admin ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                                                             border: u.is_admin ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(148, 163, 184, 0.2)'
                                                         }}>
                                                             {u.is_admin ? 'Administrator' : 'General User'}
@@ -1215,15 +1217,15 @@ function Admin() {
                                                             disabled={u.id === user?.id}
                                                             title={u.id === user?.id ? "Cannot change your own role" : "Toggle Role"}
                                                         >
-                                                            🔄 Switch
+                                                            <RefreshCw size={16} /> Switch
                                                         </button>
                                                     </div>
                                                 </td>
-                                                <td className="text-slate-500 text-xs">{new Date(u.created_at).toLocaleDateString()}</td>
+                                                <td className="text-muted text-footnote">{new Date(u.created_at).toLocaleDateString()}</td>
                                                 <td>
                                                     <button
                                                         className="btn btn-ghost btn-sm"
-                                                        style={{ color: '#ef4444' }}
+                                                        style={{ color: 'var(--color-error)' }}
                                                         onClick={() => handleDeleteUser(u.id, u.email)}
                                                         disabled={u.id === user?.id}
                                                     >
@@ -1240,9 +1242,9 @@ function Admin() {
 
                     {/* About & Component Stack Section */}
                     <section className="settings-section">
-                        <h2 className="section-title">ℹ️ About & System Components</h2>
+                        <h2 className="section-title"><Info size={20} /> About &amp; System Components</h2>
                         <div className="about-card">
-                            <div className="about-logo">🌌 AstroCat</div>
+                            <div className="about-logo"><Orbit size={24} /> AstroCat</div>
                             <div className="about-version">
                                 App Version: <strong>v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')}</strong>
                             </div>
@@ -1309,17 +1311,17 @@ function Admin() {
                 <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
                     <div className="modal-content admin-modal" onClick={e => e.stopPropagation()}>
                         <header className="modal-header">
-                            <h2 className="text-xl font-bold">Task Queue Inspection</h2>
-                            <button className="close-button" onClick={() => setIsModalOpen(false)}>×</button>
+                            <h2 className="text-title-2 font-bold">Task Queue Inspection</h2>
+                            <button className="close-button" onClick={() => setIsModalOpen(false)} aria-label="Close"><X size={20} /></button>
                         </header>
-                        <div className="modal-body overflow-y-auto max-h-[70vh]">
+                        <div className="modal-body">
                             {isQueueLoading && !queueDetails ? (
-                                <div className="p-8 text-center text-slate-400">Loading queue topology...</div>
+                                <div className="p-lg text-center text-secondary">Loading queue topology...</div>
                             ) : (
-                                <div className="queue-tables space-y-8">
+                                <div className="queue-tables">
                                     <section>
-                                        <h3 className="text-blue-400 font-bold mb-2 flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-blue-500 pulse" />
+                                        <h3 className="queue-heading queue-heading-active">
+                                            <div className="queue-dot queue-dot-active pulse" />
                                             Active Tasks ({queueDetails?.active?.length || 0})
                                         </h3>
                                         <div className="table-wrapper">
@@ -1328,19 +1330,19 @@ function Admin() {
                                                 <tbody>
                                                     {queueDetails?.active?.length > 0 ? queueDetails.active.map(t => (
                                                         <tr key={t.id}>
-                                                            <td className="font-mono text-xs text-blue-300">{t.name?.split('.').pop()}</td>
-                                                            <td className="text-xs text-slate-400">{t.worker?.split('@').shift()}</td>
-                                                            <td className="text-[10px] text-slate-500 truncate max-w-[200px]" title={JSON.stringify(t.args)}>{JSON.stringify(t.args)}</td>
-                                                            <td className="text-xs text-slate-400">{t.time_start ? new Date(t.time_start * 1000).toLocaleTimeString() : '-'}</td>
+                                                            <td className="font-mono text-footnote queue-cell-active">{t.name?.split('.').pop()}</td>
+                                                            <td className="text-footnote text-secondary">{t.worker?.split('@').shift()}</td>
+                                                            <td className="queue-args text-caption text-muted" title={JSON.stringify(t.args)}>{JSON.stringify(t.args)}</td>
+                                                            <td className="text-footnote text-secondary">{t.time_start ? new Date(t.time_start * 1000).toLocaleTimeString() : '-'}</td>
                                                         </tr>
-                                                    )) : <tr><td colSpan="4" className="text-center py-4 text-slate-600 italic text-sm">No active tasks</td></tr>}
+                                                    )) : <tr><td colSpan="4" className="queue-empty text-sm">No active tasks</td></tr>}
                                                 </tbody>
                                             </table>
                                         </div>
                                     </section>
                                     <section>
-                                        <h3 className="text-orange-400 font-bold mb-2 flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-orange-500" />
+                                        <h3 className="queue-heading queue-heading-pending">
+                                            <div className="queue-dot queue-dot-pending" />
                                             Pending In Queue ({queueDetails?.pending?.length || 0})
                                         </h3>
                                         <div className="table-wrapper">
@@ -1349,19 +1351,19 @@ function Admin() {
                                                 <tbody>
                                                     {queueDetails?.pending?.length > 0 ? queueDetails.pending.map((t, idx) => (
                                                         <tr key={t.id || idx}>
-                                                            <td className="font-mono text-xs text-orange-300">{t.name?.split('.').pop() || 'Unknown'}</td>
-                                                            <td className="text-xs text-slate-400">{t.queue}</td>
-                                                            <td className="text-[10px] text-slate-500 truncate max-w-[200px]" title={JSON.stringify(t.args)}>{JSON.stringify(t.args)}</td>
+                                                            <td className="font-mono text-footnote queue-cell-pending">{t.name?.split('.').pop() || 'Unknown'}</td>
+                                                            <td className="text-footnote text-secondary">{t.queue}</td>
+                                                            <td className="queue-args text-caption text-muted" title={JSON.stringify(t.args)}>{JSON.stringify(t.args)}</td>
                                                         </tr>
-                                                    )) : <tr><td colSpan="3" className="text-center py-4 text-slate-600 italic text-sm">No pending tasks</td></tr>}
+                                                    )) : <tr><td colSpan="3" className="queue-empty text-sm">No pending tasks</td></tr>}
                                                 </tbody>
                                             </table>
                                         </div>
                                     </section>
                                     {queueDetails?.scheduled?.length > 0 && (
                                         <section>
-                                            <h3 className="text-purple-400 font-bold mb-2 flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-purple-500" />
+                                            <h3 className="queue-heading queue-heading-scheduled">
+                                                <div className="queue-dot queue-dot-scheduled" />
                                                 Scheduled Tasks ({queueDetails.scheduled.length})
                                             </h3>
                                             <div className="table-wrapper">
@@ -1370,8 +1372,8 @@ function Admin() {
                                                     <tbody>
                                                         {queueDetails.scheduled.map(t => (
                                                             <tr key={t.id}>
-                                                                <td className="font-mono text-xs text-purple-300">{t.name?.split('.').pop()}</td>
-                                                                <td className="text-xs text-slate-400">{t.eta}</td>
+                                                                <td className="font-mono text-footnote queue-cell-scheduled">{t.name?.split('.').pop()}</td>
+                                                                <td className="text-footnote text-secondary">{t.eta}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>

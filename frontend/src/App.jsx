@@ -43,40 +43,19 @@ const AppRoutes = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#0d1117' }}>
-        <Loader2 className="spinner" size={48} color="#58a6ff" />
+      <div className="app-screen">
+        <Loader2 className="icon-spin app-screen-spinner" size={48} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        backgroundColor: '#0d1117',
-        color: '#e6edf3',
-        fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif'
-      }}>
-        <div style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem', border: '1px solid #30363d', borderRadius: '6px', backgroundColor: '#161b22' }}>
-          <h2 style={{ color: '#f85149', marginBottom: '1rem' }}>Connection Error</h2>
-          <p style={{ marginBottom: '1.5rem', color: '#8b949e' }}>{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              backgroundColor: '#238636',
-              color: '#ffffff',
-              border: '1px solid rgba(240,246,252,0.1)',
-              padding: '6px 16px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: '500'
-            }}
-          >
+      <div className="app-screen app-screen-col">
+        <div className="app-error-card">
+          <h2>Connection Error</h2>
+          <p>{error}</p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>
             Retry
           </button>
         </div>
@@ -102,7 +81,7 @@ const AppRoutes = () => {
           !setupComplete ? <Navigate to="/setup" replace /> :
             <ProtectedRoute>
               <ErrorBoundary>
-                <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="spinner" size={48} color="#58a6ff" /></div>}>
+                <Suspense fallback={<div className="app-screen app-screen-viewer"><Loader2 className="icon-spin app-screen-spinner" size={48} /></div>}>
                   <FullResViewer />
                 </Suspense>
               </ErrorBoundary>
