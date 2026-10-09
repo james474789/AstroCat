@@ -58,8 +58,9 @@ function Admin() {
     const [settingsLoading, setSettingsLoading] = useState(false);
     const [bulkActionLoading, setBulkActionLoading] = useState({}); // { [path]: 'match' | 'rescan' | null }
     const [forceRescan, setForceRescan] = useState({}); // { [path]: bool }
+    const [onlyUnsolvedRescan, setOnlyUnsolvedRescan] = useState({}); // { [path]: bool }
     const [toast, setToast] = useState(null); // { message, type: 'info'|'success'|'error' }
-    const [rescanModal, setRescanModal] = useState({ open: false, path: null, force: false, dontShowAgain: false });
+    const [rescanModal, setRescanModal] = useState({ open: false, path: null, force: false, onlyUnsolved: false, dontShowAgain: false });
 
     // User Management State
     const [users, setUsers] = useState([]);
@@ -346,10 +347,10 @@ function Admin() {
         }
     }
 
-    async function startBulkRescan(path, force) {
+    async function startBulkRescan(path, force, onlyUnsolved = false) {
         setBulkActionLoading(prev => ({ ...prev, [path]: 'rescan' }));
         try {
-            const result = await triggerMountRescan(path, force);
+            const result = await triggerMountRescan(path, force, onlyUnsolved);
             if (result.error) {
                 showToast(`Failed to start bulk rescan: ${result.error}`, 'error');
                 return;
@@ -368,12 +369,13 @@ function Admin() {
     async function handleBulkRescan(path) {
         if (bulkActionLoading[path]) return;
         const force = forceRescan[path] || false;
+        const onlyUnsolved = onlyUnsolvedRescan[path] || false;
         const suppress = localStorage.getItem('suppressBulkRescanConfirm') === '1';
         if (suppress) {
-            startBulkRescan(path, force);
+            startBulkRescan(path, force, onlyUnsolved);
             return;
         }
-        setRescanModal({ open: true, path, force, dontShowAgain: false });
+        setRescanModal({ open: true, path, force, onlyUnsolved, dontShowAgain: false });
     }
 
     async function handleOpenBackupModal() {
@@ -443,6 +445,12 @@ function Admin() {
 
     function toggleForceRescan(path) {
         setForceRescan(prev => ({ ...prev, [path]: !prev[path] }));
+        setOnlyUnsolvedRescan(prev => ({ ...prev, [path]: false }));
+    }
+
+    function toggleOnlyUnsolvedRescan(path) {
+        setOnlyUnsolvedRescan(prev => ({ ...prev, [path]: !prev[path] }));
+        setForceRescan(prev => ({ ...prev, [path]: false }));
     }
 
     function formatDuration(seconds) {
@@ -816,7 +824,7 @@ function Admin() {
                                 <div style={{ padding: '16px 18px', borderBottom: '1px solid #374151', fontWeight: 600 }}>Confirm Bulk Rescan</div>
                                 <div style={{ padding: '16px 18px' }}>
                                     <p style={{ marginBottom: '10px' }}>Start bulk rescan for <span className="font-mono">{rescanModal.path}</span>?</p>
-                                    <p style={{ marginBottom: '12px', color: '#9CA3AF' }}>Force Re-solve: {rescanModal.force ? 'YES' : 'NO'}</p>
+                                    <p style={{ marginBottom: '12px', color: '#9CA3AF' }}>Force Re-solve: {rescanModal.force ? 'YES' : 'NO'} · Unsolved/Failed only: {rescanModal.onlyUnsolved ? 'YES' : 'NO'}</p>
                                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95em' }}>
                                         <input type="checkbox" checked={rescanModal.dontShowAgain} onChange={(e) => setRescanModal(prev => ({ ...prev, dontShowAgain: e.target.checked }))} />
                                         Don't show again
@@ -824,7 +832,7 @@ function Admin() {
                                 </div>
                                 <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #374151' }}>
                                     <button className="btn btn-secondary btn-sm" onClick={() => setRescanModal({ open: false, path: null, force: false, dontShowAgain: false })}>Cancel</button>
-                                    <button className="btn btn-primary btn-sm" onClick={() => { if (rescanModal.dontShowAgain) localStorage.setItem('suppressBulkRescanConfirm', '1'); const { path, force } = rescanModal; setRescanModal({ open: false, path: null, force: false, dontShowAgain: false }); startBulkRescan(path, force); }}>Start</button>
+                                    <button className="btn btn-primary btn-sm" onClick={() => { if (rescanModal.dontShowAgain) localStorage.setItem('suppressBulkRescanConfirm', '1'); const { path, force, onlyUnsolved } = rescanModal; setRescanModal({ open: false, path: null, force: false, onlyUnsolved: false, dontShowAgain: false }); startBulkRescan(path, force, onlyUnsolved); }}>Start</button>
                                 </div>
                             </div>
                         </div>
@@ -1026,7 +1034,7 @@ function Admin() {
                                     })()}
                                     <div className="mount-actions-footer">
                                         <div className="action-group"><button className="btn btn-sm btn-secondary" onClick={() => handleBulkMatch(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}>🔄 Recalc Matches</button></div>
-                                        <div className="action-group right"><label className="checkbox-label"><input type="checkbox" checked={forceRescan[mount.path] || false} onChange={() => toggleForceRescan(mount.path)} />Force</label><button className="btn btn-sm btn-primary" onClick={() => handleBulkRescan(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}>{bulkActionLoading[mount.path] === 'rescan' ? '⏳ Starting...' : '🔭 Bulk Rescan'}</button></div>
+                                        <div className="action-group right"><label className="checkbox-label"><input type="checkbox" checked={forceRescan[mount.path] || false} onChange={() => toggleForceRescan(mount.path)} />Force</label><label className="checkbox-label" title="Submit only UNSOLVED and FAILED images"><input type="checkbox" checked={onlyUnsolvedRescan[mount.path] || false} onChange={() => toggleOnlyUnsolvedRescan(mount.path)} />Unsolved/Failed only</label><button className="btn btn-sm btn-primary" onClick={() => handleBulkRescan(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}>{bulkActionLoading[mount.path] === 'rescan' ? '⏳ Starting...' : '🔭 Bulk Rescan'}</button></div>
                                     </div>
                                 </div>
                             ))}

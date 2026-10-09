@@ -461,11 +461,11 @@ export async function triggerMountMatches(path) {
     }));
 }
 
-export async function triggerMountRescan(path, force) {
+export async function triggerMountRescan(path, force, onlyUnsolved = false) {
     return handleResponse(await fetch(`${API_BASE_URL}/indexer/batch/rescan`, {
         method: 'POST',
         headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ path, force }),
+        body: JSON.stringify({ path, force, only_unsolved: onlyUnsolved }),
         credentials: 'include'
     }));
 }

@@ -74,10 +74,12 @@ async def trigger_bulk_matches(payload: dict, background_tasks: BackgroundTasks)
 async def trigger_bulk_rescan(payload: dict, background_tasks: BackgroundTasks):
     """
     Trigger bulk rescan for a mount point.
-    payload: {"path": "/data/mount1", "force": boolean}
+    payload: {"path": "/data/mount1", "force": boolean, "only_unsolved": boolean}
+    only_unsolved submits just UNSOLVED and FAILED images and overrides force.
     """
     path = payload.get("path")
     force = payload.get("force", False)
+    only_unsolved = payload.get("only_unsolved", False)
     
     if not path:
         logger.warning("Bulk rescan triggered without path")
@@ -91,7 +93,7 @@ async def trigger_bulk_rescan(payload: dict, background_tasks: BackgroundTasks):
     
     try:
         from app.tasks.bulk import bulk_astrometry_task
-        task = bulk_astrometry_task.delay(path, force)
+        task = bulk_astrometry_task.delay(path, force, only_unsolved)
         logger.info(f"Bulk rescan task queued successfully: task_id={task.id}, path={path}, force={force}")
         return {"message": "Bulk rescan started", "task_id": task.id, "path": path}
     except Exception as e:

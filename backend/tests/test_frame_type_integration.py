@@ -167,6 +167,35 @@ class TestBulkSelectionExcludesNonLight:
         clause_strs = [str(a) for a in args]
         assert any("frame_type" in s for s in clause_strs), clause_strs
 
+    def test_bulk_astrometry_only_unsolved_queues_unsolved_and_failed(self):
+        def img(id_, solved, status, subtype=None):
+            return MagicMock(id=id_, is_plate_solved=solved, astrometry_status=status, subtype=subtype)
+
+        images = [
+            img(1, False, "NONE"),        # unsolved -> queued
+            img(2, False, "FAILED"),      # failed -> queued
+            img(3, True, "NONE"),         # imported WCS -> skipped
+            img(4, True, "SOLVED"),       # solved -> skipped
+            img(5, False, "SUBMITTED"),   # busy -> skipped
+            img(6, False, "NONE", "ALLSKY"),  # not solvable -> skipped
+        ]
+        fake_session = MagicMock()
+        fake_query = MagicMock()
+        fake_session.query.return_value = fake_query
+        fake_query.filter.return_value = fake_query
+        fake_query.all.return_value = images
+
+        with patch("app.tasks.bulk.SessionLocal") as mock_sl, \
+             patch("app.tasks.bulk.redis") as mock_redis, \
+             patch("app.tasks.astrometry.astrometry_task") as mock_task:
+            mock_sl.return_value.__enter__.return_value = fake_session
+            mock_redis.from_url.return_value = _FakeRedis()
+
+            bulk_astrometry_task.run("/data/mount1", True, True)
+
+        queued = sorted(c.args[0] for c in mock_task.delay.call_args_list)
+        assert queued == [1, 2]
+
 
 class TestBackfillFrameTypes:
     def test_backfill_updates_and_cleans_up_matches(self, monkeypatch):

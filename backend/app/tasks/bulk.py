@@ -104,14 +104,19 @@ def bulk_match_task(self, mount_path: str):
 
 
 @celery_app.task(bind=True, name="app.tasks.bulk.bulk_astrometry_task")
-def bulk_astrometry_task(self, mount_path: str, force: bool = False):
+def bulk_astrometry_task(self, mount_path: str, force: bool = False, only_unsolved: bool = False):
     """
     Bulk submit images for astrometry.net plate solving using a sync session
     for stability in Celery workers.
+
+    only_unsolved: submit just UNSOLVED and FAILED images (no imported-WCS
+    upgrades, no force re-solves). Takes precedence over force.
     """
     from app.tasks.astrometry import astrometry_task
-    
-    logger.info(f"[BULK RESCAN] Task started for mount_path={mount_path}, force={force}, task_id={self.request.id}")
+
+    if only_unsolved:
+        force = False
+    logger.info(f"[BULK RESCAN] Task started for mount_path={mount_path}, force={force}, only_unsolved={only_unsolved}, task_id={self.request.id}")
 
     # Redis setup
     try:
@@ -167,6 +172,15 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False):
                 # 1. Planetary / all-sky / aurora exclusion (not plate-solvable)
                 if img.subtype in ('PLANETARY', 'ALLSKY', 'AURORA'):
                     skipped_count += 1
+                    continue
+
+                # 1b. Unsolved/Failed only: skip imported-WCS upgrades and solved images
+                if only_unsolved:
+                    busy = img.astrometry_status in ['SUBMITTED', 'PROCESSING', 'SOLVED']
+                    if img.astrometry_status == 'FAILED' or (not img.is_plate_solved and not busy):
+                        standard_queue.append(img)
+                    else:
+                        skipped_count += 1
                     continue
 
                 # 2. Priority Queue: Imported but not System Solved
