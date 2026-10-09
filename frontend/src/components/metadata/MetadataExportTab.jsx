@@ -1,11 +1,11 @@
 import { Download, Check } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui';
-import './MetadataTab.css';
 
-export default function MetadataExportTab({ image, headerData, fileName }) {
-    const [copied, setCopied] = useState(false);
-    const [exportFormat, setExportFormat] = useState('json');
+export default function MetadataExportTab({ image, headerData }) {
+    const [copied, setCopied] = useState(null);
+    const copyTimer = useRef(null);
+    useEffect(() => () => clearTimeout(copyTimer.current), []);
 
     const generateJSON = () => {
         const data = {
@@ -181,10 +181,11 @@ export default function MetadataExportTab({ image, headerData, fileName }) {
     };
 
     const handleCopyToClipboard = (format) => {
-        const data = exportData[format].data;
-        navigator.clipboard.writeText(data);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        navigator.clipboard?.writeText(exportData[format].data).then(() => {
+            setCopied(format);
+            clearTimeout(copyTimer.current);
+            copyTimer.current = setTimeout(() => setCopied(null), 2000);
+        }, () => {});
     };
 
     return (
@@ -210,17 +211,20 @@ export default function MetadataExportTab({ image, headerData, fileName }) {
                                 <Button
                                     size="sm"
                                     className="format-btn"
-                                    icon={<Download size={16} />}
+                                    icon={<Download size={16} aria-hidden="true" />}
                                     onClick={() => handleDownload(format)}
+                                    aria-label={`Download ${format.toUpperCase()}`}
                                 >
                                     Download
                                 </Button>
                                 <Button
                                     size="sm"
                                     className="format-btn"
+                                    icon={copied === format ? <Check size={16} aria-hidden="true" /> : undefined}
                                     onClick={() => handleCopyToClipboard(format)}
+                                    aria-label={`Copy ${format.toUpperCase()}`}
                                 >
-                                    {copied ? <Check size={16} /> : 'Copy'}
+                                    {copied === format ? 'Copied' : 'Copy'}
                                 </Button>
                             </div>
                         </div>

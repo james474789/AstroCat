@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Clock, Image as ImageIcon, Zap, Hash } from 'lucide-react';
 import {
     BarChart, Bar, PieChart, Pie, Cell, ScatterChart, Scatter,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList
 } from 'recharts';
-import { fetchFitsStats } from '../api/client';
+import { fetchFitsStats, fetchStatsByMonth, fetchTopObjects } from '../api/client';
 import { MILKY_WAY_DATA } from '../data/mw_data';
 import { CONSTELLATION_LINES } from '../data/constellations_data';
 import { CONSTELLATION_LABELS } from '../data/constellations_labels';
@@ -99,6 +99,18 @@ export default function FitsStats() {
         queryKey: ['fitsStats', debouncedFilters],
         queryFn: () => fetchFitsStats(debouncedFilters),
         staleTime: 5 * 60 * 1000 // 5 minutes
+    });
+
+    // Monthly Activity and Top Objects (moved from Home) are collection-wide, not tied to the filters above.
+    const { data: monthlyData = [] } = useQuery({
+        queryKey: ['statsByMonth'],
+        queryFn: fetchStatsByMonth,
+        staleTime: 5 * 60 * 1000
+    });
+    const { data: topObjects = [] } = useQuery({
+        queryKey: ['topObjects'],
+        queryFn: fetchTopObjects,
+        staleTime: 5 * 60 * 1000
     });
 
     const handleFilterChange = (e) => {
@@ -341,6 +353,14 @@ export default function FitsStats() {
         }
     };
 
+    const handleMonthClick = (data) => {
+        if (data && data.month) {
+            const [year, month] = data.month.split('-');
+            const lastDay = new Date(year, month, 0).getDate();
+            navigate(`/search?start_date=${year}-${month}-01T00:00:00&end_date=${year}-${month}-${lastDay}T23:59:59`);
+        }
+    };
+
     // Default to 0 if values are missing
     const totalHours = (overview.total_exposure_hours || 0).toFixed(1);
     const avgExposure = (overview.average_exposure_seconds || 0).toFixed(1);
@@ -552,6 +572,75 @@ export default function FitsStats() {
                             </Scatter>
                         </ScatterChart>
                     </ResponsiveContainer>
+                </div>
+
+                {/* Monthly Activity (moved from Home) */}
+                <div className="chart-card full-width">
+                    <div className="chart-header">
+                        <h3 className="chart-title">Monthly Activity</h3>
+                        <span className="text-muted text-sm">Images captured per month</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={250}>
+                        <BarChart data={monthlyData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
+                            <XAxis
+                                dataKey="month"
+                                tickFormatter={(val) => {
+                                    if (!val || val === 'Unknown') return val;
+                                    const [y, m] = val.split('-');
+                                    return new Date(parseInt(y), parseInt(m) - 1).toLocaleDateString('default', { month: 'short', year: '2-digit' });
+                                }}
+                                stroke={CHART_AXIS}
+                                fontSize={10}
+                                tickLine={false}
+                                axisLine={false}
+                            />
+                            <YAxis stroke={CHART_AXIS} fontSize={12} tickLine={false} axisLine={false} />
+                            <Tooltip
+                                contentStyle={{ ...CHART_TOOLTIP, borderRadius: '8px' }}
+                                formatter={(value) => [value.toLocaleString(), 'Images']}
+                                labelFormatter={(label) => {
+                                    const [year, month] = label.split('-');
+                                    return `${new Date(2024, parseInt(month) - 1).toLocaleString('default', { month: 'long' })} ${year}`;
+                                }}
+                                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                            />
+                            <Bar
+                                dataKey="count"
+                                fill={CHART_PRIMARY}
+                                radius={[4, 4, 0, 0]}
+                                onClick={handleMonthClick}
+                                style={{ cursor: 'pointer' }}
+                            />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+
+                {/* Top Objects (moved from Home) */}
+                <div className="chart-card">
+                    <div className="chart-header">
+                        <h3 className="chart-title">Top Objects</h3>
+                        <Link to="/catalogs" className="link text-sm">View all →</Link>
+                    </div>
+                    <div className="top-objects-list">
+                        {topObjects.slice(0, 6).map((obj, idx) => (
+                            <Link
+                                key={obj.designation}
+                                to={`/search?object_name=${encodeURIComponent(obj.designation)}`}
+                                className="top-object-item"
+                            >
+                                <div className="object-rank">{idx + 1}</div>
+                                <div className="object-info">
+                                    <span className="object-designation">{obj.designation}</span>
+                                    <span className="object-name">{obj.name}</span>
+                                </div>
+                                <div className="object-stats">
+                                    <span className="object-count">{obj.image_count}</span>
+                                    <span className="object-exposure">{obj.total_exposure_hours.toFixed(1)}h</span>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Camera Usage */}

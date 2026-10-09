@@ -31,15 +31,9 @@
 /* Dashboard Grid */
 .page-dashboard .dashboard-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: var(--spacing-lg);
     margin-bottom: var(--spacing-xl);
-}
-
-@media (max-width: 1024px) {
-    .page-dashboard .dashboard-grid {
-        grid-template-columns: 1fr;
-    }
 }
 
 /* Dashboard Cards */
@@ -62,11 +56,6 @@
     font-size: var(--font-size-lg);
     font-weight: 600;
     color: var(--color-text-primary);
-}
-
-/* Chart Card */
-.page-dashboard .chart-card .chart-container {
-    padding: var(--spacing-lg);
 }
 
 /* Tonight tile (R2a) */
@@ -134,87 +123,42 @@
     color: var(--color-text-secondary);
 }
 
-/* Top Objects */
-.page-dashboard .top-objects-list {
+/* Calibration Library: compact shortcuts */
+.page-dashboard .calibration-list {
     padding: var(--spacing-sm);
 }
 
-.page-dashboard .top-object-item {
+.page-dashboard .calibration-item {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md);
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--border-radius);
     text-decoration: none;
     transition: background-color var(--transition-fast);
 }
 
 @media (hover: hover) {
-  .page-dashboard .top-object-item:hover {
-      background: var(--color-surface-elevated);
-  }
+    .page-dashboard .calibration-item:hover {
+        background: var(--color-surface-elevated);
+    }
 }
 
-.page-dashboard .object-rank {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-size-sm);
-    font-weight: 700;
+.page-dashboard .calibration-icon {
+    display: inline-flex;
     color: var(--color-text-muted);
-    background: var(--color-surface-elevated);
-    border-radius: var(--border-radius-full);
 }
 
-.page-dashboard .top-object-item:nth-child(1) .object-rank {
-    background: linear-gradient(135deg, #ffd700, #b8860b);
-    color: #1a1a1a;
-}
-
-.page-dashboard .top-object-item:nth-child(2) .object-rank {
-    background: linear-gradient(135deg, #c0c0c0, #808080);
-    color: #1a1a1a;
-}
-
-.page-dashboard .top-object-item:nth-child(3) .object-rank {
-    background: linear-gradient(135deg, #cd7f32, #8b4513);
-    color: #1a1a1a;
-}
-
-.page-dashboard .object-info {
+.page-dashboard .calibration-label {
     flex: 1;
-    display: flex;
-    flex-direction: column;
-}
-
-.page-dashboard .object-designation {
     font-size: var(--font-size-sm);
-    font-weight: 600;
     color: var(--color-text-primary);
 }
 
-.page-dashboard .object-name {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-}
-
-.page-dashboard .object-stats {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-}
-
-.page-dashboard .object-count {
+.page-dashboard .calibration-count {
     font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--color-primary);
-}
-
-.page-dashboard .object-exposure {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
 }
 
 /* Recent Images Section */

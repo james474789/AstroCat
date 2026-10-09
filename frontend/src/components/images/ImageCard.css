@@ -1,33 +1,32 @@
 .image-card {
-    display: block;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius-lg);
-    overflow: hidden;
-    text-decoration: none;
-    transition: all var(--transition-base);
-}
-
-.image-card {
     position: relative;
+    display: block;
+    text-decoration: none;
 }
 
 .image-card-more {
     display: none;
 }
 
-@media (hover: hover) {
-.image-card:hover {
-    border-color: var(--color-primary);
-}
-}
-
-/* Thumbnail Container */
+/* Thumbnail runs edge to edge: no card border, shadow or lift */
 .image-card-thumbnail {
     position: relative;
     aspect-ratio: 4 / 3;
     overflow: hidden;
+    border-radius: var(--border-radius);
     background: var(--color-background);
+    transition: filter var(--transition-fast);
+}
+
+@media (hover: hover) {
+    .image-card:hover .image-card-thumbnail {
+        filter: brightness(1.12);
+    }
+}
+
+.image-card:focus-visible .image-card-thumbnail {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
 
 .image-card-thumbnail img {
@@ -58,74 +57,36 @@
     z-index: 1;
 }
 
-/* Overlay */
-.image-card-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    padding: var(--spacing-sm);
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-}
-
+/* Status pills on a blurred material */
 .image-card-badges {
+    position: absolute;
+    top: var(--spacing-sm);
+    left: var(--spacing-sm);
+    right: var(--spacing-sm);
     display: flex;
     gap: var(--spacing-xs);
     flex-wrap: wrap;
 }
 
 .image-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 2px 8px;
-    font-size: 11px;
+    font-size: var(--font-size-xs);
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border-radius: var(--border-radius-sm);
+    color: var(--color-text-primary);
+    background: var(--material-thick);
+    -webkit-backdrop-filter: var(--material-blur);
+    backdrop-filter: var(--material-blur);
+    border-radius: var(--border-radius-full);
 }
 
-.badge-sub {
-    background: rgba(139, 92, 246, 0.8);
-    color: white;
-}
-
-.badge-master {
-    background: rgba(34, 197, 94, 0.8);
-    color: white;
-}
-
-.badge-deprecated {
-    background: rgba(239, 68, 68, 0.6);
-    color: white;
-}
-
-.badge-planetary {
-    background: rgba(234, 179, 8, 0.8);
-    color: white;
-}
-
-.badge-aurora {
-    background: rgba(34, 197, 94, 0.8);
-    color: white;
-}
-
-.badge-allsky {
-    background: rgba(14, 165, 233, 0.8);
-    color: white;
-}
-
-/* Calibration frame badge (F1): neutral grey/blue, distinct from processing-stage badges */
-.badge-calib {
-    background: rgba(100, 116, 139, 0.75);
-    color: white;
-}
-
-.badge-solved {
-    background: rgba(34, 211, 238, 0.2);
-    color: var(--color-accent);
-    border: 1px solid rgba(34, 211, 238, 0.4);
+.image-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--border-radius-full);
+    background: var(--color-success);
 }
 
 /* Rating Stars */
@@ -146,7 +107,7 @@
 
 /* Content */
 .image-card-content {
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm) 2px 0;
 }
 
 .image-card-title {
@@ -156,73 +117,15 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-bottom: var(--spacing-sm);
 }
 
-.image-card-meta {
-    display: flex;
-    gap: var(--spacing-md);
-    margin-bottom: var(--spacing-sm);
-}
-
-.meta-item {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
+.image-card-subhead {
+    margin: 2px 0 0;
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
-}
-
-.meta-icon {
-    font-size: 12px;
-    display: inline-flex;
-    align-items: center;
-}
-
-/* Objects Tags */
-.image-card-objects {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--spacing-xs);
-    margin-bottom: var(--spacing-sm);
-}
-
-.object-tag {
-    padding: 2px 8px;
-    font-size: 11px;
-    font-weight: 500;
-    background: var(--color-primary-glow);
-    color: var(--color-primary);
-    border-radius: var(--border-radius-full);
-}
-
-.object-tag-more {
-    background: var(--color-surface-elevated);
-    color: var(--color-text-muted);
-}
-
-/* Footer */
-.image-card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: var(--spacing-sm);
-    border-top: 1px solid var(--color-border);
-}
-
-.meta-date {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-}
-
-.meta-format {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 6px;
-    background: var(--color-surface-elevated);
-    color: var(--color-text-secondary);
-    border-radius: var(--border-radius-sm);
-    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Touch: long-press contextmenu is unreliable on iOS, so show an explicit button */
@@ -239,8 +142,8 @@
         height: 44px;
         border: none;
         border-radius: 50%;
-        background: rgba(0, 0, 0, 0.6);
-        color: white;
+        background: var(--material-thick);
+        color: var(--color-text-primary);
         font-size: 20px;
         line-height: 1;
     }

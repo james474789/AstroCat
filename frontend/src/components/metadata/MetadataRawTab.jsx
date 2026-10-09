@@ -1,17 +1,10 @@
-import { Copy, Check, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useState } from 'react';
 import { EmptyState } from '../ui';
-import './MetadataTab.css';
+import CopyButton from './CopyButton';
 
-export default function MetadataRawTab({ headerData, fileName }) {
+export default function MetadataRawTab({ headerData }) {
     const [searchTerm, setSearchTerm] = useState('');
-    const [copiedField, setCopiedField] = useState(null);
-
-    const copyToClipboard = (text, fieldName) => {
-        navigator.clipboard.writeText(text);
-        setCopiedField(fieldName);
-        setTimeout(() => setCopiedField(null), 2000);
-    };
 
     // Filter headers based on search
     const filteredHeaders = Object.entries(headerData || {})
@@ -33,9 +26,10 @@ export default function MetadataRawTab({ headerData, fileName }) {
     return (
         <div className="metadata-tab metadata-raw-tab">
             <div className="raw-search-container">
-                <Search size={18} />
+                <Search size={18} aria-hidden="true" />
                 <input
                     type="text"
+                    aria-label="Search headers"
                     placeholder="Search headers (key or value)..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -55,7 +49,7 @@ export default function MetadataRawTab({ headerData, fileName }) {
                             <tr>
                                 <th className="th-key">Key</th>
                                 <th className="th-value">Value</th>
-                                <th className="th-action"></th>
+                                <th className="th-action"><span className="ui-visually-hidden">Copy</span></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -73,17 +67,7 @@ export default function MetadataRawTab({ headerData, fileName }) {
                                             <code title={displayValue}>{displayValue}</code>
                                         </td>
                                         <td className="cell-action">
-                                            <button
-                                                className="copy-btn-small"
-                                                onClick={() => copyToClipboard(displayValue, key)}
-                                                title="Copy value"
-                                            >
-                                                {copiedField === key ? (
-                                                    <Check size={14} />
-                                                ) : (
-                                                    <Copy size={14} />
-                                                )}
-                                            </button>
+                                            <CopyButton value={displayValue} label={`${key} value`} />
                                         </td>
                                     </tr>
                                 );

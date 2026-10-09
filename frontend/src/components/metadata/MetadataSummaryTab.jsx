@@ -1,18 +1,9 @@
-import { Copy, Check, FileText, MapPin, BarChart3, Video, Star } from 'lucide-react';
+import { FileText, MapPin, BarChart3, Video, Star } from 'lucide-react';
 import TelescopeIcon from '../icons/TelescopeIcon';
-import { useState } from 'react';
 import { formatSubtype } from '../../api/client';
-import './MetadataTab.css';
+import CopyButton from './CopyButton';
 
 export default function MetadataSummaryTab({ image }) {
-    const [copiedField, setCopiedField] = useState(null);
-
-    const copyToClipboard = (text, fieldName) => {
-        navigator.clipboard.writeText(text);
-        setCopiedField(fieldName);
-        setTimeout(() => setCopiedField(null), 2000);
-    };
-
     const formatValue = (value) => {
         if (value === null || value === undefined || value === '') return '—';
         if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -92,24 +83,14 @@ export default function MetadataSummaryTab({ image }) {
 
                 return (
                     <div key={idx} className="metadata-group">
-                        <h3 className="group-title"><group.icon size={14} />{group.title}</h3>
+                        <h3 className="group-title"><group.icon size={14} aria-hidden="true" />{group.title}</h3>
                         <div className="metadata-items">
                             {filteredFields.map((field, fidx) => (
                                 <div key={fidx} className={`metadata-row ${field.highlight ? 'highlight' : ''}`}>
                                     <div className="metadata-label">{field.label}</div>
                                     <div className="metadata-value-container">
                                         <div className="metadata-value">{formatValue(field.value)}</div>
-                                        <button
-                                            className="copy-btn"
-                                            onClick={() => copyToClipboard(String(field.value), field.label)}
-                                            title="Copy to clipboard"
-                                        >
-                                            {copiedField === field.label ? (
-                                                <Check size={16} />
-                                            ) : (
-                                                <Copy size={16} />
-                                            )}
-                                        </button>
+                                        <CopyButton value={String(field.value)} label={field.label} />
                                     </div>
                                 </div>
                             ))}

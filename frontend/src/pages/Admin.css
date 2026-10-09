@@ -10,24 +10,6 @@
     margin-bottom: 3rem;
 }
 
-/* Settings sub-heading (the page's <h1> is the PageHeader above) */
-.page-admin .settings-heading {
-    margin-bottom: var(--spacing-xl);
-}
-
-.page-admin .settings-heading-title {
-    margin: 0 0 var(--spacing-xs);
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--color-text-primary);
-}
-
-.page-admin .settings-heading-subtitle {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 1rem;
-}
-
 /* Pipeline Section */
 .page-admin .pipeline-section {
     margin-bottom: 4rem;
@@ -241,7 +223,6 @@
 
 @media (max-width: 768px) {
     .page-admin { padding: 0.75rem; }
-    .page-admin .settings-heading-title { font-size: 1.5rem; }
     .page-admin .admin-page-header { margin-bottom: 1.5rem; }
     .page-admin .pipeline-section { margin-bottom: 2rem; }
 }
@@ -459,4 +440,72 @@
     margin: var(--spacing-sm) 0 0;
     font-size: 0.9em;
     color: var(--color-success);
+}
+
+/* Split view: inner sidebar on desktop, scrollable Tabs below 1024px */
+.page-admin .admin-layout {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr);
+    gap: var(--spacing-xl);
+    align-items: start;
+}
+
+.page-admin .admin-sidenav {
+    position: sticky;
+    top: calc(var(--header-height) + var(--spacing-lg));
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.page-admin .admin-sidenav-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font: inherit;
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    text-align: left;
+    color: var(--color-text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+@media (hover: hover) {
+    .page-admin .admin-sidenav-item:hover {
+        color: var(--color-text-primary);
+        background: var(--color-surface-elevated);
+    }
+}
+
+.page-admin .admin-sidenav-item.is-active {
+    color: var(--color-primary);
+    background: var(--color-surface-elevated);
+}
+
+.page-admin .admin-tabs {
+    display: none;
+}
+
+.page-admin .admin-content {
+    min-width: 0;
+}
+
+@media (max-width: 1023px) {
+    .page-admin .admin-layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--spacing-lg);
+    }
+
+    .page-admin .admin-sidenav {
+        display: none;
+    }
+
+    .page-admin .admin-tabs {
+        display: flex;
+    }
 }

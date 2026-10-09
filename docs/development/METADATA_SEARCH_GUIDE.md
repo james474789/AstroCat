@@ -1,5 +1,8 @@
 # Metadata Search & Viewer - Implementation Guide
 
+> **Note (U1 P1b):** the standalone Metadata Search page was merged into the Images page. Use the "Header fields" filter on `/search` and the Grid | List toggle (`/search?view=list`); `/metadata-search` redirects there. The filter semantics below are unchanged.
+
+
 ## 🎯 Overview
 
 AstroCat now features two powerful metadata tools:

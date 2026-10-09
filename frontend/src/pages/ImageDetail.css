@@ -56,7 +56,19 @@
     letter-spacing: 0.05em;
 }
 
-/* Layout */
+/* Layout: the image + metadata grid, with the Inspector docked to its right when open */
+.page-image-detail .image-detail-body {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-xl);
+}
+
+.page-image-detail .image-detail-stage {
+    flex: 1;
+    min-width: 0;
+    container-type: inline-size;
+}
+
 .page-image-detail .image-detail-layout {
     display: grid;
     grid-template-columns: 1fr 400px;
@@ -456,4 +468,12 @@
     top: 8px;
     right: 8px;
     z-index: 20;
+}
+
+/* Narrow stage (e.g. the Inspector is docked beside it): stack the metadata panel under the image.
+   Last in the file so it wins over the viewport rules above. */
+@container (max-width: 820px) {
+    .page-image-detail .image-detail-layout {
+        grid-template-columns: 1fr;
+    }
 }

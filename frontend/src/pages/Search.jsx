@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Download, RefreshCw, Contrast, Search as SearchIcon, FolderOpen, Image as ImageIcon, Settings, Sparkles, Moon, Check, X, ArrowRight } from 'lucide-react';
+import {
+    Download, RefreshCw, Contrast, Search as SearchIcon, FolderOpen, Image as ImageIcon, Settings, Sparkles, Moon,
+    Check, X, ArrowRight, ArrowUp, ArrowDown, SlidersHorizontal, LayoutGrid, List, MoreHorizontal, Pencil, Tags,
+    FileText, AlertTriangle, Star,
+} from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -13,16 +17,144 @@ import FilterChips from '../components/layout/FilterChips';
 import RangeInput from '../components/layout/RangeInput';
 import SpatialSearchInput from '../components/layout/SpatialSearchInput';
 import FolderTree from '../components/layout/FolderTree';
+import ActionMenu from '../components/layout/ActionMenu';
 import { useQualityUnits } from '../context/QualityUnitsContext';
 import { useIsMobile } from '../hooks/useMediaQuery';
-import { Button, Dialog, EmptyState, PageHeader, Skeleton, useToast } from '../components/ui';
+import { Button, Dialog, EmptyState, PageHeader, SegmentedControl, Skeleton, useToast } from '../components/ui';
 import './Search.css';
+
+const PAGE_SIZE = 100;
 
 // Q1d: star quality filters (units for fwhm/hfr bounds travel in quality_units).
 const QUALITY_KEYS = ['fwhm_min', 'fwhm_max', 'hfr_max', 'eccentricity_max', 'star_count_min',
     'quality_flag', 'star_metrics_status', 'quality_units'];
-const qualityFromParams = (sp) => Object.fromEntries(QUALITY_KEYS.map((k) => [k, sp.get(k) || '']));
-const QUALITY_EMPTY = Object.fromEntries(QUALITY_KEYS.map((k) => [k, '']));
+
+// Every string filter that lives in the URL and is sent to the images API.
+// telescope, gain_*, header_* came over from the retired Metadata Search page.
+const FILTER_KEYS = [
+    'subtype', 'format', 'rating', 'search', 'object_name', 'exposure_min', 'exposure_max',
+    'rotation_min', 'rotation_max', 'camera', 'telescope', 'filter', 'gain_min', 'gain_max',
+    'header_key', 'header_value', 'ra', 'dec', 'radius', 'is_plate_solved', 'pixel_scale_min',
+    'pixel_scale_max', 'start_date', 'end_date', 'path',
+    // F1: '' means the default (Lights only, not written to the URL).
+    // 'ALL' means no filter. Otherwise DARK/FLAT/BIAS/DARK_FLAT.
+    'frame_type', 'target_key', 'rig_id', 'rig_bucket',
+    ...QUALITY_KEYS,
+];
+
+// URL params that are not filters (they don't count towards the Filters badge).
+const NON_FILTER_PARAMS = ['sort_by', 'sort_order', 'quality_units', 'page', 'view', 'pixel_scale_max_exclusive'];
+
+function filtersFromParams(sp) {
+    return {
+        ...Object.fromEntries(FILTER_KEYS.map((k) => [k, sp.get(k) || ''])),
+        pixel_scale_max_exclusive: sp.get('pixel_scale_max_exclusive') === 'true',
+        sort_by: sp.get('sort_by') || 'capture_date',
+        sort_order: sp.get('sort_order') || 'desc',
+    };
+}
+
+// [value, menu label, short toolbar label]
+const SORT_FIELDS = [
+    ['capture_date', 'Capture date', 'Captured'],
+    ['exposure_time_seconds', 'Exposure time', 'Exposure'],
+    ['file_name', 'File name', 'Name'],
+    ['file_size_bytes', 'File size', 'Size'],
+    ['rating', 'Rating', 'Rating'],
+    ['file_last_modified', 'File modified', 'Modified'],
+    ['file_created', 'File created', 'Created'],
+    ['fwhm_arcsec', 'FWHM (arcsec)', 'FWHM ″'],
+    ['fwhm_px', 'FWHM (pixels)', 'FWHM px'],
+    ['hfr_px', 'HFR (pixels)', 'HFR'],
+    ['eccentricity', 'Eccentricity', 'Eccentricity'],
+    ['star_count', 'Star count', 'Stars'],
+];
+// Extra sorts reachable from the list view's column headers.
+const LIST_SORT_FIELDS = [
+    ['object_name', 'Object', 'Object'],
+    ['camera_name', 'Camera', 'Camera'],
+    ['telescope_name', 'Telescope', 'Telescope'],
+    ['is_plate_solved', 'Plate solved', 'Solved'],
+];
+
+// List view columns (from the old Metadata Search table); `sort` = API sort_by.
+const LIST_COLUMNS = [
+    { key: 'file_name', label: 'File name', sort: 'file_name' },
+    { key: 'object', label: 'Object', sort: 'object_name' },
+    { key: 'camera', label: 'Camera', sort: 'camera_name' },
+    { key: 'telescope', label: 'Telescope', sort: 'telescope_name' },
+    { key: 'exposure', label: 'Exposure (s)', sort: 'exposure_time_seconds', numeric: true },
+    { key: 'date', label: 'Date', sort: 'capture_date' },
+    { key: 'solved', label: 'Plate solved', sort: 'is_plate_solved', centered: true },
+    { key: 'rating', label: 'Rating', sort: 'rating', centered: true },
+];
+
+const SUBTYPE_NAMES = {
+    SUB_FRAME: 'Sub frames', INTEGRATION_MASTER: 'Masters', INTEGRATION_DEPRECATED: 'Deprecated',
+    PLANETARY: 'Planetary', ALLSKY: 'All-sky', AURORA: 'Aurora',
+};
+const FRAME_SCOPE_NAMES = {
+    LIGHT: 'Lights only', ALL: 'All frame types', DARK: 'Darks only', FLAT: 'Flats only',
+    BIAS: 'Bias only', DARK_FLAT: 'Dark flats only',
+};
+const SOLVE_NAMES = { solved: 'Plate solved', imported: 'WCS imported', unsolved: 'Unsolved' };
+const SUSPECT_NAMES = { ANY: 'any reason', SOFT: 'soft', CLOUD: 'few stars', TRAILED: 'elongated' };
+
+const imagesLabel = (n) => `${n.toLocaleString()} ${n === 1 ? 'image' : 'images'}`;
+
+function rangeText(label, min, max, unit = '') {
+    if (min && max) return `${label} ${min}–${max}${unit}`;
+    if (min) return `${label} ≥ ${min}${unit}`;
+    return `${label} ≤ ${max}${unit}`;
+}
+
+// Filters the API actually applies: a header value needs a key, a cone needs RA and Dec.
+function effectiveFilterEntries(sp) {
+    return [...sp.entries()].filter(([k, v]) => {
+        if (!v || NON_FILTER_PARAMS.includes(k)) return false;
+        if (k === 'frame_type' && v === 'LIGHT') return false;
+        if (k === 'header_value' && !sp.get('header_key')) return false;
+        if (['ra', 'dec', 'radius'].includes(k) && !(sp.get('ra') && sp.get('dec'))) return false;
+        return true;
+    });
+}
+
+// Readable summary of the scope a bulk edit applies to, e.g. "Lights only · Camera “ASI2600”".
+function describeScope(sp, rigNames) {
+    const g = (k) => sp.get(k) || '';
+    const parts = [FRAME_SCOPE_NAMES[g('frame_type') || 'LIGHT'] || `Frame type ${g('frame_type')}`];
+    const add = (cond, text) => { if (cond) parts.push(text); };
+    const sizeUnit = g('quality_units') === 'PX' ? ' px' : '″';
+    add(g('search'), `Search “${g('search')}”`);
+    add(g('path'), `Folder ${g('path')}`);
+    add(g('subtype'), `Type: ${SUBTYPE_NAMES[g('subtype')] || g('subtype')}`);
+    add(g('format'), `Format: ${g('format')}`);
+    add(g('rating'), `Rating ≥ ${g('rating')}`);
+    add(g('object_name'), `Object “${g('object_name')}”`);
+    add(g('camera'), `Camera “${g('camera')}”`);
+    add(g('telescope'), `Telescope “${g('telescope')}”`);
+    add(g('filter'), `Filter “${g('filter')}”`);
+    add(g('exposure_min') || g('exposure_max'), rangeText('Exposure', g('exposure_min'), g('exposure_max'), ' s'));
+    add(g('gain_min') || g('gain_max'), rangeText('Gain', g('gain_min'), g('gain_max')));
+    add(g('rotation_min') || g('rotation_max'), rangeText('Rotation', g('rotation_min'), g('rotation_max'), '°'));
+    add(g('pixel_scale_min') || g('pixel_scale_max'), rangeText('Pixel scale', g('pixel_scale_min'), g('pixel_scale_max'), '″/px'));
+    add(g('start_date') || g('end_date'), rangeText('Captured', g('start_date'), g('end_date')));
+    add(g('header_key'), g('header_value')
+        ? `Header ${g('header_key')} contains “${g('header_value')}”`
+        : `Header ${g('header_key')} present`);
+    add(g('ra') && g('dec'), `Within ${g('radius') || '1'}° of RA ${g('ra')}°, Dec ${g('dec')}°`);
+    add(g('is_plate_solved'), SOLVE_NAMES[g('is_plate_solved')] || `Plate solved: ${g('is_plate_solved')}`);
+    add(g('target_key'), `Target: ${g('target_key') === '__none__' ? 'unassigned' : g('target_key')}`);
+    add(g('rig_id'), `Rig: ${g('rig_id') === 'none' ? 'unassigned' : (rigNames[g('rig_id')] || `#${g('rig_id')}`)}`);
+    add(g('rig_bucket'), 'One unassigned-rig bucket');
+    add(g('fwhm_min') || g('fwhm_max'), rangeText('FWHM', g('fwhm_min'), g('fwhm_max'), sizeUnit));
+    add(g('hfr_max'), `HFR ≤ ${g('hfr_max')}${sizeUnit}`);
+    add(g('eccentricity_max'), `Eccentricity ≤ ${g('eccentricity_max')}`);
+    add(g('star_count_min'), `Stars ≥ ${g('star_count_min')}`);
+    add(g('quality_flag'), `Suspect: ${SUSPECT_NAMES[g('quality_flag')] || g('quality_flag')}`);
+    add(g('star_metrics_status'), `Measurement: ${g('star_metrics_status').replace(/,/g, ' / ').toLowerCase().replace(/_/g, ' ')}`);
+    return parts.join(' · ');
+}
 
 // Helper: Convert degrees to HH:MM
 function degreesToHMS(degrees) {
@@ -54,6 +186,99 @@ function BulkMessage({ message }) {
     );
 }
 
+// Shown in a bulk dialog when no filter narrows the scope: the edit hits the whole library.
+function BulkUnfilteredWarning({ frameType, ack, onAck, disabled }) {
+    const what = frameType === 'ALL' ? 'image' : 'Light frame';
+    return (
+        <div className="bulk-warning">
+            <p className="bulk-warning-text">
+                <AlertTriangle size={16} aria-hidden="true" />
+                <span><strong>No filters are active.</strong> This changes every {what} in your library, not just the ones on screen.</span>
+            </p>
+            <label className="bulk-ack">
+                <input type="checkbox" checked={ack} onChange={(e) => onAck(e.target.checked)} disabled={disabled} />
+                I understand this changes every image
+            </label>
+        </div>
+    );
+}
+
+// List view: one row per image, sortable column headers.
+function ImageTable({ images, sortBy, sortOrder, onSort, onContextMenu }) {
+    const remember = (id) => sessionStorage.setItem('lastClickedImageId', id);
+    return (
+        <div className="image-table-wrap">
+            <table className="image-table">
+                <thead>
+                    <tr>
+                        {LIST_COLUMNS.map((col) => {
+                            const active = sortBy === col.sort;
+                            return (
+                                <th
+                                    key={col.key}
+                                    scope="col"
+                                    className={col.numeric ? 'is-numeric' : col.centered ? 'is-centered' : undefined}
+                                    aria-sort={active ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                >
+                                    <button type="button" className="th-sort" onClick={() => onSort(col.sort)}>
+                                        {col.label}
+                                        {active && (sortOrder === 'asc'
+                                            ? <ArrowUp size={12} aria-hidden="true" />
+                                            : <ArrowDown size={12} aria-hidden="true" />)}
+                                    </button>
+                                </th>
+                            );
+                        })}
+                        <th scope="col"><span className="ui-visually-hidden">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {images.map((img) => (
+                        <tr key={img.id} id={`image-${img.id}`} onContextMenu={(e) => onContextMenu(e, img)}>
+                            <td className="td-filename">
+                                <span className="format-badge">{img.file_format}</span>
+                                <Link to={`/images/${img.id}`} onClick={() => remember(img.id)} title={img.file_name}>
+                                    {img.file_name}
+                                </Link>
+                            </td>
+                            <td>{img.object_name || '-'}</td>
+                            <td className="td-mono">{img.camera_name || '-'}</td>
+                            <td className="td-mono">{img.telescope_name || '-'}</td>
+                            <td className="td-numeric">
+                                {img.exposure_time_seconds ? img.exposure_time_seconds.toFixed(2) : '-'}
+                            </td>
+                            <td className="td-date">
+                                {img.capture_date ? new Date(img.capture_date).toLocaleDateString() : '-'}
+                            </td>
+                            <td className="td-centered">
+                                <span className={`solve-badge ${img.is_plate_solved ? 'is-solved' : 'is-unsolved'}`}>
+                                    {img.is_plate_solved
+                                        ? <Check size={14} aria-label="Solved" />
+                                        : <X size={14} aria-label="Not solved" />}
+                                </span>
+                            </td>
+                            <td className="td-centered">
+                                {img.rating ? <span className="td-rating"><Star size={14} aria-hidden="true" /> {img.rating}</span> : '-'}
+                            </td>
+                            <td className="td-actions">
+                                <Button
+                                    to={`/images/${img.id}/metadata`}
+                                    variant="plain"
+                                    size="sm"
+                                    iconOnly
+                                    icon={<FileText size={16} />}
+                                    aria-label={`View metadata for ${img.file_name}`}
+                                    onClick={() => remember(img.id)}
+                                />
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
 export default function Search() {
     const [searchParams, setSearchParams] = useSearchParams();
     const toast = useToast();
@@ -62,6 +287,7 @@ export default function Search() {
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(1);
     const currentPage = parseInt(searchParams.get('page')) || 1;
+    const view = searchParams.get('view') === 'list' ? 'list' : 'grid';
     const [thumbnailSize, setThumbnailSize] = useState(() => {
         const saved = localStorage.getItem('thumbnailSize');
         return saved ? parseInt(saved, 10) : 280;
@@ -82,6 +308,8 @@ export default function Search() {
     const [bulkRigValue, setBulkRigValue] = useState('');
     const [bulkRigLoading, setBulkRigLoading] = useState(false);
     const [bulkRigMessage, setBulkRigMessage] = useState('');
+    // "I understand this changes every image" (only asked when no filter is active)
+    const [bulkAck, setBulkAck] = useState(false);
 
     // Same key as Equipment.jsx, so the cache is shared.
     const equipmentQuery = useQuery({ queryKey: ['equipment'], queryFn: fetchEquipment, staleTime: 60_000 });
@@ -103,39 +331,8 @@ export default function Search() {
         };
     }, []);
 
-    // Filter states
-    const [filters, setFilters] = useState({
-        subtype: searchParams.get('subtype') || '',
-        format: searchParams.get('format') || '',
-        rating: searchParams.get('rating') || '',
-        search: searchParams.get('search') || '',
-        object_name: searchParams.get('object_name') || '',
-        exposure_min: searchParams.get('exposure_min') || '',
-        exposure_max: searchParams.get('exposure_max') || '',
-        rotation_min: searchParams.get('rotation_min') || '',
-        rotation_max: searchParams.get('rotation_max') || '',
-        camera: searchParams.get('camera') || '',
-        filter: searchParams.get('filter') || '',
-        ra: searchParams.get('ra') || '',
-        dec: searchParams.get('dec') || '',
-        radius: searchParams.get('radius') || '',
-        is_plate_solved: searchParams.get('is_plate_solved') || '',
-        pixel_scale_min: searchParams.get('pixel_scale_min') || '',
-        pixel_scale_max: searchParams.get('pixel_scale_max') || '',
-        pixel_scale_max_exclusive: searchParams.get('pixel_scale_max_exclusive') === 'true',
-        start_date: searchParams.get('start_date') || '',
-        end_date: searchParams.get('end_date') || '',
-        sort_by: searchParams.get('sort_by') || 'capture_date',
-        sort_order: searchParams.get('sort_order') || 'desc',
-        path: searchParams.get('path') || '',
-        // F1: '' means the default (Lights only, not written to the URL).
-        // 'ALL' means no filter. Otherwise DARK/FLAT/BIAS/DARK_FLAT.
-        frame_type: searchParams.get('frame_type') || '',
-        target_key: searchParams.get('target_key') || '',
-        rig_id: searchParams.get('rig_id') || '',
-        rig_bucket: searchParams.get('rig_bucket') || '',
-        ...qualityFromParams(searchParams),
-    });
+    // Filter states (the panel edits these; the URL is the applied state)
+    const [filters, setFilters] = useState(() => filtersFromParams(searchParams));
     const { units } = useQualityUnits();
 
     // Local state for RA input to allow HH:MM editing
@@ -153,42 +350,20 @@ export default function Search() {
         return () => { document.body.style.overflow = prev; };
     }, [isMobile, showFilters]);
 
+    // Switching Grid/List only changes `view`, so it must not refetch.
+    const queryKey = useMemo(() => {
+        const params = new URLSearchParams(searchParams);
+        params.delete('view');
+        return params.toString();
+    }, [searchParams]);
+
     useEffect(() => {
         loadImages();
-    }, [currentPage, searchParams]);
+    }, [queryKey]);
 
     // Sync filters form with URL params
     useEffect(() => {
-        setFilters({
-            subtype: searchParams.get('subtype') || '',
-            format: searchParams.get('format') || '',
-            rating: searchParams.get('rating') || '',
-            search: searchParams.get('search') || '',
-            object_name: searchParams.get('object_name') || '',
-            exposure_min: searchParams.get('exposure_min') || '',
-            exposure_max: searchParams.get('exposure_max') || '',
-            rotation_min: searchParams.get('rotation_min') || '',
-            rotation_max: searchParams.get('rotation_max') || '',
-            camera: searchParams.get('camera') || '',
-            filter: searchParams.get('filter') || '',
-            ra: searchParams.get('ra') || '',
-            dec: searchParams.get('dec') || '',
-            radius: searchParams.get('radius') || '',
-            is_plate_solved: searchParams.get('is_plate_solved') || '',
-            pixel_scale_min: searchParams.get('pixel_scale_min') || '',
-            pixel_scale_max: searchParams.get('pixel_scale_max') || '',
-            pixel_scale_max_exclusive: searchParams.get('pixel_scale_max_exclusive') === 'true',
-            start_date: searchParams.get('start_date') || '',
-            end_date: searchParams.get('end_date') || '',
-            sort_by: searchParams.get('sort_by') || 'capture_date',
-            sort_order: searchParams.get('sort_order') || 'desc',
-            path: searchParams.get('path') || '',
-            frame_type: searchParams.get('frame_type') || '',
-            target_key: searchParams.get('target_key') || '',
-            rig_id: searchParams.get('rig_id') || '',
-            rig_bucket: searchParams.get('rig_bucket') || '',
-            ...qualityFromParams(searchParams),
-        });
+        setFilters(filtersFromParams(searchParams));
 
         // Sync RA input display from URL param
         const raParam = searchParams.get('ra');
@@ -205,40 +380,18 @@ export default function Search() {
             // Build params directly from URL searchParams to ensure source of truth
             const params = {
                 page: currentPage,
-                page_size: 100,
+                page_size: PAGE_SIZE,
             };
 
-            // Add filters if present in URL
-            if (searchParams.get('subtype')) params.subtype = searchParams.get('subtype');
-            if (searchParams.get('format')) params.format = searchParams.get('format');
-            if (searchParams.get('rating')) params.rating = searchParams.get('rating');
-            if (searchParams.get('search')) params.search = searchParams.get('search');
-            if (searchParams.get('object_name')) params.object_name = searchParams.get('object_name');
-            if (searchParams.get('exposure_min')) params.exposure_min = searchParams.get('exposure_min');
-            if (searchParams.get('exposure_max')) params.exposure_max = searchParams.get('exposure_max');
-            if (searchParams.get('rotation_min')) params.rotation_min = searchParams.get('rotation_min');
-            if (searchParams.get('rotation_max')) params.rotation_max = searchParams.get('rotation_max');
-            if (searchParams.get('camera')) params.camera = searchParams.get('camera');
-            if (searchParams.get('filter')) params.filter = searchParams.get('filter');
-            if (searchParams.get('ra')) params.ra = searchParams.get('ra');
-            if (searchParams.get('dec')) params.dec = searchParams.get('dec');
-            if (searchParams.get('radius')) params.radius = searchParams.get('radius');
-            if (searchParams.get('is_plate_solved')) params.is_plate_solved = searchParams.get('is_plate_solved');
-            if (searchParams.get('pixel_scale_min')) params.pixel_scale_min = searchParams.get('pixel_scale_min');
-            if (searchParams.get('pixel_scale_max')) params.pixel_scale_max = searchParams.get('pixel_scale_max');
+            FILTER_KEYS.forEach((k) => {
+                if (k !== 'frame_type' && searchParams.get(k)) params[k] = searchParams.get(k);
+            });
             if (searchParams.get('pixel_scale_max_exclusive')) params.pixel_scale_max_exclusive = searchParams.get('pixel_scale_max_exclusive');
-            if (searchParams.get('start_date')) params.start_date = searchParams.get('start_date');
-            if (searchParams.get('end_date')) params.end_date = searchParams.get('end_date');
             if (searchParams.get('sort_by')) params.sort_by = searchParams.get('sort_by');
             if (searchParams.get('sort_order')) params.sort_order = searchParams.get('sort_order');
-            if (searchParams.get('path')) params.path = searchParams.get('path');
             // F1: default to Lights only when no frame_type URL param is present.
             // "ALL" is sent through as-is (backend treats it as no filter).
             params.frame_type = searchParams.get('frame_type') || 'LIGHT';
-            if (searchParams.get('target_key')) params.target_key = searchParams.get('target_key');
-            if (searchParams.get('rig_id')) params.rig_id = searchParams.get('rig_id');
-            if (searchParams.get('rig_bucket')) params.rig_bucket = searchParams.get('rig_bucket');
-            QUALITY_KEYS.forEach((k) => { if (searchParams.get(k)) params[k] = searchParams.get(k); });
 
             const data = await fetchImages(params);
             setImages(data.items);
@@ -250,7 +403,7 @@ export default function Search() {
                 ids: data.items.map(img => img.id),
                 total: data.total,
                 page: currentPage,
-                pageSize: 100, // Matching the page_size in loadImages
+                pageSize: PAGE_SIZE,
                 totalPages: data.total_pages,
                 params: params // Store search params to potentially fetch more pages
             }));
@@ -277,6 +430,23 @@ export default function Search() {
         setFilters(prev => ({ ...prev, [key]: value }));
     }
 
+    // Write a new filter set to the URL, keeping the Grid/List choice.
+    function commitParams(params) {
+        if (view === 'list') params.set('view', 'list');
+        setSearchParams(params);
+    }
+
+    // Change some URL params in place (sort, search, view), back to page 1 unless keepPage.
+    function updateParams(changes, { keepPage = false } = {}) {
+        const params = new URLSearchParams(searchParams);
+        Object.entries(changes).forEach(([key, value]) => {
+            if (value) params.set(key, value);
+            else params.delete(key);
+        });
+        if (!keepPage) params.set('page', '1');
+        setSearchParams(params);
+    }
+
     function applyCurrentFilters(updatedFilters, overrideRaString = null) {
         const params = new URLSearchParams();
         const raValue = overrideRaString !== null ? overrideRaString : (raInput ? hmsToDegrees(raInput).toFixed(4) : '');
@@ -287,7 +457,7 @@ export default function Search() {
             }
         });
         params.set('page', '1');
-        setSearchParams(params);
+        commitParams(params);
     }
 
     function applyFilters() {
@@ -308,50 +478,41 @@ export default function Search() {
             if (value) params.set(key, value);
         });
         params.set('page', '1');
-        setSearchParams(params);
+        commitParams(params);
         if (isMobile) setShowFilters(false);
-        // loadImages(); // Handled by useEffect dependence on searchParams
     }
 
     function clearFilters() {
-        setFilters({
-            subtype: '',
-            format: '',
-            rating: '',
-            object_name: '',
-            exposure_min: '',
-            exposure_max: '',
-            rotation_min: '',
-            rotation_max: '',
-            camera: '',
-            filter: '',
-            ra: '',
-            dec: '',
-            radius: '',
-            is_plate_solved: '',
-            pixel_scale_min: '',
-            pixel_scale_max: '',
-            pixel_scale_max_exclusive: false,
-            start_date: '',
-            end_date: '',
-            sort_by: 'capture_date',
-            sort_order: 'desc',
-            path: '',
-            // F1: "Clear filters" resets to the Lights default, not All.
-            frame_type: '',
-            target_key: '',
-            rig_id: '',
-            rig_bucket: '',
-            ...QUALITY_EMPTY,
-        });
+        // F1: "Clear filters" resets to the Lights default, not All.
+        setFilters(filtersFromParams(new URLSearchParams()));
         setRaInput('');
-        setSearchParams(new URLSearchParams());
+        commitParams(new URLSearchParams());
+    }
+
+    function setView(next) {
+        updateParams({ view: next === 'list' ? 'list' : '' }, { keepPage: true });
+    }
+
+    function setSort(sortBy, sortOrder) {
+        updateParams({ sort_by: sortBy, sort_order: sortOrder });
+    }
+
+    // List headers: a new column sorts ascending, the active one flips.
+    function handleColumnSort(column) {
+        if (filters.sort_by === column) setSort(column, filters.sort_order === 'asc' ? 'desc' : 'asc');
+        else setSort(column, 'asc');
+    }
+
+    function submitSearch(e) {
+        e.preventDefault();
+        updateParams({ search: filters.search.trim() });
     }
 
     // F1: current searchParams with the implicit Lights default made explicit,
     // so CSV export and bulk actions operate on the same scope the grid shows.
     function effectiveSearchParams() {
         const params = new URLSearchParams(searchParams);
+        params.delete('view');
         if (!params.get('frame_type')) {
             params.set('frame_type', 'LIGHT');
         }
@@ -439,16 +600,6 @@ export default function Search() {
         }
     };
 
-    // F1: human-readable description of the frame-type scope the current
-    // filters apply to, used in the bulk "Set frame type..." confirm dialog.
-    function currentFrameTypeScopeLabel() {
-        const ft = searchParams.get('frame_type') || 'LIGHT';
-        if (ft === 'ALL') return 'all frame types';
-        if (ft === 'LIGHT') return 'Lights only';
-        const names = { DARK: 'Darks', FLAT: 'Flats', BIAS: 'Bias', DARK_FLAT: 'Dark Flats' };
-        return `${names[ft] || ft} only`;
-    }
-
     const handleBulkChangeFrameType = async () => {
         if (!bulkFrameTypeValue || images.length === 0) {
             setBulkFrameTypeMessage('No valid selection');
@@ -512,73 +663,147 @@ export default function Search() {
         }
     };
 
-    const activeFilterCount = Object.entries(filters).filter(([k, v]) =>
-        v && !['sort_by', 'sort_order', 'quality_units'].includes(k) && !(k === 'frame_type' && v === 'LIGHT')
+    // Filters badge counts applied (URL) filters, not unsaved panel edits.
+    const activeFilterCount = [...searchParams.entries()].filter(([k, v]) =>
+        v && !NON_FILTER_PARAMS.includes(k) && !(k === 'frame_type' && v === 'LIGHT')
     ).length;
+
+    // Bulk-edit scope: what the dialogs say they will change.
+    const frameTypeParam = searchParams.get('frame_type') || '';
+    const scopeUnfiltered = effectiveFilterEntries(searchParams)
+        .filter(([k, v]) => !(k === 'frame_type' && v === 'ALL')).length === 0;
+    const scopeSummary = describeScope(searchParams, rigNames);
+    const scopeCount = imagesLabel(totalCount);
+    const bulkBlocked = loading || totalCount === 0 || (scopeUnfiltered && !bulkAck);
+
+    function openBulk(setOpen, setMessage) {
+        setMessage('');
+        setBulkAck(false);
+        setOpen(true);
+    }
+
+    const allSortFields = [...SORT_FIELDS, ...LIST_SORT_FIELDS];
+    const currentSort = allSortFields.find(([value]) => value === filters.sort_by)
+        || [filters.sort_by, filters.sort_by, filters.sort_by];
+    const sortMenuFields = SORT_FIELDS.some(([value]) => value === filters.sort_by)
+        ? SORT_FIELDS
+        : [...SORT_FIELDS, currentSort];
+    const sortAscending = filters.sort_order === 'asc';
+    const sortItems = [
+        { type: 'heading', label: 'Sort by' },
+        ...sortMenuFields.map(([value, label]) => ({
+            id: `sort-${value}`,
+            label,
+            checked: value === filters.sort_by,
+            onSelect: () => setSort(value, filters.sort_order),
+        })),
+        { type: 'separator' },
+        { type: 'heading', label: 'Order' },
+        { id: 'order-asc', label: 'Ascending', checked: sortAscending, onSelect: () => setSort(filters.sort_by, 'asc') },
+        { id: 'order-desc', label: 'Descending', checked: !sortAscending, onSelect: () => setSort(filters.sort_by, 'desc') },
+    ];
+
+    const noResults = totalCount === 0;
+    const bulkItems = [
+        {
+            id: 'bulk-type',
+            label: 'Change image type…',
+            icon: <Tags size={14} />,
+            disabled: noResults,
+            onSelect: () => openBulk(setBulkChangeModalOpen, setBulkChangeMessage),
+        },
+        {
+            id: 'bulk-frame',
+            label: 'Set frame type…',
+            icon: <Contrast size={14} />,
+            disabled: noResults,
+            onSelect: () => openBulk(setBulkFrameTypeModalOpen, setBulkFrameTypeMessage),
+        },
+        {
+            id: 'bulk-rig',
+            label: 'Assign rig…',
+            hint: 'Light sub-frames and masters only',
+            icon: <TelescopeIcon size={14} />,
+            disabled: noResults,
+            onSelect: () => openBulk(setBulkRigModalOpen, setBulkRigMessage),
+        },
+    ];
+    const moreItems = [
+        { id: 'export-csv', label: 'Export CSV', hint: 'All matching results', icon: <Download size={14} />, onSelect: handleExportCsv },
+        {
+            id: 'sync-metadata',
+            label: syncMetadataLoading ? 'Syncing metadata…' : 'Sync metadata',
+            hint: 'Queue a re-read for all matching results',
+            icon: <RefreshCw size={14} />,
+            disabled: noResults || syncMetadataLoading,
+            onSelect: handleSyncMetadata,
+        },
+    ];
 
     return (
         <div className="page-search">
             <PageHeader
-                title="Search Images"
-                subtitle="Browse and filter your astronomical image collection"
+                title="Images"
                 actions={(
-                    <div className="header-actions">
+                    <div className="search-toolbar">
+                        <form role="search" className="toolbar-search" onSubmit={submitSearch}>
+                            <SearchIcon size={16} className="toolbar-search-icon" aria-hidden="true" />
+                            <input
+                                type="search"
+                                className="input"
+                                placeholder="Search files and objects"
+                                aria-label="Search file names and objects"
+                                value={filters.search}
+                                onChange={(e) => handleFilterChange('search', e.target.value)}
+                            />
+                        </form>
                         <Button
-                            icon={<Download size={14} />}
-                            onClick={handleExportCsv}
-                            title="Export current results to CSV"
-                        >
-                            Export CSV
-                        </Button>
-                        <Button
-                            icon={<RefreshCw size={14} />}
-                            onClick={handleSyncMetadata}
-                            title="Queue metadata sync for all matching search results"
-                            loading={syncMetadataLoading}
-                            disabled={totalCount === 0}
-                        >
-                            Sync Metadata
-                        </Button>
-                        <Button
-                            icon={<RefreshCw size={14} />}
-                            onClick={() => {
-                                setBulkChangeModalOpen(true);
-                                setBulkChangeMessage('');
-                            }}
-                            title="Change image type for all results"
-                            disabled={images.length === 0}
-                        >
-                            Bulk Change Type
-                        </Button>
-                        <Button
-                            icon={<Contrast size={14} />}
-                            onClick={() => {
-                                setBulkFrameTypeModalOpen(true);
-                                setBulkFrameTypeMessage('');
-                            }}
-                            title="Set frame type for all results"
-                            disabled={images.length === 0}
-                        >
-                            Set Frame Type…
-                        </Button>
-                        <Button
-                            icon={<TelescopeIcon size={14} />}
-                            onClick={() => {
-                                setBulkRigModalOpen(true);
-                                setBulkRigMessage('');
-                            }}
-                            title="Assign a rig to every light sub-frame and master in the results"
-                            disabled={images.length === 0}
-                        >
-                            Assign Rig…
-                        </Button>
-                        <Button
-                            variant="filled"
-                            className="header-filters-btn"
+                            variant="tinted"
+                            className="toolbar-filters-btn"
+                            icon={<SlidersHorizontal size={16} />}
+                            aria-expanded={showFilters}
+                            aria-controls={showFilters ? 'search-filters' : undefined}
                             onClick={() => setShowFilters(!showFilters)}
                         >
-                            {showFilters ? 'Hide Filters' : `Filters${activeFilterCount ? ` (${activeFilterCount})` : ''}`}
+                            Filters
+                            {activeFilterCount > 0 && (
+                                <span className="toolbar-badge">
+                                    {activeFilterCount}
+                                    <span className="ui-visually-hidden"> active</span>
+                                </span>
+                            )}
                         </Button>
+                        <SegmentedControl
+                            aria-label="View"
+                            size="sm"
+                            value={view}
+                            onChange={setView}
+                            items={[
+                                { value: 'grid', label: 'Grid', icon: <LayoutGrid size={14} /> },
+                                { value: 'list', label: 'List', icon: <List size={14} /> },
+                            ]}
+                        />
+                        <ActionMenu
+                            items={sortItems}
+                            menuLabel="Sort"
+                            aria-label={`Sort by ${currentSort[1]}, ${sortAscending ? 'ascending' : 'descending'}`}
+                            variant="plain"
+                            className="toolbar-sort"
+                        >
+                            {currentSort[2]}
+                            {sortAscending ? <ArrowUp size={14} aria-hidden="true" /> : <ArrowDown size={14} aria-hidden="true" />}
+                        </ActionMenu>
+                        <ActionMenu items={bulkItems} align="end" variant="tinted" icon={<Pencil size={14} />} disabled={noResults && !loading}>
+                            Bulk edit
+                        </ActionMenu>
+                        <ActionMenu
+                            items={moreItems}
+                            align="end"
+                            variant="plain"
+                            iconOnly
+                            icon={<MoreHorizontal size={18} />}
+                            aria-label="More"
+                        />
                     </div>
                 )}
             />
@@ -589,7 +814,7 @@ export default function Search() {
                     <div className="filters-backdrop" onClick={() => setShowFilters(false)} aria-hidden="true" />
                 )}
                 {showFilters && (
-                    <form className="filters-sidebar" onSubmit={(e) => { e.preventDefault(); applyFilters(); }}>
+                    <form id="search-filters" className="filters-sidebar" onSubmit={(e) => { e.preventDefault(); applyFilters(); }}>
                         <div className="filters-header">
                             <h3><SearchIcon size={16} /> Search & Filter</h3>
                             <Button variant="plain" size="sm" onClick={clearFilters}>
@@ -741,17 +966,6 @@ export default function Search() {
                                     <option value="5">5 stars</option>
                                 </select>
                             </div>
-
-                            <div className="filter-group">
-                                <label className="label">Search (Filename/Object)</label>
-                                <input
-                                    type="text"
-                                    className="input"
-                                    placeholder="e.g., M31_Light, NGC6888"
-                                    value={filters.search}
-                                    onChange={(e) => handleFilterChange('search', e.target.value)}
-                                />
-                            </div>
                         </FilterSection>
 
                         {/* Capture Settings Section */}
@@ -765,6 +979,17 @@ export default function Search() {
                                     onMaxChange={(v) => handleFilterChange('exposure_max', v)}
                                     placeholder={{ min: '0', max: '300' }}
                                     unit="s"
+                                />
+                            </div>
+
+                            <div className="filter-group">
+                                <RangeInput
+                                    label="Gain"
+                                    minValue={filters.gain_min}
+                                    maxValue={filters.gain_max}
+                                    onMinChange={(v) => handleFilterChange('gain_min', v)}
+                                    onMaxChange={(v) => handleFilterChange('gain_max', v)}
+                                    placeholder={{ min: '0', max: '300' }}
                                 />
                             </div>
 
@@ -800,6 +1025,48 @@ export default function Search() {
                                     value={filters.camera}
                                     onChange={(e) => handleFilterChange('camera', e.target.value)}
                                 />
+                            </div>
+
+                            <div className="filter-group">
+                                <label className="label">Telescope</label>
+                                <input
+                                    type="text"
+                                    className="input"
+                                    placeholder="e.g., RedCat 51"
+                                    value={filters.telescope}
+                                    onChange={(e) => handleFilterChange('telescope', e.target.value)}
+                                />
+                            </div>
+                        </FilterSection>
+
+                        {/* Header Fields Section (FITS/EXIF keywords, from the old Metadata Search) */}
+                        <FilterSection
+                            title="Header fields"
+                            icon={<FileText size={16} />}
+                            defaultOpen={Boolean(filters.header_key || filters.header_value)}
+                        >
+                            <div className="filter-group">
+                                <label className="label" htmlFor="search-header-key">Keyword</label>
+                                <input
+                                    id="search-header-key"
+                                    type="text"
+                                    className="input"
+                                    placeholder="e.g., IMAGETYP, FOCUSPOS"
+                                    value={filters.header_key}
+                                    onChange={(e) => handleFilterChange('header_key', e.target.value)}
+                                />
+                            </div>
+                            <div className="filter-group">
+                                <label className="label" htmlFor="search-header-value">Value contains</label>
+                                <input
+                                    id="search-header-value"
+                                    type="text"
+                                    className="input"
+                                    placeholder="Leave empty to match any value"
+                                    value={filters.header_value}
+                                    onChange={(e) => handleFilterChange('header_value', e.target.value)}
+                                />
+                                <span className="filter-hint">Matches images whose FITS/EXIF header has this keyword.</span>
                             </div>
                         </FilterSection>
 
@@ -958,13 +1225,13 @@ export default function Search() {
                     </form>
                 )}
 
-                {/* Results Grid */}
+                {/* Results */}
                 <div className="search-results">
                     <div className="results-header">
-                        <div className="results-left">
-                            <span className="results-count">
-                                {loading ? 'Loading...' : `${totalCount.toLocaleString()} images found`}
-                            </span>
+                        <span className="results-count" aria-live="polite">
+                            {loading ? 'Loading…' : `${imagesLabel(totalCount)} found`}
+                        </span>
+                        {view === 'grid' && (
                             <div className="size-control">
                                 <span className="size-label">Size</span>
                                 <input
@@ -978,56 +1245,23 @@ export default function Search() {
                                     title="Adjust thumbnail size"
                                 />
                             </div>
-                        </div>
-                        <div className="sort-controls">
-                            <div className="sort-group">
-                                <label className="sort-label" htmlFor="search-sort-by">Sort by:</label>
-                                <select
-                                    id="search-sort-by"
-                                    className="input select sort-select"
-                                    value={filters.sort_by}
-                                    onChange={(e) => {
-                                        const updatedFilters = { ...filters, sort_by: e.target.value };
-                                        setFilters(updatedFilters);
-                                        applyCurrentFilters(updatedFilters);
-                                    }}
-                                >
-                                    <option value="capture_date">Capture Date</option>
-                                    <option value="exposure_time_seconds">Exposure Time</option>
-                                    <option value="file_name">File Name</option>
-                                    <option value="file_size_bytes">File Size</option>
-                                    <option value="rating">Rating</option>
-                                    <option value="file_last_modified">File Modified</option>
-                                    <option value="file_created">File Created</option>
-                                    <option value="fwhm_arcsec">FWHM (arcsec)</option>
-                                    <option value="fwhm_px">FWHM (pixels)</option>
-                                    <option value="hfr_px">HFR (pixels)</option>
-                                    <option value="eccentricity">Eccentricity</option>
-                                    <option value="star_count">Star count</option>
-                                </select>
-                                <select
-                                    className="input select sort-select"
-                                    aria-label="Sort order"
-                                    value={filters.sort_order}
-                                    onChange={(e) => {
-                                        const updatedFilters = { ...filters, sort_order: e.target.value };
-                                        setFilters(updatedFilters);
-                                        applyCurrentFilters(updatedFilters);
-                                    }}
-                                >
-                                    <option value="desc">Descending</option>
-                                    <option value="asc">Ascending</option>
-                                </select>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {loading ? (
-                        <div className="loading-grid" aria-busy="true" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))` }}>
-                            {Array.from({ length: 8 }).map((_, i) => (
-                                <Skeleton key={i} className="image-skeleton" />
-                            ))}
-                        </div>
+                        view === 'list' ? (
+                            <div className="list-loading" aria-busy="true">
+                                {Array.from({ length: 10 }).map((_, i) => (
+                                    <Skeleton key={i} height={36} />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="loading-grid" aria-busy="true" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))` }}>
+                                {Array.from({ length: 8 }).map((_, i) => (
+                                    <Skeleton key={i} className="image-skeleton" />
+                                ))}
+                            </div>
+                        )
                     ) : images.length === 0 && totalCount === 0 && searchParams.get('rig_bucket') ? (
                         // R0c: a bucket link whose images have since been assigned (or regrouped).
                         <EmptyState
@@ -1045,6 +1279,14 @@ export default function Search() {
                             icon={<TelescopeIcon size={64} strokeWidth={1.5} />}
                             title="No images found"
                             description="Try adjusting your filters or search criteria"
+                        />
+                    ) : view === 'list' ? (
+                        <ImageTable
+                            images={images}
+                            sortBy={filters.sort_by}
+                            sortOrder={filters.sort_order}
+                            onSort={handleColumnSort}
+                            onContextMenu={handleImageContextMenu}
                         />
                     ) : (
                         <div className="image-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))` }}>
@@ -1116,9 +1358,10 @@ export default function Search() {
             <Dialog
                 open={bulkChangeModalOpen}
                 onClose={() => setBulkChangeModalOpen(false)}
-                title="Change Image Type"
-                description={`This will change the image type for all ${totalCount.toLocaleString()} matching image(s) in your search results.`}
+                title="Change image type"
+                description={`This will change ${scopeCount} matching: ${scopeSummary}.`}
                 size="sm"
+                destructive
                 dismissible={!bulkChangeLoading}
                 closeOnBackdrop={!bulkChangeLoading}
                 className="dlg-search-bulk"
@@ -1127,14 +1370,22 @@ export default function Search() {
                         <Button variant="plain" onClick={() => setBulkChangeModalOpen(false)} disabled={bulkChangeLoading}>
                             Cancel
                         </Button>
-                        <Button variant="filled" onClick={handleBulkChangeImageType} loading={bulkChangeLoading}>
-                            Update
+                        <Button
+                            variant="destructive"
+                            onClick={handleBulkChangeImageType}
+                            loading={bulkChangeLoading}
+                            disabled={bulkBlocked}
+                        >
+                            {`Change type on ${scopeCount}`}
                         </Button>
                     </>
                 )}
             >
+                {scopeUnfiltered && (
+                    <BulkUnfilteredWarning frameType={frameTypeParam} ack={bulkAck} onAck={setBulkAck} disabled={bulkChangeLoading} />
+                )}
                 <div className="bulk-field">
-                    <label className="label" htmlFor="bulk-change-subtype">New Image Type</label>
+                    <label className="label" htmlFor="bulk-change-subtype">New image type</label>
                     <select
                         id="bulk-change-subtype"
                         className="input select"
@@ -1156,9 +1407,10 @@ export default function Search() {
             <Dialog
                 open={bulkFrameTypeModalOpen}
                 onClose={() => setBulkFrameTypeModalOpen(false)}
-                title="Set Frame Type"
-                description={`This will set the frame type for all ${totalCount.toLocaleString()} matching image(s) in your search results, and mark it as a manual override that survives re-indexing.`}
+                title="Set frame type"
+                description={`This will change ${scopeCount} matching: ${scopeSummary}.`}
                 size="sm"
+                destructive
                 dismissible={!bulkFrameTypeLoading}
                 closeOnBackdrop={!bulkFrameTypeLoading}
                 className="dlg-search-bulk"
@@ -1167,17 +1419,25 @@ export default function Search() {
                         <Button variant="plain" onClick={() => setBulkFrameTypeModalOpen(false)} disabled={bulkFrameTypeLoading}>
                             Cancel
                         </Button>
-                        <Button variant="filled" onClick={handleBulkChangeFrameType} loading={bulkFrameTypeLoading}>
-                            Update
+                        <Button
+                            variant="destructive"
+                            onClick={handleBulkChangeFrameType}
+                            loading={bulkFrameTypeLoading}
+                            disabled={bulkBlocked}
+                        >
+                            {`Set frame type on ${scopeCount}`}
                         </Button>
                     </>
                 )}
             >
+                {scopeUnfiltered && (
+                    <BulkUnfilteredWarning frameType={frameTypeParam} ack={bulkAck} onAck={setBulkAck} disabled={bulkFrameTypeLoading} />
+                )}
                 <p className="bulk-note">
-                    Current filter scope: <strong>{currentFrameTypeScopeLabel()}</strong>. To relabel mislabelled frames, choose "All Frame Types" or the current (wrong) type in the Frame Type filter first.
+                    The new type is a manual override that survives re-indexing. To relabel mislabelled frames, choose "All Frame Types" or the current (wrong) type in the Frame Type filter first.
                 </p>
                 <div className="bulk-field">
-                    <label className="label" htmlFor="bulk-frame-type">New Frame Type</label>
+                    <label className="label" htmlFor="bulk-frame-type">New frame type</label>
                     <select
                         id="bulk-frame-type"
                         className="input select"
@@ -1198,13 +1458,10 @@ export default function Search() {
             <Dialog
                 open={bulkRigModalOpen}
                 onClose={() => setBulkRigModalOpen(false)}
-                title="Assign Rig"
-                description={(
-                    <>
-                        Assigns a rig to every <strong>Light sub-frame and master</strong> in the current results ({totalCount.toLocaleString()} shown). Other frames are skipped. Assigned rigs are marked manual and won't be changed by auto-assignment.
-                    </>
-                )}
+                title="Assign rig"
+                description={`This will change up to ${scopeCount} matching: ${scopeSummary}.`}
                 size="sm"
+                destructive
                 dismissible={!bulkRigLoading}
                 closeOnBackdrop={!bulkRigLoading}
                 className="dlg-search-bulk"
@@ -1213,12 +1470,23 @@ export default function Search() {
                         <Button variant="plain" onClick={() => setBulkRigModalOpen(false)} disabled={bulkRigLoading}>
                             Cancel
                         </Button>
-                        <Button variant="filled" onClick={handleBulkAssignRig} loading={bulkRigLoading} disabled={!bulkRigValue}>
-                            Assign
+                        <Button
+                            variant="destructive"
+                            onClick={handleBulkAssignRig}
+                            loading={bulkRigLoading}
+                            disabled={bulkBlocked || !bulkRigValue}
+                        >
+                            {`${bulkRigValue === 'none' ? 'Clear rig on' : 'Assign rig to'} ${scopeCount}`}
                         </Button>
                     </>
                 )}
             >
+                {scopeUnfiltered && (
+                    <BulkUnfilteredWarning frameType={frameTypeParam} ack={bulkAck} onAck={setBulkAck} disabled={bulkRigLoading} />
+                )}
+                <p className="bulk-note">
+                    Only <strong>Light sub-frames and masters</strong> get the rig; other frames are skipped. Assigned rigs are marked manual and won't be changed by auto-assignment.
+                </p>
                 <div className="bulk-field">
                     <label className="label" htmlFor="bulk-rig">Rig</label>
                     <select

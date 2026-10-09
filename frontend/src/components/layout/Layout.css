@@ -51,7 +51,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all var(--transition-fast);
+    transition: background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
     opacity: 0.5;
 }
 
@@ -99,7 +99,7 @@
 
 .layout.is-collapsed .sidebar:not(:hover) .logo-text,
 .layout.is-collapsed .sidebar:not(:hover) .nav-item span,
-.layout.is-collapsed .sidebar:not(:hover) .version-info {
+.layout.is-collapsed .sidebar:not(:hover) .nav-group-heading {
     opacity: 0;
     pointer-events: none;
 }
@@ -110,8 +110,26 @@
     padding: var(--spacing-lg);
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-xs);
+    gap: var(--spacing-md);
     min-width: var(--sidebar-width);
+    overflow-y: auto;
+}
+
+.nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.nav-group-heading {
+    padding: 0 var(--spacing-md);
+    font-size: var(--fs-caption);
+    font-weight: var(--fw-caption);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    transition: opacity var(--transition-fast);
 }
 
 .nav-item {
@@ -124,7 +142,7 @@
     text-decoration: none;
     font-size: var(--font-size-sm);
     font-weight: 500;
-    transition: all var(--transition-fast);
+    transition: background var(--transition-fast), color var(--transition-fast);
     position: relative;
     white-space: nowrap;
 }
@@ -140,27 +158,78 @@
     margin-left: 0;
 }
 
-.logout-button {
-    margin-top: auto;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    width: 100%;
-}
-
-@media (hover: hover) {
-  .logout-button:hover {
-      background: rgba(248, 113, 113, 0.1) !important;
-      color: var(--color-error) !important;
-  }
-}
-
-
-/* Sidebar Footer */
+/* Sidebar Footer: account menu */
 .sidebar-footer {
+    position: relative;
     padding: var(--spacing-lg);
     border-top: 1px solid var(--color-border);
     min-width: var(--sidebar-width);
+}
+
+.account-button {
+    width: 100%;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.account-button[aria-expanded="true"] {
+    background: var(--color-surface-elevated);
+    color: var(--color-text-primary);
+}
+
+.account-email {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: opacity var(--transition-fast);
+}
+
+.account-popover {
+    position: absolute;
+    left: var(--spacing-lg);
+    right: var(--spacing-lg);
+    bottom: calc(100% - var(--spacing-md));
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-xl);
+}
+
+.account-popover .sidebar-units {
+    margin-bottom: 0;
+}
+
+.account-logout {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: none;
+    border-radius: var(--border-radius);
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-family: inherit;
+    font-size: var(--fs-callout);
+    font-weight: 500;
+    cursor: pointer;
+}
+
+@media (hover: hover) {
+  .account-logout:hover {
+      background: var(--color-surface-hover);
+      color: var(--color-error);
+  }
+}
+
+.account-version {
+    font-size: var(--fs-footnote);
+    text-align: center;
 }
 
 /* Main Content */
@@ -224,7 +293,7 @@
         border: none;
         color: var(--color-text-secondary);
         font-family: inherit;
-        font-size: 0.7rem;
+        font-size: var(--fs-caption);
         font-weight: 500;
         text-decoration: none;
         cursor: pointer;
@@ -232,6 +301,19 @@
 
     .bottom-nav-item.active {
         color: var(--color-primary);
+    }
+
+    .more-section + .more-section {
+        margin-top: var(--spacing-md);
+    }
+
+    .more-heading {
+        margin: 0;
+        font-size: var(--fs-caption);
+        font-weight: var(--fw-caption);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
     }
 
     .more-grid {
@@ -250,7 +332,7 @@
         min-height: 76px;
         padding: var(--spacing-sm);
         text-align: center;
-        font-size: 0.8rem;
+        font-size: var(--fs-subhead);
         color: var(--color-text-secondary);
         text-decoration: none;
         background: var(--color-surface-elevated);
@@ -279,6 +361,6 @@
 
     .more-version {
         text-align: center;
-        font-size: 0.75rem;
+        font-size: var(--fs-footnote);
     }
 }

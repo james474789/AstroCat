@@ -493,19 +493,35 @@ export default function FullResViewer() {
                 onMouseEnter={() => { barHoverRef.current = true; setBarVisible(true); }}
                 onMouseLeave={() => { barHoverRef.current = false; showBar(); }}
             >
-                <button className="fr-btn" onClick={back} title="Back to image (Esc)">
-                    <ArrowLeft size={16} /> Back
-                </button>
+                <Button variant="plain" size="sm" className="fr-btn" icon={<ArrowLeft size={16} aria-hidden="true" />} onClick={back} title="Back to image (Esc)">
+                    Back
+                </Button>
                 <span className="fr-title" title={image?.file_name}>{image?.file_name || '…'}</span>
                 {navInfo.currentIndex !== -1 && (
                     <span className="fr-nav">
-                        <button className="fr-btn icon" onClick={goPrev} disabled={!navInfo.prevId} title="Previous (←)" aria-label="Previous image">
-                            <ChevronLeft size={16} />
-                        </button>
+                        <Button
+                            variant="plain"
+                            size="sm"
+                            iconOnly
+                            className="fr-btn fr-icon"
+                            icon={<ChevronLeft size={18} aria-hidden="true" />}
+                            onClick={goPrev}
+                            disabled={!navInfo.prevId}
+                            title="Previous (←)"
+                            aria-label="Previous image"
+                        />
                         <span>{navInfo.currentIndex} / {navInfo.total}</span>
-                        <button className="fr-btn icon" onClick={goNext} disabled={!navInfo.nextId} title="Next (→)" aria-label="Next image">
-                            <ChevronRight size={16} />
-                        </button>
+                        <Button
+                            variant="plain"
+                            size="sm"
+                            iconOnly
+                            className="fr-btn fr-icon"
+                            icon={<ChevronRight size={18} aria-hidden="true" />}
+                            onClick={goNext}
+                            disabled={!navInfo.nextId}
+                            title="Next (→)"
+                            aria-label="Next image"
+                        />
                     </span>
                 )}
                 <select
@@ -518,43 +534,66 @@ export default function FullResViewer() {
                     {presets.length === 0 && <option value="">Stretch</option>}
                     {presets.map((p) => <option key={p} value={p}>{PRESET_LABELS[p] || p}</option>)}
                 </select>
-                <button
-                    className={`fr-btn${overlays.active ? ' active' : ''}`}
+                <Button
+                    variant={overlays.active ? 'filled' : 'tinted'}
+                    size="sm"
+                    className="fr-btn"
+                    icon={<Layers size={16} aria-hidden="true" />}
                     onClick={overlays.toggle}
                     disabled={!!overlays.unavailable}
+                    aria-pressed={overlays.active}
                     title={overlays.unavailable || 'Images in this field: footprints of smaller images that overlap it (O)'}
                 >
-                    <Layers size={16} /> In field: {overlays.active ? 'On' : 'Off'}
+                    In field: {overlays.active ? 'On' : 'Off'}
                     {overlays.active && overlays.mode && (
                         overlays.isLoading ? ' …' : ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`
                     )}
-                </button>
-                <button
-                    className={`fr-btn${seenIn.open ? ' active' : ''}`}
+                </Button>
+                <Button
+                    variant={seenIn.open ? 'filled' : 'tinted'}
+                    size="sm"
+                    className="fr-btn"
+                    icon={<Frame size={16} aria-hidden="true" />}
                     onClick={() => seenIn.setOpen(true)}
                     disabled={!!seenIn.unavailable}
                     title={seenIn.unavailable || 'Larger images whose field covers this image'}
                 >
-                    <Frame size={16} /> Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
-                </button>
-                <button
-                    className={`fr-btn${sky.active ? ' active' : ''}`}
+                    Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
+                </Button>
+                <Button
+                    variant={sky.active ? 'filled' : 'tinted'}
+                    size="sm"
+                    className="fr-btn"
+                    icon={<Sparkles size={16} aria-hidden="true" />}
                     onClick={toggleSky}
                     disabled={!!skyUnavailable}
+                    aria-pressed={sky.active}
                     title={skyUnavailable
                         || (sky.active && sky.warning
                             ? `AstroCat annotations — approximate: ${sky.warning} (C)`
                             : 'AstroCat annotations: catalog objects from the plate solution (C)')}
                 >
-                    <Sparkles size={16} /> Annotations{sky.active && (sky.isLoading ? ' …' : ` (${sky.objects.length})`)}
-                    {sky.active && sky.warning && <AlertTriangle size={14} className="fr-warn-icon" />}
-                </button>
-                <button className="fr-btn" onClick={fit} title="Fit (0)"><Frame size={16} /> Fit</button>
-                <button className="fr-btn" onClick={oneToOne} title="100% native pixels (1)"><ScanSearch size={16} /> 1:1</button>
+                    Annotations{sky.active && (sky.isLoading ? ' …' : ` (${sky.objects.length})`)}
+                    {sky.active && sky.warning && <AlertTriangle size={14} className="fr-warn-icon" aria-hidden="true" />}
+                </Button>
+                <Button variant="plain" size="sm" className="fr-btn" icon={<Frame size={16} aria-hidden="true" />} onClick={fit} title="Fit (0)">
+                    Fit
+                </Button>
+                <Button variant="plain" size="sm" className="fr-btn" icon={<ScanSearch size={16} aria-hidden="true" />} onClick={oneToOne} title="100% native pixels (1)">
+                    1:1
+                </Button>
                 <span className="fr-zoom">{zoomPct != null ? `${zoomPct < 10 ? zoomPct.toFixed(1) : Math.round(zoomPct)}%` : ''}</span>
-                <button className="fr-btn icon" onClick={toggleFullscreen} title="Fullscreen (F)" aria-label="Toggle fullscreen">
-                    {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-                </button>
+                <Button
+                    variant="plain"
+                    size="sm"
+                    iconOnly
+                    className="fr-btn fr-icon"
+                    icon={isFullscreen ? <Minimize size={18} aria-hidden="true" /> : <Maximize size={18} aria-hidden="true" />}
+                    onClick={toggleFullscreen}
+                    aria-pressed={isFullscreen}
+                    aria-label="Fullscreen"
+                    title="Fullscreen (F)"
+                />
             </div>
 
             <div
@@ -609,7 +648,7 @@ export default function FullResViewer() {
             {phase.kind === 'error' && (
                 <div className="fullres-chip error">
                     {phase.message}
-                    <button className="fr-btn" onClick={() => { retryRef.current = true; setAttempt((n) => n + 1); }}>Retry</button>
+                    <Button size="sm" className="fr-btn" onClick={() => { retryRef.current = true; setAttempt((n) => n + 1); }}>Retry</Button>
                 </div>
             )}
             {phase.kind === 'ready' && scale > 1 && (

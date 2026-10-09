@@ -1,5 +1,22 @@
 # U1: UI/UX design system and information architecture (handover)
 
+## P1b status (2026-10-09): done, committed, deployed as VERSION 20261009.06
+
+**Owner decisions applied:** bulk edits stay filter-based (no selection model, no Undo, no backend change); Metadata Search merged into Images with list at 100/page; nav renamed (Home, Images) and grouped; Home loses Monthly Activity/Top Objects (now on Statistics) and the fake 57% bar.
+
+**Done:**
+- **Nav** (`Layout.jsx`): groups Library/Observe/Insights/Setup, Lucide icons, footer account menu (email, Star sizes, version, Log out), mobile bar Home · Images · Tonight · Targets · More with grouped sheet.
+- **Images** (`Search.jsx`, new `components/layout/ActionMenu.jsx`): toolbar = search · Filters(count) · Grid|List · Sort menu · Bulk edit menu · ⋯ (Export CSV, Sync metadata); `?view=list` table (MetadataSearch columns); "Header fields" filter + Telescope/Gain; `/metadata-search` redirects (`MetadataSearchRedirect.jsx`). Every bulk dialog states "N images matching: <filters>", has a count-naming destructive confirm label, and with no narrowing filter requires an "I understand this changes every image" tick.
+- **Admin**: split view with `?section=` (Pipeline default · Health · Indexer · Plate Solving · Mounts · Thumbnails · Star Quality · Data · Users · About); left nav ≥1024px, Tabs below; Star Quality mounts only when active.
+- **Inspector** (`components/metadata/Inspector.jsx`): right panel on ImageDetail (Summary/Details/Raw/Export), `I` toggles, Esc closes, remembered per browser (not restored open under 1024px); `/images/:id/metadata` opens ImageDetail with it open; MetadataViewer page deleted; FullResViewer top bar uses `Button`.
+- **Home/ImageCard**: see above; ImageCard is borderless with title = `catalog_matches[0].catalog_designation` → file name, one subhead line (exposure · filter · camera · FWHM), blurred status pills; now reads `camera_name` (the old `image.camera` was never returned by the API).
+
+**Known follow-ups:**
+- `fetchImages` in `api/client.js` may not forward the star-quality filter params (`fwhm_min`…), so the grid/bulk count could differ from the bulk endpoints when quality filters are active. Check before relying on bulk counts with quality filters.
+- Old `/metadata-search` links land on Lights-only (the default) where the old page showed all frame types.
+- Inspector sheet (<1024px) has no focus trap/scroll lock. P2.
+- Selection model, floating action bar and Undo for bulk edits were descoped by the owner; revisit only with backend ID-based endpoints.
+
 ## P1a status (2026-10-09): done, uncommitted, deployed as VERSION 20261009.05
 
 **Primitives** in `frontend/src/components/ui/` (README there has props, migration map, conventions): `Button`, `Dialog` (native `<dialog>`, portalled), `ConfirmDialog` + `useConfirm()`, `ToastProvider` + `useToast()` (Undo via `action`), `Tabs`/`TabPanel`, `SegmentedControl`, `PageHeader`, `EmptyState`, `Spinner`, `Skeleton`. Providers are mounted in `App.jsx`.

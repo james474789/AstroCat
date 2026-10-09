@@ -15,13 +15,18 @@ import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
 import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
 import useSeenIn from '../hooks/useSeenIn';
 import SeenInPanel from '../components/seenIn/SeenInPanel';
-import { Maximize2, Layers, Crosshair, AlertTriangle, Frame, Orbit, Download, Sparkles, RefreshCw, ClipboardList, Hourglass, Rocket, Pencil, Check, Star, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Maximize2, Layers, Crosshair, AlertTriangle, Frame, Orbit, Download, Sparkles, RefreshCw, PanelRight, Hourglass, Rocket, Pencil, Check, Star, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityCard from '../components/quality/StarQualityCard';
+import Inspector from '../components/metadata/Inspector';
+import useInspectorOpen from '../components/metadata/useInspectorOpen';
 import { Button, EmptyState, Spinner, useConfirm, useToast } from '../components/ui';
 import './ImageDetail.css';
 
-export default function ImageDetail() {
+const INSPECTOR_ID = 'image-inspector';
+
+// `inspector`: the /images/:id/metadata route, which opens the Inspector on arrival
+export default function ImageDetail({ inspector: forceInspector = false }) {
     const { id } = useParams();
     const navigate = useNavigate();
     const toast = useToast();
@@ -33,6 +38,10 @@ export default function ImageDetail() {
     const [imgError, setImgError] = useState(false);
     // Navigation through the search results this image was opened from
     const { navInfo, goToImage, goPrev, goNext, returnToSearch } = useImageNav(id);
+    // Metadata Inspector (Summary / Details / Raw headers / Export), open state remembered per browser
+    const [inspectorOpen, setInspectorOpen] = useInspectorOpen(forceInspector, id);
+    const toggleInspector = useCallback(() => setInspectorOpen((open) => !open), [setInspectorOpen]);
+    const closeInspector = useCallback(() => setInspectorOpen(false), [setInspectorOpen]);
     // Touch zoom/pan: view = {s: scale, x, y translate in px, origin top-left of the preview}
     const [view, setView] = useState({ s: 1, x: 0, y: 0 });
     const viewRef = useRef(view);
@@ -144,7 +153,7 @@ export default function ImageDetail() {
             setImage(data);
             // Initialize states
             setRatingManuallyEdited(data.rating_manually_edited || false);
-        } catch (err) {
+        } catch {
             setError('Image not found');
         } finally {
             setLoading(false);
@@ -307,7 +316,10 @@ export default function ImageDetail() {
             // Ignore while a dialog (e.g. a confirm) is open: it is modal, so page shortcuts must not fire behind it
             if (document.querySelector('dialog[open]')) return;
             // Ignore if in an input field
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+            // Already handled by a focused control (e.g. arrow keys moving between Inspector tabs)
+            if (e.defaultPrevented) return;
+            const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
 
             if (!image) return;
             const key = parseInt(e.key);
@@ -326,18 +338,24 @@ export default function ImageDetail() {
             } else if (e.key.toLowerCase() === 'g') {
                 e.preventDefault();
                 returnToSearch();
-            } else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            } else if (e.key.toLowerCase() === 'f' && plain) {
                 e.preventDefault();
                 navigate(`/images/${id}/view`);
-            } else if (e.key.toLowerCase() === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && !overlaysUnavailable) {
+            } else if (e.key.toLowerCase() === 'o' && plain && !overlaysUnavailable) {
                 e.preventDefault();
                 toggleOverlays();
+            } else if (e.key.toLowerCase() === 'i' && plain) {
+                e.preventDefault();
+                toggleInspector();
+            } else if (e.key === 'Escape' && inspectorOpen) {
+                e.preventDefault();
+                closeInspector();
             }
         };
 
         window.addEventListener('keydown', handleKeyPress);
         return () => window.removeEventListener('keydown', handleKeyPress);
-    }, [image, id, navInfo, navigate, goPrev, goNext, returnToSearch, overlaysUnavailable, toggleOverlays]);
+    }, [image, id, navInfo, navigate, goPrev, goNext, returnToSearch, overlaysUnavailable, toggleOverlays, inspectorOpen, toggleInspector, closeInspector]);
 
     // Generate placeholder background
     const getPlaceholderStyle = () => {
@@ -580,644 +598,650 @@ export default function ImageDetail() {
                 )}
             </nav>
 
-            <div className="image-detail-layout">
-                <div className="image-main-content">
-                    {/* Image Preview */}
-                    <div className="image-preview-section">
-                        <div className="image-preview" ref={previewRef} style={imgError ? getPlaceholderStyle() : {}}>
-                            {!imgError ? (
-                                <div
-                                    className="preview-container"
-                                    style={{
-                                        position: 'relative',
-                                        width: '100%',
-                                        height: '100%',
-                                        transformOrigin: '0 0',
-                                        transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
-                                        '--inv-zoom': 1 / view.s,
-                                    }}
-                                >
-                                    {/* 
-                                     Hierarchy:
-                                     1. Stretched Overlay (Top Priority if enabled)
-                                     2. Annotated Overlay (If enabled)
-                                     3. Base Image (Always there)
-                                    */}
+            <div className="image-detail-body">
+                <div className="image-detail-stage">
+                    <div className="image-detail-layout">
+                        <div className="image-main-content">
+                            {/* Image Preview */}
+                            <div className="image-preview-section">
+                                <div className="image-preview" ref={previewRef} style={imgError ? getPlaceholderStyle() : {}}>
+                                    {!imgError ? (
+                                        <div
+                                            className="preview-container"
+                                            style={{
+                                                position: 'relative',
+                                                width: '100%',
+                                                height: '100%',
+                                                transformOrigin: '0 0',
+                                                transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
+                                                '--inv-zoom': 1 / view.s,
+                                            }}
+                                        >
+                                            {/* 
+                                             Hierarchy:
+                                             1. Stretched Overlay (Top Priority if enabled)
+                                             2. Annotated Overlay (If enabled)
+                                             3. Base Image (Always there)
+                                            */}
 
-                                    {/* Base Image (Always Thumbnail - Linear/Default) */}
-                                    <img
-                                        src={`${API_BASE_URL}/images/${id}/thumbnail?t=${image.thumbnail_generated_at ? new Date(image.thumbnail_generated_at).getTime() : ''}`}
-                                        alt={image.file_name}
-                                        className="real-preview-image base-layer"
-                                        style={{
-                                            width: '100%',
-                                            height: '100%',
-                                            objectFit: 'contain',
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            zIndex: 1
-                                        }}
-                                        onError={() => setImgError(true)}
-                                    />
-                                    {/* AstroCat annotations: catalog objects from the plate solution (visual only) */}
-                                    {sky.active && sky.objects.length > 0 && imgRect && (
-                                        <div style={{ position: 'absolute', inset: 0, zIndex: 8, pointerEvents: 'none' }}>
-                                            <SkyOverlayLayer
-                                                objects={sky.objects}
-                                                toScreen={overlayToScreen}
-                                                clip={imgRect}
-                                                hoveredKey={hoveredSkyKey}
-                                                labelScale={1 / view.s}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {/* Images-in-field footprints (visual only; hit-tested by the interaction layer) */}
-                                    {overlays.groups.length > 0 && imgRect && (
-                                        <div style={{ position: 'absolute', inset: 0, zIndex: 9, pointerEvents: 'none' }}>
-                                            <FieldOverlayLayer
-                                                groups={overlays.groups}
-                                                toScreen={overlayToScreen}
-                                                clip={imgRect}
-                                                hoveredId={hoveredOverlayId}
-                                                labelScale={1 / view.s}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {/* Transparent interactive layer for crosshair (needs to be on top) */}
-                                    <div
-                                        style={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            width: '100%',
-                                            height: '100%',
-                                            zIndex: 10,
-                                            cursor: hoveredOverlayId != null || hoveredSkyKey != null ? 'pointer' : 'crosshair',
-                                            touchAction: 'none'
-                                        }}
-                                        ref={imageRef}
-                                        onPointerDown={handlePointerDown}
-                                        onPointerMove={handlePointerMove}
-                                        onPointerUp={handlePointerUp}
-                                        onPointerCancel={handlePointerUp}
-                                        onPointerLeave={(e) => e.pointerType === 'mouse' && handleMouseLeave()}
-                                    />
-
-                                    {cursorPos && (
-                                        <>
-                                            <div className="crosshair-line horizontal" style={{ top: `${cursorPos.y}px`, zIndex: 11 }} />
-                                            <div className="crosshair-line vertical" style={{ left: `${cursorPos.x}px`, zIndex: 11 }} />
-                                            <div
-                                                className="crosshair-label"
+                                            {/* Base Image (Always Thumbnail - Linear/Default) */}
+                                            <img
+                                                src={`${API_BASE_URL}/images/${id}/thumbnail?t=${image.thumbnail_generated_at ? new Date(image.thumbnail_generated_at).getTime() : ''}`}
+                                                alt={image.file_name}
+                                                className="real-preview-image base-layer"
                                                 style={{
-                                                    top: `${cursorPos.y}px`,
-                                                    left: `${cursorPos.x}px`,
-                                                    zIndex: 12
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    objectFit: 'contain',
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    zIndex: 1
                                                 }}
-                                            >
-                                                X: {Math.round(cursorPos.imgX)} Y: {Math.round(cursorPos.imgY)}
-                                                {cursorPos.ra !== undefined && (
-                                                    <div style={{ fontSize: '0.8em', marginTop: '4px', color: 'var(--color-text-secondary)' }}>
-                                                        {formatRA(cursorPos.ra)}<br />
-                                                        {formatDec(cursorPos.dec)}
+                                                onError={() => setImgError(true)}
+                                            />
+                                            {/* AstroCat annotations: catalog objects from the plate solution (visual only) */}
+                                            {sky.active && sky.objects.length > 0 && imgRect && (
+                                                <div style={{ position: 'absolute', inset: 0, zIndex: 8, pointerEvents: 'none' }}>
+                                                    <SkyOverlayLayer
+                                                        objects={sky.objects}
+                                                        toScreen={overlayToScreen}
+                                                        clip={imgRect}
+                                                        hoveredKey={hoveredSkyKey}
+                                                        labelScale={1 / view.s}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Images-in-field footprints (visual only; hit-tested by the interaction layer) */}
+                                            {overlays.groups.length > 0 && imgRect && (
+                                                <div style={{ position: 'absolute', inset: 0, zIndex: 9, pointerEvents: 'none' }}>
+                                                    <FieldOverlayLayer
+                                                        groups={overlays.groups}
+                                                        toScreen={overlayToScreen}
+                                                        clip={imgRect}
+                                                        hoveredId={hoveredOverlayId}
+                                                        labelScale={1 / view.s}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Transparent interactive layer for crosshair (needs to be on top) */}
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: 0,
+                                                    left: 0,
+                                                    width: '100%',
+                                                    height: '100%',
+                                                    zIndex: 10,
+                                                    cursor: hoveredOverlayId != null || hoveredSkyKey != null ? 'pointer' : 'crosshair',
+                                                    touchAction: 'none'
+                                                }}
+                                                ref={imageRef}
+                                                onPointerDown={handlePointerDown}
+                                                onPointerMove={handlePointerMove}
+                                                onPointerUp={handlePointerUp}
+                                                onPointerCancel={handlePointerUp}
+                                                onPointerLeave={(e) => e.pointerType === 'mouse' && handleMouseLeave()}
+                                            />
+
+                                            {cursorPos && (
+                                                <>
+                                                    <div className="crosshair-line horizontal" style={{ top: `${cursorPos.y}px`, zIndex: 11 }} />
+                                                    <div className="crosshair-line vertical" style={{ left: `${cursorPos.x}px`, zIndex: 11 }} />
+                                                    <div
+                                                        className="crosshair-label"
+                                                        style={{
+                                                            top: `${cursorPos.y}px`,
+                                                            left: `${cursorPos.x}px`,
+                                                            zIndex: 12
+                                                        }}
+                                                    >
+                                                        X: {Math.round(cursorPos.imgX)} Y: {Math.round(cursorPos.imgY)}
+                                                        {cursorPos.ra !== undefined && (
+                                                            <div style={{ fontSize: '0.8em', marginTop: '4px', color: 'var(--color-text-secondary)' }}>
+                                                                {formatRA(cursorPos.ra)}<br />
+                                                                {formatDec(cursorPos.dec)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+
+                                        </div>
+                                    ) : (
+                                        <div className="preview-placeholder">
+                                            <span className="preview-icon"><Orbit size={64} strokeWidth={1.5} /></span>
+                                            <span className="preview-text">Preview Not Available</span>
+                                        </div>
+                                    )}
+                                    {sky.active && !imgError && (
+                                        <SkyOverlayLegend
+                                            className="image-sky-legend"
+                                            counts={sky.counts}
+                                            hidden={sky.hidden}
+                                            onToggle={sky.toggleCatalog}
+                                            warning={sky.warning}
+                                            isLoading={sky.isLoading}
+                                            isError={sky.isError}
+                                        />
+                                    )}
+                                    {overlays.active && !imgError && (
+                                        <FieldOverlayLegend overlays={overlays} className="image-field-legend" />
+                                    )}
+                                </div>
+
+                                {view.s > 1 && (
+                                    <Button size="sm" className="zoom-reset" onClick={() => setView({ s: 1, x: 0, y: 0 })}>
+                                        Reset zoom ({view.s.toFixed(1)}x)
+                                    </Button>
+                                )}
+
+                                {/* Quick Actions */}
+                                <div className="image-actions">
+                                    <Button to={`/images/${id}/view`} title="Open at full resolution (F)" icon={<Maximize2 size={14} />}>
+                                        Full resolution
+                                    </Button>
+                                    <Button
+                                        as="a"
+                                        href={getDownloadUrl(id, 'jpg')}
+                                        download // Hint to browser
+                                        icon={<Download size={14} />}
+                                    >
+                                        Download JPG
+                                    </Button>
+
+                                    {/* AstroCat annotations on/off */}
+                                    <Button
+                                        variant={sky.active ? 'filled' : 'tinted'}
+                                        icon={<Sparkles size={14} />}
+                                        onClick={() => setAnnotationsOn((on) => !on)}
+                                        disabled={!!sky.unavailable}
+                                        title={sky.unavailable
+                                            || (sky.active && sky.warning
+                                                ? `Annotations — approximate: ${sky.warning}`
+                                                : 'Annotations: catalog objects from the plate solution')}
+                                    >
+                                        Annotations: {sky.active ? 'On' : 'Off'}
+                                        {sky.active && sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
+                                    </Button>
+
+                                    <Button
+                                        variant={overlays.active ? 'filled' : 'tinted'}
+                                        icon={<Layers size={14} />}
+                                        onClick={overlays.toggle}
+                                        disabled={!!overlays.unavailable}
+                                        title={overlays.unavailable || 'Images in this field: footprints of smaller images that overlap it (O)'}
+                                    >
+                                        In field: {overlays.active ? 'On' : 'Off'}
+                                        {overlays.active && !overlays.isLoading && overlays.mode && ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`}
+                                        {overlays.active && overlays.isLoading && ' …'}
+                                    </Button>
+
+                                    <Button
+                                        variant={seenIn.open ? 'filled' : 'tinted'}
+                                        icon={<Frame size={14} />}
+                                        onClick={() => seenIn.setOpen(true)}
+                                        disabled={!!seenIn.unavailable}
+                                        title={seenIn.unavailable || 'Larger images whose field covers this image'}
+                                    >
+                                        Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
+                                    </Button>
+
+                                    {overlays.active && overlays.mode && overlays.unsolvedCount > 0 && (
+                                        <Button
+                                            icon={<Crosshair size={14} />}
+                                            onClick={handleSolveOverlays}
+                                            disabled={saving}
+                                            title="Submit the dashed-circle footprints currently shown (no rotation yet) for astrometry"
+                                        >
+                                            Solve {overlays.unsolvedCount} unsolved
+                                        </Button>
+                                    )}
+
+                                    <Button
+                                        icon={<RefreshCw size={14} />}
+                                        onClick={handleRegenerateThumbnail}
+                                        disabled={saving}
+                                        title="Force backend to regenerate the linear thumbnail"
+                                    >
+                                        Regenerate
+                                    </Button>
+                                    <Button
+                                        variant={inspectorOpen ? 'filled' : 'tinted'}
+                                        icon={<PanelRight size={14} aria-hidden="true" />}
+                                        onClick={toggleInspector}
+                                        aria-label="Inspector"
+                                        aria-pressed={inspectorOpen}
+                                        aria-controls={inspectorOpen ? INSPECTOR_ID : undefined}
+                                        title="Inspector: metadata, raw headers and export (I)"
+                                    >
+                                        Inspector
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {seenIn.open && <SeenInPanel seenIn={seenIn} onClose={() => seenIn.setOpen(false)} />}
+
+                            {/* Secondary Layout Section (Below Image) */}
+                            <div className="image-secondary-section">
+                                {/* Left Column: Objects in Field */}
+                                <div className="secondary-panel">
+                                    <div className="panel-header">
+                                        <h3 className="section-title">Objects in Field</h3>
+                                    </div>
+                                    <div className="panel-content">
+                                        {image.catalog_matches && image.catalog_matches.length > 0 ? (
+                                            <div className="matched-objects">
+                                                {image.catalog_matches.map((match, idx) => (
+                                                    <Link
+                                                        key={idx}
+                                                        to={`/search?object_name=${encodeURIComponent(match.catalog_designation || match.designation)}`}
+                                                        className="matched-object-tag"
+                                                    >
+                                                        <span className="object-designation">
+                                                            {match.catalog_designation || match.designation}
+                                                        </span>
+                                                        {match.ra_degrees != null && match.dec_degrees != null && (
+                                                            <span className="object-coords">
+                                                                {formatRA(match.ra_degrees)} {formatDec(match.dec_degrees)}
+                                                            </span>
+                                                        )}
+                                                        {/* Name might not be available in API yet */}
+                                                        {(match.name || match.common_name) && (
+                                                            <span className="object-name">{match.name || match.common_name}</span>
+                                                        )}
+                                                    </Link>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-muted text-sm">No objects identified yet.</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Right Column: Plate Solving */}
+                                <div className="secondary-panel">
+                                    <div className="panel-header">
+                                        <h3 className="section-title">
+                                            Plate Solving ({image.plate_solve_provider === 'LOCAL' ? 'Local' : (image.plate_solve_source === 'HEADER' || image.plate_solve_source === 'SIDECAR' ? 'Imported' : 'Web')})
+                                        </h3>
+                                    </div>
+                                    <div className="panel-content">
+                                        {['PLANETARY', 'ALLSKY', 'AURORA'].includes(image.subtype) ? (
+                                            <p className="text-muted text-sm">Plate solving disabled for {({ ALLSKY: 'all-sky', AURORA: 'aurora' })[image.subtype] || 'planetary'} images.</p>
+                                        ) : (
+                                            <div className="astrometry-panel">
+                                                {/* Status Display */}
+                                                <div className="astrometry-status-row">
+                                                    <div className="status-label">Source:</div>
+                                                    <div className="status-value text-muted" style={{ fontWeight: 'normal', marginRight: 'auto', marginLeft: '0.5rem' }}>
+                                                        {image.plate_solve_source === 'HEADER' ? 'File Header' : (image.plate_solve_source === 'SIDECAR' ? 'Sidecar File' : (image.plate_solve_provider === 'LOCAL' ? 'Local Server' : 'Nova Web'))}
+                                                    </div>
+                                                </div>
+                                                <div className="astrometry-status-row">
+                                                    <div className="status-label">Status:</div>
+                                                    <div className={`status-value ${image.astrometry_status === 'SOLVED' ? 'text-success' : image.astrometry_status === 'FAILED' ? 'text-error' : 'text-warning'}`}>
+                                                        {image.astrometry_status}
+                                                    </div>
+                                                </div>
+
+                                                {/* Details (IDs) */}
+                                                {image.astrometry_submission_id && (
+                                                    <div className="astrometry-details text-xs text-slate-400 mt-1">
+                                                        <div>Sub ID: {image.astrometry_submission_id}</div>
+                                                        {image.astrometry_job_id && <div>Job ID: {image.astrometry_job_id}</div>}
                                                     </div>
                                                 )}
-                                            </div>
-                                        </>
-                                    )}
 
-                                </div>
-                            ) : (
-                                <div className="preview-placeholder">
-                                    <span className="preview-icon"><Orbit size={64} strokeWidth={1.5} /></span>
-                                    <span className="preview-text">Preview Not Available</span>
-                                </div>
-                            )}
-                            {sky.active && !imgError && (
-                                <SkyOverlayLegend
-                                    className="image-sky-legend"
-                                    counts={sky.counts}
-                                    hidden={sky.hidden}
-                                    onToggle={sky.toggleCatalog}
-                                    warning={sky.warning}
-                                    isLoading={sky.isLoading}
-                                    isError={sky.isError}
-                                />
-                            )}
-                            {overlays.active && !imgError && (
-                                <FieldOverlayLegend overlays={overlays} className="image-field-legend" />
-                            )}
-                        </div>
+                                                {/* Actions */}
+                                                <div className="astrometry-actions mt-3 flex gap-2">
+                                                    <Button
+                                                        variant="filled"
+                                                        size="sm"
+                                                        onClick={handleRescan}
+                                                        disabled={['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status) || saving}
+                                                        icon={['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status)
+                                                            ? <Hourglass size={14} />
+                                                            : <TelescopeIcon size={14} />}
+                                                    >
+                                                        {['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status) ? 'Processing...' : 'Start Rescan'}
+                                                    </Button>
 
-                        {view.s > 1 && (
-                            <Button size="sm" className="zoom-reset" onClick={() => setView({ s: 1, x: 0, y: 0 })}>
-                                Reset zoom ({view.s.toFixed(1)}x)
-                            </Button>
-                        )}
+                                                    {image.astrometry_url && (
+                                                        <Button
+                                                            as="a"
+                                                            href={image.astrometry_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            size="sm"
+                                                            icon={<Rocket size={14} />}
+                                                        >
+                                                            View Results
+                                                        </Button>
+                                                    )}
 
-                        {/* Quick Actions */}
-                        <div className="image-actions">
-                            <Button to={`/images/${id}/view`} title="Open at full resolution (F)" icon={<Maximize2 size={14} />}>
-                                Full resolution
-                            </Button>
-                            <Button
-                                as="a"
-                                href={getDownloadUrl(id, 'jpg')}
-                                download // Hint to browser
-                                icon={<Download size={14} />}
-                            >
-                                Download JPG
-                            </Button>
-
-                            {/* AstroCat annotations on/off */}
-                            <Button
-                                variant={sky.active ? 'filled' : 'tinted'}
-                                icon={<Sparkles size={14} />}
-                                onClick={() => setAnnotationsOn((on) => !on)}
-                                disabled={!!sky.unavailable}
-                                title={sky.unavailable
-                                    || (sky.active && sky.warning
-                                        ? `Annotations — approximate: ${sky.warning}`
-                                        : 'Annotations: catalog objects from the plate solution')}
-                            >
-                                Annotations: {sky.active ? 'On' : 'Off'}
-                                {sky.active && sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
-                            </Button>
-
-                            <Button
-                                variant={overlays.active ? 'filled' : 'tinted'}
-                                icon={<Layers size={14} />}
-                                onClick={overlays.toggle}
-                                disabled={!!overlays.unavailable}
-                                title={overlays.unavailable || 'Images in this field: footprints of smaller images that overlap it (O)'}
-                            >
-                                In field: {overlays.active ? 'On' : 'Off'}
-                                {overlays.active && !overlays.isLoading && overlays.mode && ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`}
-                                {overlays.active && overlays.isLoading && ' …'}
-                            </Button>
-
-                            <Button
-                                variant={seenIn.open ? 'filled' : 'tinted'}
-                                icon={<Frame size={14} />}
-                                onClick={() => seenIn.setOpen(true)}
-                                disabled={!!seenIn.unavailable}
-                                title={seenIn.unavailable || 'Larger images whose field covers this image'}
-                            >
-                                Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
-                            </Button>
-
-                            {overlays.active && overlays.mode && overlays.unsolvedCount > 0 && (
-                                <Button
-                                    icon={<Crosshair size={14} />}
-                                    onClick={handleSolveOverlays}
-                                    disabled={saving}
-                                    title="Submit the dashed-circle footprints currently shown (no rotation yet) for astrometry"
-                                >
-                                    Solve {overlays.unsolvedCount} unsolved
-                                </Button>
-                            )}
-
-                            <Button
-                                icon={<RefreshCw size={14} />}
-                                onClick={handleRegenerateThumbnail}
-                                disabled={saving}
-                                title="Force backend to regenerate the linear thumbnail"
-                            >
-                                Regenerate
-                            </Button>
-                            <Button
-                                icon={<ClipboardList size={14} />}
-                                onClick={() => navigate(`/images/${id}/metadata`)}
-                            >
-                                View Metadata
-                            </Button>
-                        </div>
-                    </div>
-
-                    {seenIn.open && <SeenInPanel seenIn={seenIn} onClose={() => seenIn.setOpen(false)} />}
-
-                    {/* Secondary Layout Section (Below Image) */}
-                    <div className="image-secondary-section">
-                        {/* Left Column: Objects in Field */}
-                        <div className="secondary-panel">
-                            <div className="panel-header">
-                                <h3 className="section-title">Objects in Field</h3>
-                            </div>
-                            <div className="panel-content">
-                                {image.catalog_matches && image.catalog_matches.length > 0 ? (
-                                    <div className="matched-objects">
-                                        {image.catalog_matches.map((match, idx) => (
-                                            <Link
-                                                key={idx}
-                                                to={`/search?object_name=${encodeURIComponent(match.catalog_designation || match.designation)}`}
-                                                className="matched-object-tag"
-                                            >
-                                                <span className="object-designation">
-                                                    {match.catalog_designation || match.designation}
-                                                </span>
-                                                {match.ra_degrees != null && match.dec_degrees != null && (
-                                                    <span className="object-coords">
-                                                        {formatRA(match.ra_degrees)} {formatDec(match.dec_degrees)}
-                                                    </span>
-                                                )}
-                                                {/* Name might not be available in API yet */}
-                                                {(match.name || match.common_name) && (
-                                                    <span className="object-name">{match.name || match.common_name}</span>
-                                                )}
-                                            </Link>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-muted text-sm">No objects identified yet.</p>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Right Column: Plate Solving */}
-                        <div className="secondary-panel">
-                            <div className="panel-header">
-                                <h3 className="section-title">
-                                    Plate Solving ({image.plate_solve_provider === 'LOCAL' ? 'Local' : (image.plate_solve_source === 'HEADER' || image.plate_solve_source === 'SIDECAR' ? 'Imported' : 'Web')})
-                                </h3>
-                            </div>
-                            <div className="panel-content">
-                                {['PLANETARY', 'ALLSKY', 'AURORA'].includes(image.subtype) ? (
-                                    <p className="text-muted text-sm">Plate solving disabled for {({ ALLSKY: 'all-sky', AURORA: 'aurora' })[image.subtype] || 'planetary'} images.</p>
-                                ) : (
-                                    <div className="astrometry-panel">
-                                        {/* Status Display */}
-                                        <div className="astrometry-status-row">
-                                            <div className="status-label">Source:</div>
-                                            <div className="status-value text-muted" style={{ fontWeight: 'normal', marginRight: 'auto', marginLeft: '0.5rem' }}>
-                                                {image.plate_solve_source === 'HEADER' ? 'File Header' : (image.plate_solve_source === 'SIDECAR' ? 'Sidecar File' : (image.plate_solve_provider === 'LOCAL' ? 'Local Server' : 'Nova Web'))}
-                                            </div>
-                                        </div>
-                                        <div className="astrometry-status-row">
-                                            <div className="status-label">Status:</div>
-                                            <div className={`status-value ${image.astrometry_status === 'SOLVED' ? 'text-success' : image.astrometry_status === 'FAILED' ? 'text-error' : 'text-warning'}`}>
-                                                {image.astrometry_status}
-                                            </div>
-                                        </div>
-
-                                        {/* Details (IDs) */}
-                                        {image.astrometry_submission_id && (
-                                            <div className="astrometry-details text-xs text-slate-400 mt-1">
-                                                <div>Sub ID: {image.astrometry_submission_id}</div>
-                                                {image.astrometry_job_id && <div>Job ID: {image.astrometry_job_id}</div>}
+                                                </div>
                                             </div>
                                         )}
-
-                                        {/* Actions */}
-                                        <div className="astrometry-actions mt-3 flex gap-2">
-                                            <Button
-                                                variant="filled"
-                                                size="sm"
-                                                onClick={handleRescan}
-                                                disabled={['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status) || saving}
-                                                icon={['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status)
-                                                    ? <Hourglass size={14} />
-                                                    : <TelescopeIcon size={14} />}
-                                            >
-                                                {['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status) ? 'Processing...' : 'Start Rescan'}
-                                            </Button>
-
-                                            {image.astrometry_url && (
-                                                <Button
-                                                    as="a"
-                                                    href={image.astrometry_url}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    size="sm"
-                                                    icon={<Rocket size={14} />}
-                                                >
-                                                    View Results
-                                                </Button>
-                                            )}
-
-                                        </div>
                                     </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Metadata Panel */}
-                <div className="metadata-panel">
-                    <div className="metadata-header">
-                        <div className="title-group">
-                            <div className="title-left">
-                                <h1 className="image-title">{image.file_name}</h1>
-                                {image.is_plate_solved && image.subtype !== 'PLANETARY' && image.subtype !== 'ALLSKY' && image.subtype !== 'AURORA' && (
-                                    <span className="badge badge-success">
-                                        {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? 'Solve Imported' : 'Img Solved'}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="image-rating">
-                                <span className="rating-label">Rating:</span>
-                                <span className="rating-stars">
-                                    <span
-                                        className="rating-star clear-rating"
-                                        onClick={() => handleRatingChange(0)}
-                                        style={{ cursor: 'pointer', opacity: image.rating ? 0.6 : 1 }}
-                                        title="Clear rating (or press 0)"
-                                        role="button"
-                                        aria-label="Clear rating"
-                                    >
-                                        <X size={16} aria-hidden="true" />
-                                    </span>
-                                    {[...Array(5)].map((_, i) => (
-                                        <span
-                                            key={i}
-                                            className={i < (image.rating || 0) ? 'rating-star filled' : 'rating-star'}
-                                            onClick={() => handleRatingChange(i + 1)}
-                                            style={{ cursor: 'pointer' }}
-                                            title={`Rate ${i + 1}/5 (or press ${i + 1})`}
-                                        >
-                                            <Star size={18} fill={i < (image.rating || 0) ? 'currentColor' : 'none'} />
-                                        </span>
-                                    ))}
-                                </span>
-                                <span
-                                    className="rating-value"
-                                    onClick={() => handleRatingChange(0)}
-                                    style={{ cursor: 'pointer' }}
-                                    title="Click to clear rating (or press 0)"
-                                >
-                                    ({image.rating || 0}/5)
-                                </span>
-                                {ratingManuallyEdited && (
-                                    <span className="badge badge-info" style={{ marginLeft: '0.5rem' }} title="Rating was manually edited"><Pencil size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />Edited</span>
-                                )}
+                                </div>
                             </div>
                         </div>
 
-                        {/* Subtype Selector */}
-                        <div className="subtype-selector">
-                            <label className="label">Classification</label>
-                            <select
-                                className="input select"
-                                value={image.subtype || ''}
-                                onChange={(e) => handleSubtypeChange(e.target.value || null)}
-                                disabled={saving}
-                            >
-                                <option value="">Unclassified</option>
-                                <option value="SUB_FRAME">Sub Frame</option>
-                                <option value="INTEGRATION_MASTER">Integration Master</option>
-                                <option value="INTEGRATION_DEPRECATED">Deprecated</option>
-                                <option value="PLANETARY">Planetary</option>
-                                <option value="ALLSKY">All-sky</option>
-                                <option value="AURORA">Aurora</option>
-                            </select>
-                        </div>
-
-                        {/* Frame Type Selector (F1) */}
-                        <div className="subtype-selector">
-                            <label className="label">
-                                Frame Type
-                                {image.frame_type_source && (
-                                    <span className="text-xs text-muted" style={{ marginLeft: '0.5rem', fontWeight: 'normal' }}>
-                                        {image.frame_type_source === 'MANUAL'
-                                            ? '(manual)'
-                                            : `(auto: ${image.frame_type_source.toLowerCase()})`}
-                                    </span>
-                                )}
-                            </label>
-                            <select
-                                className="input select"
-                                value={image.frame_type || 'LIGHT'}
-                                onChange={(e) => handleFrameTypeChange(e.target.value)}
-                                disabled={saving}
-                            >
-                                <option value="LIGHT">Light</option>
-                                <option value="DARK">Dark</option>
-                                <option value="FLAT">Flat</option>
-                                <option value="BIAS">Bias</option>
-                                <option value="DARK_FLAT">Dark Flat</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* File Info */}
-                    <section className="metadata-section">
-                        <h3 className="section-title">File Information</h3>
-                        <dl className="metadata-grid">
-                            <div className="metadata-item">
-                                <dt>Path</dt>
-                                <dd className="font-mono text-sm">{image.file_path}</dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Format</dt>
-                                <dd>{image.file_format}</dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Size</dt>
-                                <dd>{formatBytes(image.file_size_bytes)}</dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Dimensions</dt>
-                                <dd>
-                                    {image.width_pixels && image.height_pixels
-                                        ? `${image.width_pixels} × ${image.height_pixels} px`
-                                        : 'Unknown'}
-                                </dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Created</dt>
-                                <dd>{image.file_created ? formatDateTime(image.file_created) : 'Unknown'}</dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Modified</dt>
-                                <dd>{image.file_last_modified ? formatDateTime(image.file_last_modified) : 'Unknown'}</dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Indexed</dt>
-                                <dd>{formatDateTime(image.indexed_at)}</dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Target</dt>
-                                <dd>
-                                    {editingTarget ? (
-                                        <span style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                                            <input
-                                                type="text"
-                                                className="input"
-                                                style={{ maxWidth: '180px' }}
-                                                value={targetInput}
-                                                onChange={(e) => setTargetInput(e.target.value)}
-                                                placeholder="e.g. M31 (empty clears)"
-                                                autoFocus
-                                            />
-                                            <Button variant="filled" size="sm" onClick={handleTargetSave} disabled={saving}>Save</Button>
-                                            <Button size="sm" onClick={() => setEditingTarget(false)} disabled={saving}>Cancel</Button>
-                                        </span>
-                                    ) : (
-                                        <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                            {image.target_key ? (
-                                                <Link to={`/targets/${encodeURIComponent(image.target_key)}`}>{image.target_key}</Link>
-                                            ) : (
-                                                <span className="text-muted">Unassigned</span>
-                                            )}
-                                            {image.target_source && image.target_source !== 'NONE' && (
-                                                <span className="text-muted text-xs">
-                                                    ({image.target_source === 'MANUAL' ? 'manual' : `auto: ${image.target_source.toLowerCase()}`})
-                                                </span>
-                                            )}
-                                            <Button
-                                                variant="plain"
-                                                size="sm"
-                                                iconOnly
-                                                onClick={() => { setTargetInput(image.target_key || ''); setEditingTarget(true); }}
-                                                title="Edit target"
-                                                aria-label="Edit target"
-                                                icon={<Pencil size={14} aria-hidden="true" />}
-                                            />
-                                        </span>
-                                    )}
-                                </dd>
-                            </div>
-                        </dl>
-                    </section>
-
-                    {/* Plate Solve Data */}
-                    {image.is_plate_solved && image.subtype !== 'PLANETARY' && image.subtype !== 'ALLSKY' && image.subtype !== 'AURORA' && (
-                        <section className="metadata-section">
-                            <h3 className="section-title">
-                                <span className="badge badge-success">
-                                    {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? <><Check size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Solve Imported</> : <><Check size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Plate Solved</>}
-                                </span>
-                            </h3>
-                            <dl className="metadata-grid">
-                                <div className="metadata-item">
-                                    <dt>Right Ascension</dt>
-                                    <dd className="font-mono">{formatRA(image.ra_center_degrees)}</dd>
-                                </div>
-                                <div className="metadata-item">
-                                    <dt>Declination</dt>
-                                    <dd className="font-mono">{formatDec(image.dec_center_degrees)}</dd>
-                                </div>
-                                <div className="metadata-item">
-                                    <dt>Field of View</dt>
-                                    <dd>
-                                        {image.width_pixels && image.height_pixels && image.pixel_scale_arcsec ? (
-                                            <>
-                                                {((image.width_pixels * image.pixel_scale_arcsec) / 3600).toFixed(2)}° ×
-                                                {((image.height_pixels * image.pixel_scale_arcsec) / 3600).toFixed(2)}°
-                                            </>
-                                        ) : (
-                                            <>{(image.field_radius_degrees * 2).toFixed(2)}° (Diameter)</>
-                                        )}
-                                    </dd>
-                                </div>
-                                <div className="metadata-item">
-                                    <dt>Rotation</dt>
-                                    <dd>{image.rotation_degrees?.toFixed(1)}°</dd>
-                                </div>
-                                <div className="metadata-item">
-                                    <dt>Pixel Scale</dt>
-                                    <dd>{image.pixel_scale_arcsec?.toFixed(2)} arcsec/px</dd>
-                                </div>
-                            </dl>
-                        </section>
-                    )}
-
-                    {/* Exposure Data */}
-                    <section className="metadata-section">
-                        <h3 className="section-title">Exposure Data</h3>
-                        <dl className="metadata-grid">
-                            <div className="metadata-item">
-                                <dt>Exposure Time</dt>
-                                <dd className="exposure-value">{formatExposure(image.exposure_time_seconds || 0)}</dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Capture Date</dt>
-                                <dd>{image.capture_date ? formatDateTime(image.capture_date) : 'Unknown'}</dd>
-                            </div>
-                            {image.gain && (
-                                <div className="metadata-item">
-                                    <dt>Gain</dt>
-                                    <dd>{image.gain}</dd>
-                                </div>
-                            )}
-                            {image.iso_speed && (
-                                <div className="metadata-item">
-                                    <dt>ISO</dt>
-                                    <dd>{image.iso_speed}</dd>
-                                </div>
-                            )}
-                            {image.temperature_celsius && (
-                                <div className="metadata-item">
-                                    <dt>Sensor Temp</dt>
-                                    <dd>{image.temperature_celsius}°C</dd>
-                                </div>
-                            )}
-                            {image.filter_name && (
-                                <div className="metadata-item">
-                                    <dt>Filter</dt>
-                                    <dd>{image.filter_name}</dd>
-                                </div>
-                            )}
-                        </dl>
-                    </section>
-
-                    {/* Star quality (Q1): Light subs and masters only */}
-                    {image.frame_type === 'LIGHT' && ['SUB_FRAME', 'INTEGRATION_MASTER'].includes(image.subtype) && (
-                        <StarQualityCard image={image} onImageUpdated={setImage} />
-                    )}
-
-                    {/* Equipment */}
-                    <section className="metadata-section">
-                        <h3 className="section-title">Equipment</h3>
-                        <dl className="metadata-grid">
-                            <div className="metadata-item">
-                                <dt>Camera</dt>
-                                <dd>{image.camera_name || 'Unknown'}</dd>
-                            </div>
-                            <div className="metadata-item">
-                                <dt>Telescope/Lens</dt>
-                                <dd>{image.telescope_name || 'Unknown'}</dd>
-                            </div>
-                            {/* R0: rig, with an inline override select (docs/design/P0-R0-equipment-sites.md §4.9) */}
-                            <div className="metadata-item">
-                                <dt>Rig</dt>
-                                <dd>
-                                    <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                        {image.rig_name ? (
-                                            <span>
-                                                {image.rig_name}
-                                                <span className="text-muted text-xs" style={{ marginLeft: '0.4rem' }}>
-                                                    ({image.rig_source === 'MANUAL' ? 'manual' : 'auto'})
-                                                </span>
+                        {/* Metadata Panel */}
+                        <div className="metadata-panel">
+                            <div className="metadata-header">
+                                <div className="title-group">
+                                    <div className="title-left">
+                                        <h1 className="image-title">{image.file_name}</h1>
+                                        {image.is_plate_solved && image.subtype !== 'PLANETARY' && image.subtype !== 'ALLSKY' && image.subtype !== 'AURORA' && (
+                                            <span className="badge badge-success">
+                                                {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? 'Solve Imported' : 'Img Solved'}
                                             </span>
-                                        ) : (
-                                            <span className="text-muted">Unassigned</span>
                                         )}
-                                        <select
-                                            className="input"
-                                            style={{ maxWidth: '200px' }}
-                                            value={image.rig_id ?? ''}
-                                            onChange={(e) => handleRigChange(e.target.value)}
-                                            disabled={saving}
-                                        >
-                                            <option value="">None / auto</option>
-                                            {rigs.map((r) => (
-                                                <option key={r.id} value={r.id}>{r.name}</option>
+                                    </div>
+                                    <div className="image-rating">
+                                        <span className="rating-label">Rating:</span>
+                                        <span className="rating-stars">
+                                            <span
+                                                className="rating-star clear-rating"
+                                                onClick={() => handleRatingChange(0)}
+                                                style={{ cursor: 'pointer', opacity: image.rating ? 0.6 : 1 }}
+                                                title="Clear rating (or press 0)"
+                                                role="button"
+                                                aria-label="Clear rating"
+                                            >
+                                                <X size={16} aria-hidden="true" />
+                                            </span>
+                                            {[...Array(5)].map((_, i) => (
+                                                <span
+                                                    key={i}
+                                                    className={i < (image.rating || 0) ? 'rating-star filled' : 'rating-star'}
+                                                    onClick={() => handleRatingChange(i + 1)}
+                                                    style={{ cursor: 'pointer' }}
+                                                    title={`Rate ${i + 1}/5 (or press ${i + 1})`}
+                                                >
+                                                    <Star size={18} fill={i < (image.rating || 0) ? 'currentColor' : 'none'} />
+                                                </span>
                                             ))}
-                                        </select>
-                                    </span>
-                                </dd>
+                                        </span>
+                                        <span
+                                            className="rating-value"
+                                            onClick={() => handleRatingChange(0)}
+                                            style={{ cursor: 'pointer' }}
+                                            title="Click to clear rating (or press 0)"
+                                        >
+                                            ({image.rating || 0}/5)
+                                        </span>
+                                        {ratingManuallyEdited && (
+                                            <span className="badge badge-info" style={{ marginLeft: '0.5rem' }} title="Rating was manually edited"><Pencil size={12} style={{ verticalAlign: '-2px', marginRight: 6 }} />Edited</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Subtype Selector */}
+                                <div className="subtype-selector">
+                                    <label className="label">Classification</label>
+                                    <select
+                                        className="input select"
+                                        value={image.subtype || ''}
+                                        onChange={(e) => handleSubtypeChange(e.target.value || null)}
+                                        disabled={saving}
+                                    >
+                                        <option value="">Unclassified</option>
+                                        <option value="SUB_FRAME">Sub Frame</option>
+                                        <option value="INTEGRATION_MASTER">Integration Master</option>
+                                        <option value="INTEGRATION_DEPRECATED">Deprecated</option>
+                                        <option value="PLANETARY">Planetary</option>
+                                        <option value="ALLSKY">All-sky</option>
+                                        <option value="AURORA">Aurora</option>
+                                    </select>
+                                </div>
+
+                                {/* Frame Type Selector (F1) */}
+                                <div className="subtype-selector">
+                                    <label className="label">
+                                        Frame Type
+                                        {image.frame_type_source && (
+                                            <span className="text-xs text-muted" style={{ marginLeft: '0.5rem', fontWeight: 'normal' }}>
+                                                {image.frame_type_source === 'MANUAL'
+                                                    ? '(manual)'
+                                                    : `(auto: ${image.frame_type_source.toLowerCase()})`}
+                                            </span>
+                                        )}
+                                    </label>
+                                    <select
+                                        className="input select"
+                                        value={image.frame_type || 'LIGHT'}
+                                        onChange={(e) => handleFrameTypeChange(e.target.value)}
+                                        disabled={saving}
+                                    >
+                                        <option value="LIGHT">Light</option>
+                                        <option value="DARK">Dark</option>
+                                        <option value="FLAT">Flat</option>
+                                        <option value="BIAS">Bias</option>
+                                        <option value="DARK_FLAT">Dark Flat</option>
+                                    </select>
+                                </div>
                             </div>
-                        </dl>
-                    </section>
 
+                            {/* File Info */}
+                            <section className="metadata-section">
+                                <h3 className="section-title">File Information</h3>
+                                <dl className="metadata-grid">
+                                    <div className="metadata-item">
+                                        <dt>Path</dt>
+                                        <dd className="font-mono text-sm">{image.file_path}</dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Format</dt>
+                                        <dd>{image.file_format}</dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Size</dt>
+                                        <dd>{formatBytes(image.file_size_bytes)}</dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Dimensions</dt>
+                                        <dd>
+                                            {image.width_pixels && image.height_pixels
+                                                ? `${image.width_pixels} × ${image.height_pixels} px`
+                                                : 'Unknown'}
+                                        </dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Created</dt>
+                                        <dd>{image.file_created ? formatDateTime(image.file_created) : 'Unknown'}</dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Modified</dt>
+                                        <dd>{image.file_last_modified ? formatDateTime(image.file_last_modified) : 'Unknown'}</dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Indexed</dt>
+                                        <dd>{formatDateTime(image.indexed_at)}</dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Target</dt>
+                                        <dd>
+                                            {editingTarget ? (
+                                                <span style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                                                    <input
+                                                        type="text"
+                                                        className="input"
+                                                        style={{ maxWidth: '180px' }}
+                                                        value={targetInput}
+                                                        onChange={(e) => setTargetInput(e.target.value)}
+                                                        placeholder="e.g. M31 (empty clears)"
+                                                        autoFocus
+                                                    />
+                                                    <Button variant="filled" size="sm" onClick={handleTargetSave} disabled={saving}>Save</Button>
+                                                    <Button size="sm" onClick={() => setEditingTarget(false)} disabled={saving}>Cancel</Button>
+                                                </span>
+                                            ) : (
+                                                <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                    {image.target_key ? (
+                                                        <Link to={`/targets/${encodeURIComponent(image.target_key)}`}>{image.target_key}</Link>
+                                                    ) : (
+                                                        <span className="text-muted">Unassigned</span>
+                                                    )}
+                                                    {image.target_source && image.target_source !== 'NONE' && (
+                                                        <span className="text-muted text-xs">
+                                                            ({image.target_source === 'MANUAL' ? 'manual' : `auto: ${image.target_source.toLowerCase()}`})
+                                                        </span>
+                                                    )}
+                                                    <Button
+                                                        variant="plain"
+                                                        size="sm"
+                                                        iconOnly
+                                                        onClick={() => { setTargetInput(image.target_key || ''); setEditingTarget(true); }}
+                                                        title="Edit target"
+                                                        aria-label="Edit target"
+                                                        icon={<Pencil size={14} aria-hidden="true" />}
+                                                    />
+                                                </span>
+                                            )}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </section>
 
+                            {/* Plate Solve Data */}
+                            {image.is_plate_solved && image.subtype !== 'PLANETARY' && image.subtype !== 'ALLSKY' && image.subtype !== 'AURORA' && (
+                                <section className="metadata-section">
+                                    <h3 className="section-title">
+                                        <span className="badge badge-success">
+                                            {['HEADER', 'SIDECAR'].includes(image.plate_solve_source) ? <><Check size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Solve Imported</> : <><Check size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Plate Solved</>}
+                                        </span>
+                                    </h3>
+                                    <dl className="metadata-grid">
+                                        <div className="metadata-item">
+                                            <dt>Right Ascension</dt>
+                                            <dd className="font-mono">{formatRA(image.ra_center_degrees)}</dd>
+                                        </div>
+                                        <div className="metadata-item">
+                                            <dt>Declination</dt>
+                                            <dd className="font-mono">{formatDec(image.dec_center_degrees)}</dd>
+                                        </div>
+                                        <div className="metadata-item">
+                                            <dt>Field of View</dt>
+                                            <dd>
+                                                {image.width_pixels && image.height_pixels && image.pixel_scale_arcsec ? (
+                                                    <>
+                                                        {((image.width_pixels * image.pixel_scale_arcsec) / 3600).toFixed(2)}° ×
+                                                        {((image.height_pixels * image.pixel_scale_arcsec) / 3600).toFixed(2)}°
+                                                    </>
+                                                ) : (
+                                                    <>{(image.field_radius_degrees * 2).toFixed(2)}° (Diameter)</>
+                                                )}
+                                            </dd>
+                                        </div>
+                                        <div className="metadata-item">
+                                            <dt>Rotation</dt>
+                                            <dd>{image.rotation_degrees?.toFixed(1)}°</dd>
+                                        </div>
+                                        <div className="metadata-item">
+                                            <dt>Pixel Scale</dt>
+                                            <dd>{image.pixel_scale_arcsec?.toFixed(2)} arcsec/px</dd>
+                                        </div>
+                                    </dl>
+                                </section>
+                            )}
 
+                            {/* Exposure Data */}
+                            <section className="metadata-section">
+                                <h3 className="section-title">Exposure Data</h3>
+                                <dl className="metadata-grid">
+                                    <div className="metadata-item">
+                                        <dt>Exposure Time</dt>
+                                        <dd className="exposure-value">{formatExposure(image.exposure_time_seconds || 0)}</dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Capture Date</dt>
+                                        <dd>{image.capture_date ? formatDateTime(image.capture_date) : 'Unknown'}</dd>
+                                    </div>
+                                    {image.gain && (
+                                        <div className="metadata-item">
+                                            <dt>Gain</dt>
+                                            <dd>{image.gain}</dd>
+                                        </div>
+                                    )}
+                                    {image.iso_speed && (
+                                        <div className="metadata-item">
+                                            <dt>ISO</dt>
+                                            <dd>{image.iso_speed}</dd>
+                                        </div>
+                                    )}
+                                    {image.temperature_celsius && (
+                                        <div className="metadata-item">
+                                            <dt>Sensor Temp</dt>
+                                            <dd>{image.temperature_celsius}°C</dd>
+                                        </div>
+                                    )}
+                                    {image.filter_name && (
+                                        <div className="metadata-item">
+                                            <dt>Filter</dt>
+                                            <dd>{image.filter_name}</dd>
+                                        </div>
+                                    )}
+                                </dl>
+                            </section>
 
+                            {/* Star quality (Q1): Light subs and masters only */}
+                            {image.frame_type === 'LIGHT' && ['SUB_FRAME', 'INTEGRATION_MASTER'].includes(image.subtype) && (
+                                <StarQualityCard image={image} onImageUpdated={setImage} />
+                            )}
+
+                            {/* Equipment */}
+                            <section className="metadata-section">
+                                <h3 className="section-title">Equipment</h3>
+                                <dl className="metadata-grid">
+                                    <div className="metadata-item">
+                                        <dt>Camera</dt>
+                                        <dd>{image.camera_name || 'Unknown'}</dd>
+                                    </div>
+                                    <div className="metadata-item">
+                                        <dt>Telescope/Lens</dt>
+                                        <dd>{image.telescope_name || 'Unknown'}</dd>
+                                    </div>
+                                    {/* R0: rig, with an inline override select (docs/design/P0-R0-equipment-sites.md §4.9) */}
+                                    <div className="metadata-item">
+                                        <dt>Rig</dt>
+                                        <dd>
+                                            <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                {image.rig_name ? (
+                                                    <span>
+                                                        {image.rig_name}
+                                                        <span className="text-muted text-xs" style={{ marginLeft: '0.4rem' }}>
+                                                            ({image.rig_source === 'MANUAL' ? 'manual' : 'auto'})
+                                                        </span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted">Unassigned</span>
+                                                )}
+                                                <select
+                                                    className="input"
+                                                    style={{ maxWidth: '200px' }}
+                                                    value={image.rig_id ?? ''}
+                                                    onChange={(e) => handleRigChange(e.target.value)}
+                                                    disabled={saving}
+                                                >
+                                                    <option value="">None / auto</option>
+                                                    {rigs.map((r) => (
+                                                        <option key={r.id} value={r.id}>{r.name}</option>
+                                                    ))}
+                                                </select>
+                                            </span>
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </section>
+                        </div>
+                    </div>
                 </div>
+                {inspectorOpen && <Inspector id={INSPECTOR_ID} image={image} onClose={closeInspector} />}
             </div>
         </div>
     );

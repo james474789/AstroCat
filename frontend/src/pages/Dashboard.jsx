@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Camera, Clock, Target, Star, Moon, Circle, Square, Contrast, AlertTriangle } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { fetchStatsOverview, fetchImages, fetchStatsByMonth, fetchTopObjects, fetchRecommendations } from '../api/client';
-import { CHART_PRIMARY, CHART_AXIS_MUTED, CHART_TOOLTIP_DASHBOARD } from '../utils/chartColors';
+import { fetchStatsOverview, fetchImages, fetchRecommendations } from '../api/client';
 import ImageCard from '../components/images/ImageCard';
 import LastNightTile from '../components/quality/LastNightTile';
 import { Button, EmptyState, PageHeader, Spinner } from '../components/ui';
@@ -15,6 +13,13 @@ import './Dashboard.css';
 // tile is written strictly against the spec's response shape (same as Tonight.jsx's R1 shape).
 
 const VERDICT_LABELS = { GO: 'GO', MARGINAL: 'MARGINAL', DONT_BOTHER: "DON'T BOTHER" };
+const CALIBRATION_TYPES = [
+    { type: 'DARK', label: 'Darks', icon: <Moon size={16} aria-hidden="true" /> },
+    { type: 'FLAT', label: 'Flats', icon: <Circle size={16} aria-hidden="true" /> },
+    { type: 'BIAS', label: 'Bias', icon: <Square size={16} aria-hidden="true" /> },
+    { type: 'DARK_FLAT', label: 'Dark Flats', icon: <Contrast size={16} aria-hidden="true" /> },
+];
+
 const VERDICT_CLASSES = { GO: 'verdict-go', MARGINAL: 'verdict-marginal', DONT_BOTHER: 'verdict-dont-bother' };
 
 function formatLocalWindow(startIso, endIso, timeZone) {
@@ -121,27 +126,20 @@ function TonightTile() {
 export default function Dashboard() {
     const [stats, setStats] = useState(null);
     const [recentImages, setRecentImages] = useState([]);
-    const [monthlyData, setMonthlyData] = useState([]);
-    const [topObjects, setTopObjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(false);
-    const navigate = useNavigate();
 
     const loadDashboard = useCallback(async () => {
         setLoading(true);
         setLoadError(false);
         try {
-            const [statsData, imagesData, monthly, objects] = await Promise.all([
+            const [statsData, imagesData] = await Promise.all([
                 fetchStatsOverview(),
                 fetchImages({ page: 1, page_size: 6, sort_by: 'capture_date', sort_order: 'desc' }),
-                fetchStatsByMonth(),
-                fetchTopObjects(),
             ]);
 
             setStats(statsData);
             setRecentImages(imagesData.items);
-            setMonthlyData(monthly);
-            setTopObjects(objects);
         } catch (error) {
             console.error('Failed to load dashboard:', error);
             setLoadError(true);
@@ -168,10 +166,10 @@ export default function Dashboard() {
     if (loadError) {
         return (
             <div className="page-dashboard">
-                <PageHeader title="Dashboard" subtitle="Your astronomical image collection at a glance" />
+                <PageHeader title="Home" subtitle="Your astronomical image collection at a glance" />
                 <EmptyState
                     icon={<AlertTriangle size={32} aria-hidden="true" />}
-                    title="Couldn't load the dashboard"
+                    title="Couldn't load Home"
                     description="The server didn't return your collection stats. Check that the backend is running, then try again."
                     action={<Button variant="filled" onClick={loadDashboard}>Retry</Button>}
                 />
@@ -181,7 +179,7 @@ export default function Dashboard() {
 
     return (
         <div className="page-dashboard">
-            <PageHeader title="Dashboard" subtitle="Your astronomical image collection at a glance" />
+            <PageHeader title="Home" subtitle="Your astronomical image collection at a glance" />
 
             {/* Stats Grid */}
             <div className="stats-grid">
@@ -216,120 +214,20 @@ export default function Dashboard() {
                 <TonightTile />
                 <LastNightTile />
 
-                {/* Monthly Activity Chart */}
-                <div className="dashboard-card chart-card">
-                    <div className="card-header">
-                        <h3>Monthly Activity</h3>
-                        <span className="text-muted text-sm">Images captured per month</span>
-                    </div>
-                    <div className="chart-container">
-                        <ResponsiveContainer width="100%" height={250}>
-                            <BarChart data={monthlyData}>
-                                <defs>
-                                    <linearGradient id="colorImages" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={CHART_PRIMARY} stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor={CHART_PRIMARY} stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <XAxis
-                                    dataKey="month"
-                                    tickFormatter={(val) => {
-                                        if (!val || val === 'Unknown') return val;
-                                        const [y, m] = val.split('-');
-                                        const date = new Date(parseInt(y), parseInt(m) - 1);
-                                        return date.toLocaleDateString('default', { month: 'short', year: '2-digit' });
-                                    }}
-                                    stroke={CHART_AXIS_MUTED}
-                                    fontSize={10}
-                                />
-                                <YAxis stroke={CHART_AXIS_MUTED} fontSize={12} />
-                                <Tooltip
-                                    contentStyle={{
-                                        ...CHART_TOOLTIP_DASHBOARD,
-                                        borderRadius: '8px'
-                                    }}
-                                    formatter={(value, name) => [value.toLocaleString(), name === 'count' ? 'Images' : 'Hours']}
-                                    labelFormatter={(label) => {
-                                        const [year, month] = label.split('-');
-                                        return `${new Date(2024, parseInt(month) - 1).toLocaleString('default', { month: 'long' })} ${year}`;
-                                    }}
-                                    cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                                />
-                                <Bar
-                                    dataKey="count"
-                                    fill="url(#colorImages)"
-                                    radius={[4, 4, 0, 0]}
-                                    onClick={(data) => {
-                                        if (data && data.month) {
-                                            const [year, month] = data.month.split('-');
-                                            const startDate = `${year}-${month}-01T00:00:00`;
-                                            // Get last day of month
-                                            const lastDay = new Date(year, month, 0).getDate();
-                                            const endDate = `${year}-${month}-${lastDay}T23:59:59`;
-                                            navigate(`/search?start_date=${startDate}&end_date=${endDate}`);
-                                        }
-                                    }}
-                                    style={{ cursor: 'pointer' }}
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Top Objects */}
-                <div className="dashboard-card">
-                    <div className="card-header">
-                        <h3>Top Objects</h3>
-                        <Link to="/catalogs" className="link text-sm">View all →</Link>
-                    </div>
-                    <div className="top-objects-list">
-                        {topObjects.slice(0, 6).map((obj, idx) => (
-                            <Link
-                                key={obj.designation}
-                                to={`/search?object_name=${encodeURIComponent(obj.designation)}`}
-                                className="top-object-item"
-                            >
-                                <div className="object-rank">{idx + 1}</div>
-                                <div className="object-info">
-                                    <span className="object-designation">{obj.designation}</span>
-                                    <span className="object-name">{obj.name}</span>
-                                </div>
-                                <div className="object-stats">
-                                    <span className="object-count">{obj.image_count}</span>
-                                    <span className="object-exposure">{obj.total_exposure_hours.toFixed(1)}h</span>
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Calibration Library (F1) */}
+                {/* Calibration Library (F1): shortcuts into the Images page filtered by frame type */}
                 <div className="dashboard-card">
                     <div className="card-header">
                         <h3>Calibration Library</h3>
                         <Link to="/search?frame_type=ALL" className="link text-sm">View all →</Link>
                     </div>
-                    <div className="top-objects-list">
-                        {[
-                            { type: 'DARK', label: 'Darks', icon: <Moon size={18} aria-hidden="true" /> },
-                            { type: 'FLAT', label: 'Flats', icon: <Circle size={18} aria-hidden="true" /> },
-                            { type: 'BIAS', label: 'Bias', icon: <Square size={18} aria-hidden="true" /> },
-                            { type: 'DARK_FLAT', label: 'Dark Flats', icon: <Contrast size={18} aria-hidden="true" /> },
-                        ].map(({ type, label, icon }) => (
-                            <Link
-                                key={type}
-                                to={`/search?frame_type=${type}`}
-                                className="top-object-item"
-                            >
-                                <div className="object-rank">{icon}</div>
-                                <div className="object-info">
-                                    <span className="object-designation">{label}</span>
-                                </div>
-                                <div className="object-stats">
-                                    <span className="object-count">
-                                        {(stats?.calibration_counts?.[type] ?? 0).toLocaleString()}
-                                    </span>
-                                </div>
+                    <div className="calibration-list">
+                        {CALIBRATION_TYPES.map(({ type, label, icon }) => (
+                            <Link key={type} to={`/search?frame_type=${type}`} className="calibration-item">
+                                <span className="calibration-icon">{icon}</span>
+                                <span className="calibration-label">{label}</span>
+                                <span className="calibration-count">
+                                    {(stats?.calibration_counts?.[type] ?? 0).toLocaleString()}
+                                </span>
                             </Link>
                         ))}
                     </div>
@@ -363,13 +261,12 @@ export default function Dashboard() {
                     <span className="quick-stat-value">{stats?.messier_coverage}/110</span>
                 </div>
 
-                <div className="quick-stat">
-                    <span className="quick-stat-label">Storage Used</span>
-                    <div className="progress-bar">
-                        <div className="progress-fill" style={{ width: '57%' }} />
+                {stats?.total_file_size_gb != null && (
+                    <div className="quick-stat">
+                        <span className="quick-stat-label">Library Size</span>
+                        <span className="quick-stat-value">{stats.total_file_size_gb.toFixed(1)} GB</span>
                     </div>
-                    <span className="quick-stat-value">{stats?.total_file_size_gb?.toFixed(1)} GB</span>
-                </div>
+                )}
             </div>
         </div>
     );

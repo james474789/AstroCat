@@ -55,14 +55,14 @@ For long-running processes like Astrometry.net plate solving, the frontend imple
 
 ## Pages
 
-1. **Dashboard (`/`)**: High-level overview, statistics, and recently added images.
-2. **Search (`/search`)**: The primary discovery interface with multi-criteria filtering.
+1. **Home (`/`, was Dashboard)**: High-level overview, statistics, and recently added images.
+2. **Images (`/search`, was Search)**: The primary discovery interface with multi-criteria filtering, a Grid | List view (`?view=list`) and FITS header-field filters.
 3. **Image Detail (`/images/:id`)**: Full metadata view, pan/zoom image preview, and catalog matches.
 4. **Catalogs (`/catalogs`)**: Browsing interface for Messier and NGC objects.
 5. **Stats (`/stats`)**: Visualizations of exposure time and sky coverage.
 6. **Statistics (`/stats`)**: In-depth FITS metadata analytics with equipment and sky coverage charts.
 7. **Admin (`/admin`)**: System administration dashboard with astrometry stats, indexing controls, and job queue management.
-8. **Metadata Search (`/metadata`)**: Advanced metadata search with field-specific filters and operators.
+8. **Metadata Search (`/metadata-search`)**: Retired; redirects to `/search?view=list`.
 9. **FITS Explorer (`/fits/:id`)**: Detailed FITS header viewer and analyzer.
 10. **Settings (`/settings`)**: Indexer controls and system configuration.
 11. **Login (`/login`)**: Email/password authentication form.

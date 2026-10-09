@@ -5,8 +5,7 @@ import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Search from './pages/Search';
 import ImageDetail from './pages/ImageDetail';
-import MetadataViewer from './pages/MetadataViewer';
-import MetadataSearch from './pages/MetadataSearch';
+import MetadataSearchRedirect from './pages/MetadataSearchRedirect';
 import Catalogs from './pages/Catalogs';
 import Tonight from './pages/Tonight';
 import Targets from './pages/Targets';
@@ -100,8 +99,8 @@ const AppRoutes = () => {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/search" element={<Search />} />
                   <Route path="/images/:id" element={<ImageDetail />} />
-                  <Route path="/images/:id/metadata" element={<MetadataViewer />} />
-                  <Route path="/metadata-search" element={<MetadataSearch />} />
+                  <Route path="/images/:id/metadata" element={<ImageDetail inspector />} />
+                  <Route path="/metadata-search" element={<MetadataSearchRedirect />} />
                   <Route path="/catalogs" element={<Catalogs />} />
                   <Route path="/catalogs/:type/:designation" element={<Catalogs />} />
                   {/* R1: inserted before Targets per docs/design/R1-recommendation-engine.md §8 */}

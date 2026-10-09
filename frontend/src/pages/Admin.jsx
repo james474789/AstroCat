@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
     fetchAdminStats,
@@ -27,15 +28,32 @@ import {
     updateUserRole,
     fetchSystemVersion
 } from '../api/client';
-import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info } from 'lucide-react';
+import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info, Activity, HeartPulse, Star } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityAdmin from '../components/quality/StarQualityAdmin';
-import { Button, Dialog, PageHeader, SegmentedControl, Spinner, useConfirm, useToast } from '../components/ui';
+import { Button, Dialog, PageHeader, SegmentedControl, Spinner, Tabs, useConfirm, useToast } from '../components/ui';
 import './Admin.css';
 import './Settings.css';
 
+const ADMIN_SECTIONS = [
+    { value: 'pipeline', label: 'Pipeline', icon: <Activity size={16} /> },
+    { value: 'health', label: 'Health', icon: <HeartPulse size={16} /> },
+    { value: 'indexer', label: 'Indexer', icon: <Search size={16} /> },
+    { value: 'plate-solving', label: 'Plate Solving', icon: <TelescopeIcon size={16} /> },
+    { value: 'mounts', label: 'Mounts', icon: <Folder size={16} /> },
+    { value: 'thumbnails', label: 'Thumbnails', icon: <ImageIcon size={16} /> },
+    { value: 'star-quality', label: 'Star Quality', icon: <Star size={16} /> },
+    { value: 'data', label: 'Data', icon: <Database size={16} /> },
+    { value: 'users', label: 'Users', icon: <Users size={16} /> },
+    { value: 'about', label: 'About', icon: <Info size={16} /> },
+];
+
 function Admin() {
     const { user } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const requestedSection = searchParams.get('section');
+    const activeSection = ADMIN_SECTIONS.some(s => s.value === requestedSection) ? requestedSection : ADMIN_SECTIONS[0].value;
+
     const confirm = useConfirm();
     const toast = useToast();
     // Admin Dashboard State
@@ -73,9 +91,6 @@ function Admin() {
 
     // Backup/Restore Modal State
     const [backupModal, setBackupModal] = useState({ open: false, type: '', file: null });
-
-    // Lazy load settings section after main content renders
-    const [settingsSectionReady, setSettingsSectionReady] = useState(false);
 
     const scanPollRef = useRef(null);
 
@@ -122,14 +137,6 @@ function Admin() {
         return () => {
             if (fetchWorkerStatsRef.current) clearInterval(fetchWorkerStatsRef.current);
         };
-    }, [stats]);
-
-    // Defer Settings section rendering until main pipeline loads
-    useEffect(() => {
-        if (stats) {
-            const timer = setTimeout(() => setSettingsSectionReady(true), 300);
-            return () => clearTimeout(timer);
-        }
     }, [stats]);
 
     async function loadData() {
@@ -354,6 +361,10 @@ function Admin() {
         } finally {
             setBulkActionLoading(prev => ({ ...prev, [path]: null }));
         }
+    }
+
+    function selectSection(id) {
+        setSearchParams({ section: id }, { replace: true });
     }
 
     function showToast(message, type = 'info', durationMs = 4000) {
@@ -663,616 +674,641 @@ function Admin() {
                 className="admin-page-header"
             />
 
-            {/* PIPELINE VISUALIZATION */}
-            <section className="pipeline-section">
-                <h2 className="text-title-2 mb-md text-secondary">Indexing Pipeline</h2>
-                <div className="pipeline-container">
-                    {/* 1. File Scanner */}
-                    <div className={`pipeline-card ${scannerClass}`}>
-                        <div className="card-icon"><FolderOpen size={32} /></div>
-                        <div className="card-title">File Scanner</div>
-                        <div className="card-value">
-                            {indexerStatus?.files_scanned?.toLocaleString() || 0}
-                        </div>
-                        <div className="card-status">
-                            <div className={`status-dot ${isScanning ? 'blue pulse' : 'gray'}`} />
-                            {indexerStatus?.is_running ? 'Scanning Files...' : isBulkRunning ? 'Bulk Operation...' : 'Idle'}
-                        </div>
-                    </div>
-
-                    {/* 2. Job Queue */}
-                    <div className={`pipeline-card clickable ${queueClass}`} onClick={handleOpenQueueModal}>
-                        <div className="card-icon"><Library size={32} /></div>
-                        <div className="card-title">Job Queue</div>
-                        <div className="card-value text-orange-400">
-                            {pendingTasks}
-                        </div>
-                        <div className="card-status">
-                            <div className={`status-dot ${pendingTasks > 0 ? 'orange' : 'gray'}`} />
-                            {pendingTasks > 0 ? 'Pending' : 'Empty'}
-                        </div>
-                        {pendingTasks > 0 && (
-                            <div className="progress-container">
-                                <div className="progress-bar infinite-loader" style={{ width: '100%' }}></div>
-                            </div>
-                        )}
-                        <div className="text-caption text-muted mt-sm">Click to inspect</div>
-                    </div>
-
-                    {/* 3. Processors */}
-                    <div className={`pipeline-card ${processorClass}`}>
-                        <div className="card-icon"><Settings size={32} /></div>
-                        <div className="card-title">Processors</div>
-                        <div className="card-value text-primary">
-                            <span className="text-title-1">{activeTaskCount}</span>
-                            <span className="text-sm text-muted">/</span>
-                            <span className="text-lg text-secondary">{activeWorkers}</span>
-                        </div>
-                        <div className="card-status">
-                            <div className={`status-dot ${activeTaskCount > 0 ? 'blue pulse' : 'gray'}`} />
-                            {activeTaskCount > 0 ? 'Active' : 'Idle'}
-                        </div>
-                        <div className="text-footnote mt-sm text-secondary">
-                            {taskSummary || 'System Ready'}
-                        </div>
-                    </div>
-
-                    {/* 4. Database */}
-                    <div className="pipeline-card">
-                        <div className="card-icon"><Database size={32} /></div>
-                        <div className="card-title">Database</div>
-                        <div className="card-value">
-                            {stats?.database?.record_count?.toLocaleString() || 0}
-                        </div>
-                        <div className="card-status">
-                            <div className={`status-dot ${stats?.database?.status === 'connected' ? 'green' : 'red'}`} />
-                            {stats?.database?.status === 'connected' ? 'Online' : 'Offline'}
-                        </div>
-                        {stats?.database?.astrometry_counts && (
-                            <div className="text-caption text-secondary mt-sm">
-                                <span className="text-muted font-bold text-caption">Astrometry Status</span>
-                                {Object.entries(stats.database.astrometry_counts)
-                                    .sort(([a], [b]) => {
-                                        const order = ['SOLVED', 'IMPORTED', 'SUBMITTED', 'PROCESSING', 'FAILED', 'UNSOLVED'];
-                                        const idxA = order.indexOf(a);
-                                        const idxB = order.indexOf(b);
-                                        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                                        if (idxA !== -1) return -1;
-                                        if (idxB !== -1) return 1;
-                                        return a.localeCompare(b);
-                                    })
-                                    .map(([status, count]) => (
-                                        <div key={status} className="flex justify-between">
-                                            <span className={
-                                                status === 'SOLVED' || status === 'IMPORTED' ? 'text-green-400' :
-                                                    status === 'FAILED' ? 'text-red-400' :
-                                                        status === 'SUBMITTED' || status === 'PROCESSING' ? 'text-blue-400' :
-                                                            ''
-                                            }>
-                                                {String(status)}:
-                                            </span>
-                                            <span className="font-mono text-secondary">
-                                                {typeof count === 'object' ? JSON.stringify(count) : String(count)}
-                                            </span>
-                                        </div>
-                                    ))}
-                            </div>
-                        )}
-                        <div className="text-caption text-muted mt-sm text-center">
-                            <div className="flex gap-sm justify-center">
-                                <Button variant="plain" size="sm" icon={<DatabaseBackup size={16} />} onClick={handleOpenBackupModal}>Backup</Button>
-                                <Button variant="plain" size="sm" icon={<RotateCcw size={16} />} onClick={handleOpenRestoreModal}>Restore</Button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ACTIVE BULK OPERATIONS */}
-                    {isBulkRunning && (
-                        <div className="active-bulk-ops mt-lg">
-                            {indexerStatus?.mount_points?.filter(m => m.bulk_match?.status === 'running' || m.bulk_rescan?.status === 'running').map(mount => (
-                                <div key={mount.path} className="bulk-op-item">
-                                    <div className="flex justify-between mb-sm">
-                                        <span className="text-sm font-mono text-secondary">{mount.path}</span>
-                                        <span className="bulk-op-label">
-                                            {mount.bulk_match?.status === 'running' ? 'Recalculating Matches' : 'Bulk Rescanning'}
-                                        </span>
+            <div className="admin-layout">
+                <nav className="admin-sidenav" aria-label="Admin sections">
+                    {ADMIN_SECTIONS.map(({ value, label, icon }) => (
+                        <button
+                            key={value}
+                            type="button"
+                            className={`admin-sidenav-item${value === activeSection ? ' is-active' : ''}`}
+                            aria-current={value === activeSection ? 'page' : undefined}
+                            onClick={() => selectSection(value)}
+                        >
+                            {icon}
+                            {label}
+                        </button>
+                    ))}
+                </nav>
+                <Tabs
+                    className="admin-tabs"
+                    aria-label="Admin sections"
+                    items={ADMIN_SECTIONS}
+                    value={activeSection}
+                    onChange={selectSection}
+                />
+                <div className="admin-content">
+                    {activeSection === 'pipeline' && (
+                        <section className="pipeline-section">
+                            <h2 className="text-title-2 mb-md text-secondary">Indexing Pipeline</h2>
+                            <div className="pipeline-container">
+                                {/* 1. File Scanner */}
+                                <div className={`pipeline-card ${scannerClass}`}>
+                                    <div className="card-icon"><FolderOpen size={32} /></div>
+                                    <div className="card-title">File Scanner</div>
+                                    <div className="card-value">
+                                        {indexerStatus?.files_scanned?.toLocaleString() || 0}
                                     </div>
-                                    {mount.bulk_match?.status === 'running' && (
-                                        <div className="flex items-center gap-md">
-                                            <div className="bulk-track">
-                                                <div
-                                                    className="bulk-fill"
-                                                    style={{ width: `${(mount.bulk_match.processed / (mount.bulk_match.total || 1)) * 100}%` }}
-                                                />
-                                            </div>
-                                            <span className="text-footnote text-secondary">
-                                                {mount.bulk_match.processed} / {mount.bulk_match.total}
-                                                <span className="text-muted">({mount.bulk_match.errors || 0} errors, {mount.bulk_match.skipped || 0} skipped)</span>
-                                            </span>
+                                    <div className="card-status">
+                                        <div className={`status-dot ${isScanning ? 'blue pulse' : 'gray'}`} />
+                                        {indexerStatus?.is_running ? 'Scanning Files...' : isBulkRunning ? 'Bulk Operation...' : 'Idle'}
+                                    </div>
+                                </div>
+
+                                {/* 2. Job Queue */}
+                                <div className={`pipeline-card clickable ${queueClass}`} onClick={handleOpenQueueModal}>
+                                    <div className="card-icon"><Library size={32} /></div>
+                                    <div className="card-title">Job Queue</div>
+                                    <div className="card-value text-orange-400">
+                                        {pendingTasks}
+                                    </div>
+                                    <div className="card-status">
+                                        <div className={`status-dot ${pendingTasks > 0 ? 'orange' : 'gray'}`} />
+                                        {pendingTasks > 0 ? 'Pending' : 'Empty'}
+                                    </div>
+                                    {pendingTasks > 0 && (
+                                        <div className="progress-container">
+                                            <div className="progress-bar infinite-loader" style={{ width: '100%' }}></div>
                                         </div>
                                     )}
-                                    {mount.bulk_rescan?.status === 'running' && (
-                                        <div className="flex items-center gap-md">
-                                            <div className="bulk-track">
-                                                <div
-                                                    className="bulk-fill bulk-fill-rescan"
-                                                    style={{ width: `${(mount.bulk_rescan.processed / (mount.bulk_rescan.total || 1)) * 100}%` }}
-                                                />
-                                            </div>
-                                            <span className="text-footnote text-secondary">
-                                                {mount.bulk_rescan.processed} / {mount.bulk_rescan.total}
-                                                <span className="text-muted">({mount.bulk_rescan.queued} queued, {mount.bulk_rescan.skipped || 0} skipped)</span>
-                                            </span>
-                                        </div>
-                                    )}
+                                    <div className="text-caption text-muted mt-sm">Click to inspect</div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </section>
 
-            {/* TECH STACK & HEALTH */}
-            <section className="health-section">
-                <h2 className="text-title-2 mb-md text-secondary">System Health</h2>
-                <div className="tech-grid">
-                    <div className="tech-card">
-                        <div className="tech-header">
-                            <span className="tech-name">PostgreSQL + PostGIS</span>
-                            <span className="tech-status-badge">HEALTHY</span>
-                        </div>
-                        <div className="tech-details">
-                            <span className="tech-metric">{stats?.database?.size_str}</span>
-                            <span className="tech-label">Size</span>
-                        </div>
-                    </div>
-                    <div className="tech-card">
-                        <div className="tech-header">
-                            <span className="tech-name">Redis Broker</span>
-                            <span className={`tech-status-badge ${stats?.redis?.status === 'connected' ? '' : 'tech-status-error'}`}>
-                                {stats?.redis?.status === 'connected' ? 'CONNECTED' : 'ERROR'}
-                            </span>
-                        </div>
-                        <div className="tech-details">
-                            <span className="tech-metric">{stats?.redis?.memory_used_mb} MB</span>
-                            <span className="tech-label">Memory</span>
-                        </div>
-                    </div>
-                    <div className="tech-card">
-                        <div className="tech-header">
-                            <span className="tech-name">Celery Workers</span>
-                            <span className="tech-status-badge">OPERATIONAL</span>
-                        </div>
-                        <div className="tech-details">
-                            <span className="tech-metric">{activeWorkers}</span>
-                            <span className="tech-label">Threads</span>
-                        </div>
-                    </div>
-                    <div className="tech-card">
-                        <div className="tech-header">
-                            <span className="tech-name">Thumbnail Cache</span>
-                            <span className="tech-status-badge">DISK</span>
-                        </div>
-                        <div className="tech-details">
-                            <span className="tech-metric">{stats?.disk?.thumbnail_cache_gb} GB</span>
-                            <span className="tech-label">Storage</span>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* SETTINGS CONTENT BELOW */}
-            {settingsSectionReady && (
-                <div className="settings-page" style={{ padding: 0, marginTop: '4rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4rem' }}>
-                    <div className="settings-heading">
-                        <h2 className="settings-heading-title">Settings</h2>
-                        <p className="settings-heading-subtitle">Manage indexing and application preferences</p>
-                    </div>
-
-                    {/* Indexer Section */}
-                    <section className="settings-section">
-                        <h2 className="section-title"><Search size={20} /> Indexer</h2>
-                        <div className="indexer-card">
-                            <div className="indexer-status">
-                                <div className={`status-indicator ${scanning ? 'running' : 'idle'}`}>
-                                    {scanning ? (
-                                        <><div className="status-dot pulsing" /><span>Scanning...</span></>
-                                    ) : (
-                                        <><div className="status-dot" /><span>Idle</span></>
-                                    )}
-                                </div>
-                                <Button variant="filled" onClick={handleStartScan} disabled={scanning}>{scanning ? 'Scanning...' : 'Start Scan'}</Button>
-                            </div>
-                            {indexerStatus && (
-                                <div className="indexer-details">
-                                    <div className="detail-row"><span className="detail-label">Last Scan</span><span className="detail-value">{formatDate(indexerStatus.last_scan_at)}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Duration</span><span className="detail-value">{formatDuration(indexerStatus.last_scan_duration_seconds)}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Files Scanned</span><span className="detail-value">{indexerStatus.files_scanned.toLocaleString()}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Files Added</span><span className="detail-value text-success">+{indexerStatus.files_added}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Files Updated</span><span className="detail-value">{indexerStatus.files_updated}</span></div>
-                                    <div className="detail-row"><span className="detail-label">Files Removed</span><span className="detail-value text-error">-{indexerStatus.files_removed}</span></div>
-                                </div>
-                            )}
-                        </div>
-                    </section>
-
-                    {/* Plate Solving Section */}
-                    <section className="settings-section">
-                        <h2 className="section-title"><TelescopeIcon size={20} /> Plate Solving</h2>
-                        <div className="card">
-                            <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem' }}>
-                                <div>
-                                    <div className="setting-label" style={{ fontWeight: 'bold' }}>Astrometry Provider</div>
-                                    <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>Choose between the public Nova.astrometry.net service or a local Astrometry server.</div>
-                                </div>
-                                <SegmentedControl
-                                    aria-label="Astrometry provider"
-                                    size="sm"
-                                    value={systemSettings.astrometry_provider}
-                                    onChange={handleProviderChange}
-                                    items={[
-                                        { value: 'nova', label: 'Nova Web', icon: <Cloud size={16} />, disabled: settingsLoading },
-                                        { value: 'local', label: 'Local Server', icon: <HardDrive size={16} />, disabled: settingsLoading },
-                                    ]}
-                                />
-                            </div>
-                            {systemSettings.astrometry_provider === 'local' && (
-                                <div style={{ padding: '0 1rem 1rem 1rem', fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>Using configured local URL. Ensure your local server is running.</div>
-                            )}
-                            <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderTop: '1px solid var(--color-border)' }}>
-                                <div>
-                                    <div className="setting-label" style={{ fontWeight: 'bold' }}>Astrometry Max Submissions</div>
-                                    <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>Limit concurrent submissions to the astrometry server.</div>
-                                </div>
-                                <div>
-                                    <input type="number" min="1" max="50" className="input" style={{ width: '80px', background: 'var(--color-border)', border: '1px solid var(--color-border-light)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }} value={systemSettings.astrometry_max_submissions || 8} onChange={(e) => { const val = parseInt(e.target.value) || 1; updateSettings({ ...systemSettings, astrometry_max_submissions: val }).then(setSystemSettings).catch(err => toast.error("Failed to update: " + err.message)); }} disabled={settingsLoading} />
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Mount Points Section */}
-                    <section className="settings-section">
-                        <h2 className="section-title"><Folder size={20} /> Mount Points</h2>
-                        <div className="mount-points-list">
-                            {indexerStatus?.mount_points?.map((mount) => (
-                                <div key={mount.path} className="mount-point-card">
-                                    <div className="mount-header">
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                            <span className="mount-path font-mono">{mount.path}</span>
-                                            <div className="mount-friendly-name-section">
-                                                <input
-                                                    type="text"
-                                                    className="friendly-name-input"
-                                                    placeholder="Assign a friendly name..."
-                                                    value={systemSettings.mount_friendly_names?.[mount.path] || ''}
-                                                    onChange={(e) => {
-                                                        const newNames = { ...systemSettings.mount_friendly_names, [mount.path]: e.target.value };
-                                                        setSystemSettings({ ...systemSettings, mount_friendly_names: newNames });
-                                                    }}
-                                                />
-                                                <Button
-                                                    variant="plain"
-                                                    size="sm"
-                                                    icon={<Save size={16} />}
-                                                    title="Save Friendly Name"
-                                                    onClick={() => {
-                                                        updateSettings(systemSettings)
-                                                            .then(() => showToast('Friendly name saved', 'success'))
-                                                            .catch(err => showToast('Failed to save: ' + err.message, 'error'));
-                                                    }}
-                                                    disabled={settingsLoading}
-                                                >
-                                                    Save
-                                                </Button>
-                                            </div>
-                                        </div>
-                                        <span className={`mount-status ${mount.status}`}>{mount.status === 'connected' ? <><Check size={14} /> Connected</> : <><X size={14} /> Disconnected</>}</span>
+                                {/* 3. Processors */}
+                                <div className={`pipeline-card ${processorClass}`}>
+                                    <div className="card-icon"><Settings size={32} /></div>
+                                    <div className="card-title">Processors</div>
+                                    <div className="card-value text-primary">
+                                        <span className="text-title-1">{activeTaskCount}</span>
+                                        <span className="text-sm text-muted">/</span>
+                                        <span className="text-lg text-secondary">{activeWorkers}</span>
                                     </div>
-                                    <div className="mount-stats">
-                                        <div className="mount-stat"><span className="stat-value">{mount.file_count.toLocaleString()}</span><span className="stat-label">Files</span></div>
-                                        <div className="mount-stat"><span className="stat-value">{mount.size_gb.toFixed(1)} GB</span><span className="stat-label">Size</span></div>
+                                    <div className="card-status">
+                                        <div className={`status-dot ${activeTaskCount > 0 ? 'blue pulse' : 'gray'}`} />
+                                        {activeTaskCount > 0 ? 'Active' : 'Idle'}
                                     </div>
-                                    {(() => {
-                                        const isMatchVisible = mount.bulk_match && (mount.bulk_match.status === 'running' || mount.bulk_match.status === 'failed' || (Date.now() / 1000 - parseInt(mount.bulk_match.updated_at || 0)) < 300);
-                                        const isRescanVisible = mount.bulk_rescan && (mount.bulk_rescan.status === 'running' || mount.bulk_rescan.status === 'failed' || (Date.now() / 1000 - parseInt(mount.bulk_rescan.updated_at || 0)) < 300);
-                                        if (!isMatchVisible && !isRescanVisible) return null;
-                                        return (
-                                            <div className="mount-progress-section">
-                                                {isMatchVisible && (
-                                                    <div className="bulk-status-row">
-                                                        <span className="status-label">Matching:</span>
-                                                        {mount.bulk_match.status === 'running' ? (
-                                                            <><div className="status-bar-container"><div className="status-bar-fill" style={{ width: `${(mount.bulk_match.processed / (mount.bulk_match.total || 1)) * 100}%` }} /></div><span className="status-text">{mount.bulk_match.processed} / {mount.bulk_match.total}<span className="sub-text">({mount.bulk_match.errors || 0} errors, {mount.bulk_match.skipped || 0} skipped)</span></span></>
-                                                        ) : (
-                                                            <span className={`status-text ${mount.bulk_match.status === 'failed' ? 'text-error' : 'text-success'}`}>{mount.bulk_match.status} ({mount.bulk_match.processed} total, {mount.bulk_match.errors || 0} errors, {mount.bulk_match.skipped || 0} skipped)</span>
-                                                        )}
+                                    <div className="text-footnote mt-sm text-secondary">
+                                        {taskSummary || 'System Ready'}
+                                    </div>
+                                </div>
+
+                                {/* 4. Database */}
+                                <div className="pipeline-card">
+                                    <div className="card-icon"><Database size={32} /></div>
+                                    <div className="card-title">Database</div>
+                                    <div className="card-value">
+                                        {stats?.database?.record_count?.toLocaleString() || 0}
+                                    </div>
+                                    <div className="card-status">
+                                        <div className={`status-dot ${stats?.database?.status === 'connected' ? 'green' : 'red'}`} />
+                                        {stats?.database?.status === 'connected' ? 'Online' : 'Offline'}
+                                    </div>
+                                    {stats?.database?.astrometry_counts && (
+                                        <div className="text-caption text-secondary mt-sm">
+                                            <span className="text-muted font-bold text-caption">Astrometry Status</span>
+                                            {Object.entries(stats.database.astrometry_counts)
+                                                .sort(([a], [b]) => {
+                                                    const order = ['SOLVED', 'IMPORTED', 'SUBMITTED', 'PROCESSING', 'FAILED', 'UNSOLVED'];
+                                                    const idxA = order.indexOf(a);
+                                                    const idxB = order.indexOf(b);
+                                                    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                                                    if (idxA !== -1) return -1;
+                                                    if (idxB !== -1) return 1;
+                                                    return a.localeCompare(b);
+                                                })
+                                                .map(([status, count]) => (
+                                                    <div key={status} className="flex justify-between">
+                                                        <span className={
+                                                            status === 'SOLVED' || status === 'IMPORTED' ? 'text-green-400' :
+                                                                status === 'FAILED' ? 'text-red-400' :
+                                                                    status === 'SUBMITTED' || status === 'PROCESSING' ? 'text-blue-400' :
+                                                                        ''
+                                                        }>
+                                                            {String(status)}:
+                                                        </span>
+                                                        <span className="font-mono text-secondary">
+                                                            {typeof count === 'object' ? JSON.stringify(count) : String(count)}
+                                                        </span>
                                                     </div>
-                                                )}
-                                                {isRescanVisible && (
-                                                    <div className="bulk-status-row">
-                                                        <span className="status-label">Rescanning:</span>
-                                                        {mount.bulk_rescan.status === 'running' ? (
-                                                            <><div className="status-bar-container"><div className="status-bar-fill rescan" style={{ width: `${(mount.bulk_rescan.processed / (mount.bulk_rescan.total || 1)) * 100}%` }} /></div><span className="status-text">{mount.bulk_rescan.processed} / {mount.bulk_rescan.total}<span className="sub-text">({mount.bulk_rescan.queued} queued, {mount.bulk_rescan.skipped || 0} skipped)</span></span></>
-                                                        ) : (
-                                                            <span className={`status-text ${mount.bulk_rescan.status === 'failed' ? 'text-error' : 'text-success'}`}>{mount.bulk_rescan.status} ({mount.bulk_rescan.processed} processed, {mount.bulk_rescan.queued} queued, {mount.bulk_rescan.skipped || 0} skipped){mount.bulk_rescan.error && <span className="sub-text text-error">{mount.bulk_rescan.error}</span>}{mount.bulk_rescan.status === 'completed' && parseInt(mount.bulk_rescan.queued) === 0 && (<span className="sub-text" style={{ color: 'var(--color-warning)', marginTop: '4px', fontSize: '0.85em', display: 'block' }}>(No images required solving. Use 'Force' to re-solve existing ones.)</span>)}</span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
-                                    <div className="mount-actions-footer">
-                                        <div className="action-group"><Button size="sm" icon={<RefreshCw size={16} />} onClick={() => handleBulkMatch(mount.path)} disabled={!!bulkActionLoading[mount.path] || mount.status !== 'connected'}>Recalc Matches</Button></div>
-                                        <div className="action-group right"><label className="checkbox-label"><input type="checkbox" checked={forceRescan[mount.path] || false} onChange={() => toggleForceRescan(mount.path)} />Force</label><label className="checkbox-label" title="Submit only UNSOLVED and FAILED images"><input type="checkbox" checked={onlyUnsolvedRescan[mount.path] || false} onChange={() => toggleOnlyUnsolvedRescan(mount.path)} />Unsolved/Failed only</label><Button variant="filled" size="sm" icon={<TelescopeIcon size={16} />} loading={bulkActionLoading[mount.path] === 'rescan'} onClick={() => handleBulkRescan(mount.path)} disabled={!!bulkActionLoading[mount.path] || mount.status !== 'connected'}>{bulkActionLoading[mount.path] === 'rescan' ? 'Starting...' : 'Bulk Rescan'}</Button></div>
+                                                ))}
+                                        </div>
+                                    )}
+                                    <div className="text-caption text-muted mt-sm text-center">
+                                        <div className="flex gap-sm justify-center">
+                                            <Button variant="plain" size="sm" icon={<DatabaseBackup size={16} />} onClick={handleOpenBackupModal}>Backup</Button>
+                                            <Button variant="plain" size="sm" icon={<RotateCcw size={16} />} onClick={handleOpenRestoreModal}>Restore</Button>
+                                        </div>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                        <div className="mount-actions"><Button onClick={handleAddMountPoint}>+ Add Mount Point</Button><p className="text-sm text-muted mt-sm">Note: Mount points are configured in docker-compose.yml</p></div>
-                    </section>
 
-                    {/* Thumbnail Cache Section */}
-                    <section className="settings-section">
-                        <h2 className="section-title"><ImageIcon size={20} /> Thumbnail Cache</h2>
-                        <div className="cache-card">
-                            <div className="cache-info">
-                                <div className="cache-stat">{cacheStats ? <span className="cache-value">{cacheStats.count.toLocaleString()}</span> : <span className="cache-value">--</span>}<span className="cache-label">Cached Thumbnails</span></div>
-                                <div className="cache-stat">{cacheStats ? <span className="cache-value">{cacheStats.size_mb} MB</span> : <span className="cache-value">--</span>}<span className="cache-label">Cache Size</span></div>
-                            </div>
-                            <div className="cache-info">
-                                <div className="cache-stat">
-                                    <span className="cache-value">{fullResStats ? `${(fullResStats.bytes / 1024 ** 3).toFixed(1)} / ${(fullResStats.max_bytes / 1024 ** 3).toFixed(0)} GB` : '--'}</span>
-                                    <span className="cache-label">Full-res cache{fullResStats ? ` · ${fullResStats.count.toLocaleString()} images` : ''}</span>
-                                </div>
-                                <div className="cache-stat">
-                                    <Button onClick={handleClearFullResCache} disabled={cacheActionLoading || !fullResStats?.count}>Clear</Button>
-                                </div>
-                            </div>
-                            <div className="cache-actions"><Button onClick={handleClearCache} disabled={cacheActionLoading}>{cacheActionLoading ? 'Processing...' : 'Clear Cache'}</Button><Button variant="filled" onClick={handleRegenerateThumbnails} disabled={cacheActionLoading} style={{ marginLeft: '1rem' }}>Regenerate All</Button></div>
-                        </div>
-                    </section>
-
-                    {/* Star quality (Q1) */}
-                    <StarQualityAdmin systemSettings={systemSettings} onSettingsChange={setSystemSettings} />
-
-                    {/* Data Maintenance Section (F1/F2) */}
-                    <section className="settings-section">
-                        <h2 className="section-title"><Contrast size={20} /> Data Maintenance</h2>
-                        <div className="cache-card">
-                            <div className="cache-info">
-                                <div className="cache-stat">
-                                    <span className="cache-label">Frame type classification (Light/Dark/Flat/Bias/Dark-Flat), derived from stored header/filename/path data. No file IO -- safe to re-run.</span>
-                                </div>
-                            </div>
-                            <div className="cache-actions">
-                                <Button icon={<Contrast size={16} />} loading={reclassifyLoading} onClick={handleReclassifyFrameTypes}>
-                                    {reclassifyLoading ? 'Starting...' : 'Reclassify frame types'}
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="cache-card" style={{ marginTop: '1rem' }}>
-                            <div className="cache-info">
-                                <div className="cache-stat">
-                                    <span className="cache-label">Target resolution for Light sub-frames. A regular rescan already fills in any unassigned targets automatically -- use this to force a full re-resolve of every non-manual target (e.g. after an alias index update or catalog reseed). Also repairs missing field-of-view radii on plate-solved images and re-matches their catalog objects.</span>
-                                </div>
-                            </div>
-                            <div className="cache-actions">
-                                <Button icon={<Target size={16} />} loading={backfillTargetsLoading} onClick={handleBackfillTargets}>
-                                    {backfillTargetsLoading ? 'Starting...' : 'Re-resolve all targets'}
-                                </Button>
-                            </div>
-                        </div>
-                        <div className="cache-card" style={{ marginTop: '1rem', flexDirection: 'column', alignItems: 'stretch' }}>
-                            <div className="cache-info">
-                                <div className="cache-stat">
-                                    <span className="cache-label">Data migrations: one-off repairs that run automatically, once, in the background after an upgrade. Failed ones retry on the next restart. Re-run one here if needed.</span>
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
-                                {dataMigrations.items.map(m => {
-                                    const statusColor = m.status === 'applied' ? 'var(--color-success)' : m.status === 'failed' ? 'var(--color-error)' : 'var(--color-warning)';
-                                    return (
-                                        <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: 'var(--color-surface-elevated)', borderRadius: '0.4rem', flexWrap: 'wrap' }}>
-                                            <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                                                <div style={{ color: 'var(--color-text-primary)', fontSize: '0.85rem' }}>{m.description}</div>
-                                                <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', marginTop: '0.2rem', wordBreak: 'break-word' }}>
-                                                    <code>{m.id}</code>
-                                                    {m.applied_at && <> · {new Date(m.applied_at).toLocaleString()}</>}
-                                                    {m.duration_seconds != null && <> · {m.duration_seconds.toFixed(1)}s</>}
-                                                    {m.result && <> · {m.result}</>}
+                                {/* ACTIVE BULK OPERATIONS */}
+                                {isBulkRunning && (
+                                    <div className="active-bulk-ops mt-lg">
+                                        {indexerStatus?.mount_points?.filter(m => m.bulk_match?.status === 'running' || m.bulk_rescan?.status === 'running').map(mount => (
+                                            <div key={mount.path} className="bulk-op-item">
+                                                <div className="flex justify-between mb-sm">
+                                                    <span className="text-sm font-mono text-secondary">{mount.path}</span>
+                                                    <span className="bulk-op-label">
+                                                        {mount.bulk_match?.status === 'running' ? 'Recalculating Matches' : 'Bulk Rescanning'}
+                                                    </span>
                                                 </div>
+                                                {mount.bulk_match?.status === 'running' && (
+                                                    <div className="flex items-center gap-md">
+                                                        <div className="bulk-track">
+                                                            <div
+                                                                className="bulk-fill"
+                                                                style={{ width: `${(mount.bulk_match.processed / (mount.bulk_match.total || 1)) * 100}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-footnote text-secondary">
+                                                            {mount.bulk_match.processed} / {mount.bulk_match.total}
+                                                            <span className="text-muted">({mount.bulk_match.errors || 0} errors, {mount.bulk_match.skipped || 0} skipped)</span>
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {mount.bulk_rescan?.status === 'running' && (
+                                                    <div className="flex items-center gap-md">
+                                                        <div className="bulk-track">
+                                                            <div
+                                                                className="bulk-fill bulk-fill-rescan"
+                                                                style={{ width: `${(mount.bulk_rescan.processed / (mount.bulk_rescan.total || 1)) * 100}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-footnote text-secondary">
+                                                            {mount.bulk_rescan.processed} / {mount.bulk_rescan.total}
+                                                            <span className="text-muted">({mount.bulk_rescan.queued} queued, {mount.bulk_rescan.skipped || 0} skipped)</span>
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <span style={{ color: statusColor, fontSize: '0.8rem', textTransform: 'capitalize' }}>{m.status}</span>
-                                            <Button
-                                                onClick={() => handleRunDataMigration(m.id)}
-                                                disabled={dataMigrations.running || dataMigrationStarting !== null}
-                                            >
-                                                {dataMigrationStarting === m.id ? 'Starting...' : m.status === 'pending' ? 'Run now' : 'Run again'}
-                                            </Button>
-                                        </div>
-                                    );
-                                })}
-                                {dataMigrations.running && (
-                                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>Running in background...</span>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
-                        </div>
-                    </section>
+                        </section>
+                    )}
 
-                    {/* User Management Section */}
-                    <section className="settings-section">
-                        <h2 className="section-title"><Users size={20} /> User Management</h2>
-                        <div className="card" style={{ padding: '1.5rem' }}>
-                            <div style={{ marginBottom: '2rem' }}>
-                                <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text-primary)' }}>Register New User</h3>
-                                <form onSubmit={handleCreateUser} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
-                                    <div className="form-group" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Email Address</label>
-                                        <input
-                                            type="email"
-                                            className="input"
-                                            style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
-                                            value={newUser.email}
-                                            onChange={e => setNewUser({ ...newUser, email: e.target.value })}
-                                            required
-                                        />
+                    {activeSection === 'health' && (
+                        <section className="health-section">
+                            <h2 className="text-title-2 mb-md text-secondary">System Health</h2>
+                            <div className="tech-grid">
+                                <div className="tech-card">
+                                    <div className="tech-header">
+                                        <span className="tech-name">PostgreSQL + PostGIS</span>
+                                        <span className="tech-status-badge">HEALTHY</span>
                                     </div>
-                                    <div className="form-group" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Password</label>
-                                        <input
-                                            type="password"
-                                            className="input"
-                                            style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
-                                            value={newUser.password}
-                                            onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-                                            required
-                                        />
+                                    <div className="tech-details">
+                                        <span className="tech-metric">{stats?.database?.size_str}</span>
+                                        <span className="tech-label">Size</span>
                                     </div>
-                                    <div className="form-group" style={{ margin: 0 }}>
-                                        <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Confirm Password</label>
-                                        <input
-                                            type="password"
-                                            className="input"
-                                            style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
-                                            value={newUser.confirmPassword}
-                                            onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                    <Button
-                                        type="submit"
-                                        variant="filled"
-                                        loading={userActionLoading}
-                                        style={{ height: '42px' }}
-                                    >
-                                        {userActionLoading ? 'Creating...' : 'Add User'}
-                                    </Button>
-                                </form>
-                            </div>
-
-                            <div className="table-wrapper">
-                                <table className="admin-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Email</th>
-                                            <th>Role</th>
-                                            <th>Since</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {users.map(u => (
-                                            <tr key={u.id}>
-                                                <td className="text-primary">{u.email}</td>
-                                                <td>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <span style={{
-                                                            padding: '2px 8px',
-                                                            borderRadius: '12px',
-                                                            fontSize: '0.75rem',
-                                                            background: u.is_admin ? 'rgba(59, 130, 246, 0.2)' : 'rgba(148, 163, 184, 0.1)',
-                                                            color: u.is_admin ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                                                            border: u.is_admin ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(148, 163, 184, 0.2)'
-                                                        }}>
-                                                            {u.is_admin ? 'Administrator' : 'General User'}
-                                                        </span>
-                                                        <Button
-                                                            variant="plain"
-                                                            size="sm"
-                                                            icon={<RefreshCw size={16} />}
-                                                            onClick={() => handleUpdateRole(u.id, !u.is_admin)}
-                                                            disabled={u.id === user?.id}
-                                                            title={u.id === user?.id ? "Cannot change your own role" : "Toggle Role"}
-                                                        >
-                                                            Switch
-                                                        </Button>
-                                                    </div>
-                                                </td>
-                                                <td className="text-muted text-footnote">{new Date(u.created_at).toLocaleDateString()}</td>
-                                                <td>
-                                                    <Button
-                                                        variant="destructive"
-                                                        size="sm"
-                                                        onClick={() => handleDeleteUser(u.id, u.email)}
-                                                        disabled={u.id === user?.id}
-                                                    >
-                                                        Delete
-                                                    </Button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* About & Component Stack Section */}
-                    <section className="settings-section">
-                        <h2 className="section-title"><Info size={20} /> About &amp; System Components</h2>
-                        <div className="about-card">
-                            <div className="about-logo"><Orbit size={24} /> AstroCat</div>
-                            <div className="about-version">
-                                App Version: <strong>v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')}</strong>
-                            </div>
-                            <p className="about-description">
-                                Astronomical Image Database - A modern web application for cataloging, indexing, and retrieving astronomical image files with plate-solving metadata and celestial object associations.
-                            </p>
-
-                            {/* Component Stack Breakdown */}
-                            <div className="component-stack-container">
-                                <h3 className="component-stack-title">Component Stack Details</h3>
-                                <div className="component-stack-grid">
-                                    <div className="component-stack-item">
-                                        <span className="component-name">Frontend UI</span>
-                                        <span className="component-value font-mono">
-                                            v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')} (React + Vite)
+                                </div>
+                                <div className="tech-card">
+                                    <div className="tech-header">
+                                        <span className="tech-name">Redis Broker</span>
+                                        <span className={`tech-status-badge ${stats?.redis?.status === 'connected' ? '' : 'tech-status-error'}`}>
+                                            {stats?.redis?.status === 'connected' ? 'CONNECTED' : 'ERROR'}
                                         </span>
                                     </div>
-                                    <div className="component-stack-item">
-                                        <span className="component-name">Backend API</span>
-                                        <span className="component-value font-mono">
-                                            v{systemVersion?.backend?.version || '0.1.0'} (FastAPI / Python {systemVersion?.backend?.python || '3.12'})
-                                        </span>
+                                    <div className="tech-details">
+                                        <span className="tech-metric">{stats?.redis?.memory_used_mb} MB</span>
+                                        <span className="tech-label">Memory</span>
                                     </div>
-
-                                    <div className="component-stack-item">
-                                        <span className="component-name">Database</span>
-                                        <span className="component-value font-mono">
-                                            {systemVersion?.database?.status === 'connected' ? 'PostgreSQL' : 'Disconnected'}
-                                            {systemVersion?.database?.postgis_version ? ` (PostGIS ${systemVersion.database.postgis_version.split(' ')[0]})` : ''}
-                                        </span>
+                                </div>
+                                <div className="tech-card">
+                                    <div className="tech-header">
+                                        <span className="tech-name">Celery Workers</span>
+                                        <span className="tech-status-badge">OPERATIONAL</span>
                                     </div>
-                                    <div className="component-stack-item">
-                                        <span className="component-name">DB Schema Revision</span>
-                                        <span className="component-value font-mono">
-                                            {systemVersion?.database?.schema_revision || 'Current'}
-                                        </span>
+                                    <div className="tech-details">
+                                        <span className="tech-metric">{activeWorkers}</span>
+                                        <span className="tech-label">Threads</span>
                                     </div>
-                                    <div className="component-stack-item">
-                                        <span className="component-name">Task Queue</span>
-                                        <span className="component-value font-mono">
-                                            Celery + Redis {systemVersion?.redis?.redis_version ? `v${systemVersion.redis.redis_version}` : ''}
-                                        </span>
+                                </div>
+                                <div className="tech-card">
+                                    <div className="tech-header">
+                                        <span className="tech-name">Thumbnail Cache</span>
+                                        <span className="tech-status-badge">DISK</span>
                                     </div>
-                                    <div className="component-stack-item">
-                                        <span className="component-name">Environment</span>
-                                        <span className="component-value font-mono">
-                                            {systemVersion?.backend?.os || 'Docker / Linux'}
-                                        </span>
+                                    <div className="tech-details">
+                                        <span className="tech-metric">{stats?.disk?.thumbnail_cache_gb} GB</span>
+                                        <span className="tech-label">Storage</span>
                                     </div>
                                 </div>
                             </div>
+                        </section>
+                    )}
 
-                            <div className="about-links">
-                                <a href="https://github.com/james474789/AstroCat" target="_blank" rel="noopener" className="link">GitHub Repository</a>
-                                <a href="/api/docs" target="_blank" rel="noopener" className="link">API Documentation</a>
+                    {activeSection === 'indexer' && (
+                        <section className="settings-section">
+                            <h2 className="section-title"><Search size={20} /> Indexer</h2>
+                            <div className="indexer-card">
+                                <div className="indexer-status">
+                                    <div className={`status-indicator ${scanning ? 'running' : 'idle'}`}>
+                                        {scanning ? (
+                                            <><div className="status-dot pulsing" /><span>Scanning...</span></>
+                                        ) : (
+                                            <><div className="status-dot" /><span>Idle</span></>
+                                        )}
+                                    </div>
+                                    <Button variant="filled" onClick={handleStartScan} disabled={scanning}>{scanning ? 'Scanning...' : 'Start Scan'}</Button>
+                                </div>
+                                {indexerStatus && (
+                                    <div className="indexer-details">
+                                        <div className="detail-row"><span className="detail-label">Last Scan</span><span className="detail-value">{formatDate(indexerStatus.last_scan_at)}</span></div>
+                                        <div className="detail-row"><span className="detail-label">Duration</span><span className="detail-value">{formatDuration(indexerStatus.last_scan_duration_seconds)}</span></div>
+                                        <div className="detail-row"><span className="detail-label">Files Scanned</span><span className="detail-value">{indexerStatus.files_scanned.toLocaleString()}</span></div>
+                                        <div className="detail-row"><span className="detail-label">Files Added</span><span className="detail-value text-success">+{indexerStatus.files_added}</span></div>
+                                        <div className="detail-row"><span className="detail-label">Files Updated</span><span className="detail-value">{indexerStatus.files_updated}</span></div>
+                                        <div className="detail-row"><span className="detail-label">Files Removed</span><span className="detail-value text-error">-{indexerStatus.files_removed}</span></div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    </section>
+                        </section>
+                    )}
+
+                    {activeSection === 'plate-solving' && (
+                        <section className="settings-section">
+                            <h2 className="section-title"><TelescopeIcon size={20} /> Plate Solving</h2>
+                            <div className="card">
+                                <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem' }}>
+                                    <div>
+                                        <div className="setting-label" style={{ fontWeight: 'bold' }}>Astrometry Provider</div>
+                                        <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>Choose between the public Nova.astrometry.net service or a local Astrometry server.</div>
+                                    </div>
+                                    <SegmentedControl
+                                        aria-label="Astrometry provider"
+                                        size="sm"
+                                        value={systemSettings.astrometry_provider}
+                                        onChange={handleProviderChange}
+                                        items={[
+                                            { value: 'nova', label: 'Nova Web', icon: <Cloud size={16} />, disabled: settingsLoading },
+                                            { value: 'local', label: 'Local Server', icon: <HardDrive size={16} />, disabled: settingsLoading },
+                                        ]}
+                                    />
+                                </div>
+                                {systemSettings.astrometry_provider === 'local' && (
+                                    <div style={{ padding: '0 1rem 1rem 1rem', fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>Using configured local URL. Ensure your local server is running.</div>
+                                )}
+                                <div className="setting-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderTop: '1px solid var(--color-border)' }}>
+                                    <div>
+                                        <div className="setting-label" style={{ fontWeight: 'bold' }}>Astrometry Max Submissions</div>
+                                        <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>Limit concurrent submissions to the astrometry server.</div>
+                                    </div>
+                                    <div>
+                                        <input type="number" min="1" max="50" className="input" style={{ width: '80px', background: 'var(--color-border)', border: '1px solid var(--color-border-light)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }} value={systemSettings.astrometry_max_submissions || 8} onChange={(e) => { const val = parseInt(e.target.value) || 1; updateSettings({ ...systemSettings, astrometry_max_submissions: val }).then(setSystemSettings).catch(err => toast.error("Failed to update: " + err.message)); }} disabled={settingsLoading} />
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {activeSection === 'mounts' && (
+                        <section className="settings-section">
+                            <h2 className="section-title"><Folder size={20} /> Mount Points</h2>
+                            <div className="mount-points-list">
+                                {indexerStatus?.mount_points?.map((mount) => (
+                                    <div key={mount.path} className="mount-point-card">
+                                        <div className="mount-header">
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                <span className="mount-path font-mono">{mount.path}</span>
+                                                <div className="mount-friendly-name-section">
+                                                    <input
+                                                        type="text"
+                                                        className="friendly-name-input"
+                                                        placeholder="Assign a friendly name..."
+                                                        value={systemSettings.mount_friendly_names?.[mount.path] || ''}
+                                                        onChange={(e) => {
+                                                            const newNames = { ...systemSettings.mount_friendly_names, [mount.path]: e.target.value };
+                                                            setSystemSettings({ ...systemSettings, mount_friendly_names: newNames });
+                                                        }}
+                                                    />
+                                                    <Button
+                                                        variant="plain"
+                                                        size="sm"
+                                                        icon={<Save size={16} />}
+                                                        title="Save Friendly Name"
+                                                        onClick={() => {
+                                                            updateSettings(systemSettings)
+                                                                .then(() => showToast('Friendly name saved', 'success'))
+                                                                .catch(err => showToast('Failed to save: ' + err.message, 'error'));
+                                                        }}
+                                                        disabled={settingsLoading}
+                                                    >
+                                                        Save
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                            <span className={`mount-status ${mount.status}`}>{mount.status === 'connected' ? <><Check size={14} /> Connected</> : <><X size={14} /> Disconnected</>}</span>
+                                        </div>
+                                        <div className="mount-stats">
+                                            <div className="mount-stat"><span className="stat-value">{mount.file_count.toLocaleString()}</span><span className="stat-label">Files</span></div>
+                                            <div className="mount-stat"><span className="stat-value">{mount.size_gb.toFixed(1)} GB</span><span className="stat-label">Size</span></div>
+                                        </div>
+                                        {(() => {
+                                            const isMatchVisible = mount.bulk_match && (mount.bulk_match.status === 'running' || mount.bulk_match.status === 'failed' || (Date.now() / 1000 - parseInt(mount.bulk_match.updated_at || 0)) < 300);
+                                            const isRescanVisible = mount.bulk_rescan && (mount.bulk_rescan.status === 'running' || mount.bulk_rescan.status === 'failed' || (Date.now() / 1000 - parseInt(mount.bulk_rescan.updated_at || 0)) < 300);
+                                            if (!isMatchVisible && !isRescanVisible) return null;
+                                            return (
+                                                <div className="mount-progress-section">
+                                                    {isMatchVisible && (
+                                                        <div className="bulk-status-row">
+                                                            <span className="status-label">Matching:</span>
+                                                            {mount.bulk_match.status === 'running' ? (
+                                                                <><div className="status-bar-container"><div className="status-bar-fill" style={{ width: `${(mount.bulk_match.processed / (mount.bulk_match.total || 1)) * 100}%` }} /></div><span className="status-text">{mount.bulk_match.processed} / {mount.bulk_match.total}<span className="sub-text">({mount.bulk_match.errors || 0} errors, {mount.bulk_match.skipped || 0} skipped)</span></span></>
+                                                            ) : (
+                                                                <span className={`status-text ${mount.bulk_match.status === 'failed' ? 'text-error' : 'text-success'}`}>{mount.bulk_match.status} ({mount.bulk_match.processed} total, {mount.bulk_match.errors || 0} errors, {mount.bulk_match.skipped || 0} skipped)</span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {isRescanVisible && (
+                                                        <div className="bulk-status-row">
+                                                            <span className="status-label">Rescanning:</span>
+                                                            {mount.bulk_rescan.status === 'running' ? (
+                                                                <><div className="status-bar-container"><div className="status-bar-fill rescan" style={{ width: `${(mount.bulk_rescan.processed / (mount.bulk_rescan.total || 1)) * 100}%` }} /></div><span className="status-text">{mount.bulk_rescan.processed} / {mount.bulk_rescan.total}<span className="sub-text">({mount.bulk_rescan.queued} queued, {mount.bulk_rescan.skipped || 0} skipped)</span></span></>
+                                                            ) : (
+                                                                <span className={`status-text ${mount.bulk_rescan.status === 'failed' ? 'text-error' : 'text-success'}`}>{mount.bulk_rescan.status} ({mount.bulk_rescan.processed} processed, {mount.bulk_rescan.queued} queued, {mount.bulk_rescan.skipped || 0} skipped){mount.bulk_rescan.error && <span className="sub-text text-error">{mount.bulk_rescan.error}</span>}{mount.bulk_rescan.status === 'completed' && parseInt(mount.bulk_rescan.queued) === 0 && (<span className="sub-text" style={{ color: 'var(--color-warning)', marginTop: '4px', fontSize: '0.85em', display: 'block' }}>(No images required solving. Use 'Force' to re-solve existing ones.)</span>)}</span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                        <div className="mount-actions-footer">
+                                            <div className="action-group"><Button size="sm" icon={<RefreshCw size={16} />} onClick={() => handleBulkMatch(mount.path)} disabled={!!bulkActionLoading[mount.path] || mount.status !== 'connected'}>Recalc Matches</Button></div>
+                                            <div className="action-group right"><label className="checkbox-label"><input type="checkbox" checked={forceRescan[mount.path] || false} onChange={() => toggleForceRescan(mount.path)} />Force</label><label className="checkbox-label" title="Submit only UNSOLVED and FAILED images"><input type="checkbox" checked={onlyUnsolvedRescan[mount.path] || false} onChange={() => toggleOnlyUnsolvedRescan(mount.path)} />Unsolved/Failed only</label><Button variant="filled" size="sm" icon={<TelescopeIcon size={16} />} loading={bulkActionLoading[mount.path] === 'rescan'} onClick={() => handleBulkRescan(mount.path)} disabled={!!bulkActionLoading[mount.path] || mount.status !== 'connected'}>{bulkActionLoading[mount.path] === 'rescan' ? 'Starting...' : 'Bulk Rescan'}</Button></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mount-actions"><Button onClick={handleAddMountPoint}>+ Add Mount Point</Button><p className="text-sm text-muted mt-sm">Note: Mount points are configured in docker-compose.yml</p></div>
+                        </section>
+                    )}
+
+                    {activeSection === 'thumbnails' && (
+                        <section className="settings-section">
+                            <h2 className="section-title"><ImageIcon size={20} /> Thumbnail Cache</h2>
+                            <div className="cache-card">
+                                <div className="cache-info">
+                                    <div className="cache-stat">{cacheStats ? <span className="cache-value">{cacheStats.count.toLocaleString()}</span> : <span className="cache-value">--</span>}<span className="cache-label">Cached Thumbnails</span></div>
+                                    <div className="cache-stat">{cacheStats ? <span className="cache-value">{cacheStats.size_mb} MB</span> : <span className="cache-value">--</span>}<span className="cache-label">Cache Size</span></div>
+                                </div>
+                                <div className="cache-info">
+                                    <div className="cache-stat">
+                                        <span className="cache-value">{fullResStats ? `${(fullResStats.bytes / 1024 ** 3).toFixed(1)} / ${(fullResStats.max_bytes / 1024 ** 3).toFixed(0)} GB` : '--'}</span>
+                                        <span className="cache-label">Full-res cache{fullResStats ? ` · ${fullResStats.count.toLocaleString()} images` : ''}</span>
+                                    </div>
+                                    <div className="cache-stat">
+                                        <Button onClick={handleClearFullResCache} disabled={cacheActionLoading || !fullResStats?.count}>Clear</Button>
+                                    </div>
+                                </div>
+                                <div className="cache-actions"><Button onClick={handleClearCache} disabled={cacheActionLoading}>{cacheActionLoading ? 'Processing...' : 'Clear Cache'}</Button><Button variant="filled" onClick={handleRegenerateThumbnails} disabled={cacheActionLoading} style={{ marginLeft: '1rem' }}>Regenerate All</Button></div>
+                            </div>
+                        </section>
+                    )}
+
+                    {activeSection === 'star-quality' && (
+                        <StarQualityAdmin systemSettings={systemSettings} onSettingsChange={setSystemSettings} />
+                    )}
+
+                    {activeSection === 'data' && (
+                        <section className="settings-section">
+                            <h2 className="section-title"><Contrast size={20} /> Data Maintenance</h2>
+                            <div className="cache-card">
+                                <div className="cache-info">
+                                    <div className="cache-stat">
+                                        <span className="cache-label">Frame type classification (Light/Dark/Flat/Bias/Dark-Flat), derived from stored header/filename/path data. No file IO -- safe to re-run.</span>
+                                    </div>
+                                </div>
+                                <div className="cache-actions">
+                                    <Button icon={<Contrast size={16} />} loading={reclassifyLoading} onClick={handleReclassifyFrameTypes}>
+                                        {reclassifyLoading ? 'Starting...' : 'Reclassify frame types'}
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="cache-card" style={{ marginTop: '1rem' }}>
+                                <div className="cache-info">
+                                    <div className="cache-stat">
+                                        <span className="cache-label">Target resolution for Light sub-frames. A regular rescan already fills in any unassigned targets automatically -- use this to force a full re-resolve of every non-manual target (e.g. after an alias index update or catalog reseed). Also repairs missing field-of-view radii on plate-solved images and re-matches their catalog objects.</span>
+                                    </div>
+                                </div>
+                                <div className="cache-actions">
+                                    <Button icon={<Target size={16} />} loading={backfillTargetsLoading} onClick={handleBackfillTargets}>
+                                        {backfillTargetsLoading ? 'Starting...' : 'Re-resolve all targets'}
+                                    </Button>
+                                </div>
+                            </div>
+                            <div className="cache-card" style={{ marginTop: '1rem', flexDirection: 'column', alignItems: 'stretch' }}>
+                                <div className="cache-info">
+                                    <div className="cache-stat">
+                                        <span className="cache-label">Data migrations: one-off repairs that run automatically, once, in the background after an upgrade. Failed ones retry on the next restart. Re-run one here if needed.</span>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.75rem' }}>
+                                    {dataMigrations.items.map(m => {
+                                        const statusColor = m.status === 'applied' ? 'var(--color-success)' : m.status === 'failed' ? 'var(--color-error)' : 'var(--color-warning)';
+                                        return (
+                                            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: 'var(--color-surface-elevated)', borderRadius: '0.4rem', flexWrap: 'wrap' }}>
+                                                <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                                    <div style={{ color: 'var(--color-text-primary)', fontSize: '0.85rem' }}>{m.description}</div>
+                                                    <div style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', marginTop: '0.2rem', wordBreak: 'break-word' }}>
+                                                        <code>{m.id}</code>
+                                                        {m.applied_at && <> · {new Date(m.applied_at).toLocaleString()}</>}
+                                                        {m.duration_seconds != null && <> · {m.duration_seconds.toFixed(1)}s</>}
+                                                        {m.result && <> · {m.result}</>}
+                                                    </div>
+                                                </div>
+                                                <span style={{ color: statusColor, fontSize: '0.8rem', textTransform: 'capitalize' }}>{m.status}</span>
+                                                <Button
+                                                    onClick={() => handleRunDataMigration(m.id)}
+                                                    disabled={dataMigrations.running || dataMigrationStarting !== null}
+                                                >
+                                                    {dataMigrationStarting === m.id ? 'Starting...' : m.status === 'pending' ? 'Run now' : 'Run again'}
+                                                </Button>
+                                            </div>
+                                        );
+                                    })}
+                                    {dataMigrations.running && (
+                                        <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem' }}>Running in background...</span>
+                                    )}
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {activeSection === 'users' && (
+                        <section className="settings-section">
+                            <h2 className="section-title"><Users size={20} /> User Management</h2>
+                            <div className="card" style={{ padding: '1.5rem' }}>
+                                <div style={{ marginBottom: '2rem' }}>
+                                    <h3 style={{ fontSize: '1.1rem', marginBottom: '1rem', color: 'var(--color-text-primary)' }}>Register New User</h3>
+                                    <form onSubmit={handleCreateUser} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', alignItems: 'flex-end' }}>
+                                        <div className="form-group" style={{ margin: 0 }}>
+                                            <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Email Address</label>
+                                            <input
+                                                type="email"
+                                                className="input"
+                                                style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
+                                                value={newUser.email}
+                                                onChange={e => setNewUser({ ...newUser, email: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="form-group" style={{ margin: 0 }}>
+                                            <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Password</label>
+                                            <input
+                                                type="password"
+                                                className="input"
+                                                style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
+                                                value={newUser.password}
+                                                onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="form-group" style={{ margin: 0 }}>
+                                            <label style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Confirm Password</label>
+                                            <input
+                                                type="password"
+                                                className="input"
+                                                style={{ width: '100%', background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'white', padding: '0.5rem', borderRadius: '0.4rem' }}
+                                                value={newUser.confirmPassword}
+                                                onChange={e => setNewUser({ ...newUser, confirmPassword: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <Button
+                                            type="submit"
+                                            variant="filled"
+                                            loading={userActionLoading}
+                                            style={{ height: '42px' }}
+                                        >
+                                            {userActionLoading ? 'Creating...' : 'Add User'}
+                                        </Button>
+                                    </form>
+                                </div>
+
+                                <div className="table-wrapper">
+                                    <table className="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Email</th>
+                                                <th>Role</th>
+                                                <th>Since</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {users.map(u => (
+                                                <tr key={u.id}>
+                                                    <td className="text-primary">{u.email}</td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span style={{
+                                                                padding: '2px 8px',
+                                                                borderRadius: '12px',
+                                                                fontSize: '0.75rem',
+                                                                background: u.is_admin ? 'rgba(59, 130, 246, 0.2)' : 'rgba(148, 163, 184, 0.1)',
+                                                                color: u.is_admin ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                                                border: u.is_admin ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(148, 163, 184, 0.2)'
+                                                            }}>
+                                                                {u.is_admin ? 'Administrator' : 'General User'}
+                                                            </span>
+                                                            <Button
+                                                                variant="plain"
+                                                                size="sm"
+                                                                icon={<RefreshCw size={16} />}
+                                                                onClick={() => handleUpdateRole(u.id, !u.is_admin)}
+                                                                disabled={u.id === user?.id}
+                                                                title={u.id === user?.id ? "Cannot change your own role" : "Toggle Role"}
+                                                            >
+                                                                Switch
+                                                            </Button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="text-muted text-footnote">{new Date(u.created_at).toLocaleDateString()}</td>
+                                                    <td>
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="sm"
+                                                            onClick={() => handleDeleteUser(u.id, u.email)}
+                                                            disabled={u.id === user?.id}
+                                                        >
+                                                            Delete
+                                                        </Button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
+                    {activeSection === 'about' && (
+                        <section className="settings-section">
+                            <h2 className="section-title"><Info size={20} /> About &amp; System Components</h2>
+                            <div className="about-card">
+                                <div className="about-logo"><Orbit size={24} /> AstroCat</div>
+                                <div className="about-version">
+                                    App Version: <strong>v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')}</strong>
+                                </div>
+                                <p className="about-description">
+                                    Astronomical Image Database - A modern web application for cataloging, indexing, and retrieving astronomical image files with plate-solving metadata and celestial object associations.
+                                </p>
+
+                                {/* Component Stack Breakdown */}
+                                <div className="component-stack-container">
+                                    <h3 className="component-stack-title">Component Stack Details</h3>
+                                    <div className="component-stack-grid">
+                                        <div className="component-stack-item">
+                                            <span className="component-name">Frontend UI</span>
+                                            <span className="component-value font-mono">
+                                                v{systemVersion?.app_version || (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0')} (React + Vite)
+                                            </span>
+                                        </div>
+                                        <div className="component-stack-item">
+                                            <span className="component-name">Backend API</span>
+                                            <span className="component-value font-mono">
+                                                v{systemVersion?.backend?.version || '0.1.0'} (FastAPI / Python {systemVersion?.backend?.python || '3.12'})
+                                            </span>
+                                        </div>
+
+                                        <div className="component-stack-item">
+                                            <span className="component-name">Database</span>
+                                            <span className="component-value font-mono">
+                                                {systemVersion?.database?.status === 'connected' ? 'PostgreSQL' : 'Disconnected'}
+                                                {systemVersion?.database?.postgis_version ? ` (PostGIS ${systemVersion.database.postgis_version.split(' ')[0]})` : ''}
+                                            </span>
+                                        </div>
+                                        <div className="component-stack-item">
+                                            <span className="component-name">DB Schema Revision</span>
+                                            <span className="component-value font-mono">
+                                                {systemVersion?.database?.schema_revision || 'Current'}
+                                            </span>
+                                        </div>
+                                        <div className="component-stack-item">
+                                            <span className="component-name">Task Queue</span>
+                                            <span className="component-value font-mono">
+                                                Celery + Redis {systemVersion?.redis?.redis_version ? `v${systemVersion.redis.redis_version}` : ''}
+                                            </span>
+                                        </div>
+                                        <div className="component-stack-item">
+                                            <span className="component-name">Environment</span>
+                                            <span className="component-value font-mono">
+                                                {systemVersion?.backend?.os || 'Docker / Linux'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="about-links">
+                                    <a href="https://github.com/james474789/AstroCat" target="_blank" rel="noopener" className="link">GitHub Repository</a>
+                                    <a href="/api/docs" target="_blank" rel="noopener" className="link">API Documentation</a>
+                                </div>
+                            </div>
+                        </section>
+                    )}
                 </div>
-            )}
+            </div>
 
             {/* QUEUE DETAILS DIALOG */}
             <Dialog

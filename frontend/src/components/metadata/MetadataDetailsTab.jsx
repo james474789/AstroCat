@@ -1,17 +1,10 @@
-import { Copy, Check, ChevronDown, FileText, MapPin, BarChart3, Video, Star, Globe } from 'lucide-react';
+import { ChevronDown, FileText, MapPin, BarChart3, Video, Star, Globe } from 'lucide-react';
 import TelescopeIcon from '../icons/TelescopeIcon';
 import { useState } from 'react';
-import './MetadataTab.css';
+import CopyButton from './CopyButton';
 
-export default function MetadataDetailsTab({ image, headerData }) {
-    const [copiedField, setCopiedField] = useState(null);
+export default function MetadataDetailsTab({ image }) {
     const [expandedSection, setExpandedSection] = useState('file');
-
-    const copyToClipboard = (text, fieldName) => {
-        navigator.clipboard.writeText(text);
-        setCopiedField(fieldName);
-        setTimeout(() => setCopiedField(null), 2000);
-    };
 
     const formatValue = (value) => {
         if (value === null || value === undefined || value === '') return '—';
@@ -31,13 +24,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
                     <div className="detail-value" title={String(value)}>
                         {formatValue(value)}
                     </div>
-                    <button
-                        className="copy-btn"
-                        onClick={() => copyToClipboard(String(value), label)}
-                        title="Copy to clipboard"
-                    >
-                        {copiedField === label ? <Check size={14} /> : <Copy size={14} />}
-                    </button>
+                    <CopyButton value={String(value)} label={label} />
                 </div>
             </div>
         );
@@ -140,16 +127,18 @@ export default function MetadataDetailsTab({ image, headerData }) {
         <div className="metadata-tab metadata-details-tab">
             <div className="sections-container">
                 {detailSections.map(section => {
-                    const fields = section.fields.filter(([_, val]) => val !== null);
+                    const fields = section.fields.filter(([, val]) => val !== null);
                     if (fields.length === 0) return null;
 
                     return (
                         <div key={section.id} className="detail-section">
                             <button
+                                type="button"
                                 className={`section-header ${expandedSection === section.id ? 'expanded' : ''}`}
+                                aria-expanded={expandedSection === section.id}
                                 onClick={() => setExpandedSection(expandedSection === section.id ? null : section.id)}
                             >
-                                <span className="section-title"><section.icon size={16} />{section.title}</span>
+                                <span className="detail-section-title"><section.icon size={16} aria-hidden="true" />{section.title}</span>
                                 <ChevronDown className="expand-icon" size={14} aria-hidden="true" />
                             </button>
                             {expandedSection === section.id && (

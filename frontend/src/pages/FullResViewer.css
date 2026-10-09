@@ -29,7 +29,8 @@
     align-items: center;
     gap: 0.6rem;
     padding: calc(0.5rem + var(--safe-top, 0px)) 0.75rem 0.5rem;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.45));
+    /* Even backing (not a fade) so the transparent plain/tinted buttons keep contrast over bright images */
+    background: color-mix(in srgb, var(--color-black) 85%, transparent);
     transition: opacity 0.25s ease;
 }
 
@@ -55,30 +56,11 @@
     white-space: nowrap;
 }
 
-.page-fullres .fr-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.35rem 0.6rem;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    background: rgba(20, 27, 45, 0.85);
-    color: inherit;
-    font-size: 0.85rem;
-    cursor: pointer;
-}
-
-.page-fullres .fr-btn.icon { padding: 0.35rem; }
-@media (hover: hover) {
-  .page-fullres .fr-btn:hover:not(:disabled) { background: var(--color-surface-hover); }
-}
-.page-fullres .fr-btn:disabled { opacity: 0.4; cursor: default; }
-
 .page-fullres .fr-select {
     padding: 0.35rem 0.5rem;
     border: 1px solid var(--color-border);
     border-radius: 6px;
-    background: rgba(20, 27, 45, 0.9);
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
     color: inherit;
     font-size: 0.85rem;
 }
@@ -95,7 +77,7 @@
 .page-fullres .fr-crosshair {
     position: absolute;
     pointer-events: none;
-    background: rgba(34, 211, 238, 0.55);
+    background: color-mix(in srgb, var(--color-accent) 55%, transparent);
     z-index: 10;
 }
 .page-fullres .fr-crosshair.horizontal { left: 0; right: 0; height: 1px; }
@@ -108,7 +90,7 @@
     z-index: 20;
     padding: 0.3rem 0.6rem;
     border-radius: 6px;
-    background: rgba(0, 0, 0, 0.7);
+    background: color-mix(in srgb, var(--color-black) 70%, transparent);
     font-size: 0.85rem;
     font-variant-numeric: tabular-nums;
     pointer-events: none;
@@ -125,7 +107,7 @@
     gap: 0.5rem;
     padding: 0.4rem 0.8rem;
     border-radius: 999px;
-    background: rgba(20, 27, 45, 0.92);
+    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
     border: 1px solid var(--color-border);
     font-size: 0.85rem;
     pointer-events: auto;
@@ -166,11 +148,10 @@
 .page-fullres .fr-warn-icon { margin-left: 4px; color: var(--color-warning); }
 .page-fullres .fullres-osd.fo-hover,
 .page-fullres .fullres-osd.fo-hover * { cursor: pointer; }
-.page-fullres .fr-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: white; }
 
 /* Touch: viewer toolbar controls meet the 44px target size */
 @media (pointer: coarse) {
     .page-fullres .fr-btn,
-.page-fullres .fr-select { min-height: 44px; }
-    .page-fullres .fr-btn.icon { min-width: 44px; justify-content: center; }
+    .page-fullres .fr-select { min-height: 44px; }
+    .page-fullres .fr-icon { min-width: 44px; }
 }

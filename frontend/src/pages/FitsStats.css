@@ -138,6 +138,85 @@
     color: var(--color-text-primary);
 }
 
+/* Top Objects (moved from Home) */
+.page-fits-stats .top-object-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius);
+    text-decoration: none;
+    transition: background-color var(--transition-fast);
+}
+
+@media (hover: hover) {
+    .page-fits-stats .top-object-item:hover {
+        background: var(--color-surface-elevated);
+    }
+}
+
+.page-fits-stats .object-rank {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    color: var(--color-text-muted);
+    background: var(--color-surface-elevated);
+    border-radius: var(--border-radius-full);
+}
+
+.page-fits-stats .top-object-item:nth-child(1) .object-rank {
+    background: linear-gradient(135deg, #ffd700, #b8860b);
+    color: #1a1a1a;
+}
+
+.page-fits-stats .top-object-item:nth-child(2) .object-rank {
+    background: linear-gradient(135deg, #c0c0c0, #808080);
+    color: #1a1a1a;
+}
+
+.page-fits-stats .top-object-item:nth-child(3) .object-rank {
+    background: linear-gradient(135deg, #cd7f32, #8b4513);
+    color: #1a1a1a;
+}
+
+.page-fits-stats .object-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.page-fits-stats .object-designation {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.page-fits-stats .object-name {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.page-fits-stats .object-stats {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.page-fits-stats .object-count {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.page-fits-stats .object-exposure {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
 /* Loading State */
 .page-fits-stats .loading-container {
     display: flex;
