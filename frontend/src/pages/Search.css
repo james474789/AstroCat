@@ -148,22 +148,6 @@
     border-radius: var(--border-radius-lg);
 }
 
-/* Pagination */
-.page-search .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: var(--spacing-lg);
-    margin-top: var(--spacing-xl);
-    padding-top: var(--spacing-lg);
-    border-top: 1px solid var(--color-border);
-}
-
-.page-search .pagination-info {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-}
-
 /* Responsive */
 @media (max-width: 1024px) {
     .page-search .filters-sidebar {
@@ -239,10 +223,6 @@
         position: fixed;
     }
 
-    .page-search .pagination {
-        flex-wrap: wrap;
-        justify-content: center;
-    }
 }
 
 /* Tablets in portrait (and 1024px landscape): a slide-over drawer instead of a full-screen sheet,
@@ -372,20 +352,6 @@
     .page-search .search-results .image-badge {
         padding: 1px 5px;
         font-size: 10px;
-    }
-
-    .page-search .pagination {
-        gap: var(--spacing-sm);
-    }
-
-    .page-search .pagination .pagination-btn {
-        flex: 1;
-    }
-
-    .page-search .pagination-info {
-        order: -1;
-        flex: 1 1 100%;
-        text-align: center;
     }
 }
 

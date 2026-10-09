@@ -176,7 +176,7 @@ a {
 .link {
   color: var(--color-primary);
   text-decoration: none;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 
 @media (hover: hover) {
@@ -200,7 +200,7 @@ a {
   border: 1px solid transparent;
   border-radius: var(--border-radius);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
   text-decoration: none;
 }
 
@@ -272,7 +272,7 @@ a {
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
   outline: none;
-  transition: all var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .input:focus {
@@ -306,7 +306,7 @@ a {
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
   overflow: hidden;
-  transition: all var(--transition-base);
+  transition: border-color var(--transition-base);
 }
 
 @media (hover: hover) {
@@ -617,7 +617,7 @@ a {
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 @media (hover: hover) {
@@ -676,7 +676,7 @@ a {
 .page-enter-active {
   opacity: 1;
   transform: translateY(0);
-  transition: all var(--transition-base);
+  transition: opacity var(--transition-base), transform var(--transition-base);
 }
 
 /* ==========================================================================
@@ -718,7 +718,6 @@ button, a, .btn, .nav-item {
   }
   .tab,
   .filter-chip,
-  .pagination .btn,
   .sidebar-toggle {
     min-height: 44px;
   }
@@ -747,5 +746,32 @@ button, a, .btn, .nav-item {
 
   .recharts-legend-wrapper {
     font-size: 11px;
+  }
+}
+
+
+/* Accessibility: one visible keyboard focus ring for everything focusable */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Inputs that draw their own focus ring (border + glow) keep it instead of the outline */
+.input:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Spinners signal progress; slow them down instead of freezing them */
+  .spinner, .icon-spin {
+    animation-duration: 2.5s !important;
+    animation-iteration-count: infinite !important;
   }
 }

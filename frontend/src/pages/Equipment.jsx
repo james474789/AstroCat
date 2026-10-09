@@ -1039,7 +1039,9 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
         <div className="sites-tab">
             <div className="equip-list">
                 {sites.map((s) => (
-                    <div key={s.id} className={`equip-card site-card${s.id === effectiveSiteId ? ' selected' : ''}`} onClick={() => setSelectedSiteId(s.id)}>
+                    <div key={s.id} className={`equip-card site-card${s.id === effectiveSiteId ? ' selected' : ''}`} role="button" tabIndex={0} aria-pressed={s.id === effectiveSiteId}
+                        onClick={() => setSelectedSiteId(s.id)}
+                        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setSelectedSiteId(s.id); } }}>
                         <div className="rig-card-header">
                             <span className="rig-name">{s.name}{s.is_default && <span className="badge badge-primary" style={{ marginLeft: '0.5rem' }}>Default</span>}</span>
                         </div>

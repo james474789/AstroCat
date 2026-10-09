@@ -39,7 +39,7 @@ export default function FieldOverlayPopover({ group, x, y, onClose }) {
                     {group.object_name || group.file_name} · {group.count} images
                     {group.shape === 'circle' && <span className="fo-pop-note"> (rotation unknown)</span>}
                 </span>
-                <button className="fo-pop-close" onClick={onClose} title="Close"><X size={14} /></button>
+                <button className="fo-pop-close" onClick={onClose} title="Close" aria-label="Close"><X size={14} /></button>
             </div>
             <ul className="fo-pop-list">
                 {group.members.map((m) => (

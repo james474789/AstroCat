@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchMessierCatalog, fetchNGCCatalog, fetchCaldwellCatalog, fetchNamedStarCatalog, fetchSh2Catalog, fetchTargetKeys, formatRA, formatDec } from '../api/client';
 import { Orbit, Sparkles, Star, Cloud, CloudFog, CircleDot, Circle, Zap, Search, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
-import { Button, Tabs, TabPanel, PageHeader, EmptyState, Spinner } from '../components/ui';
+import { Button, Tabs, TabPanel, PageHeader, EmptyState, Spinner, Pagination } from '../components/ui';
 import './Catalogs.css';
 
 // Mirrors the backend's app.services.targets.normalize_designation just
@@ -306,31 +306,13 @@ export default function Catalogs() {
                     </div>
 
                     {/* Pagination */}
-                    {totalPages > 1 && (
-                        <div className="pagination">
-                            <Button
-                                variant="tinted"
-                                size="sm"
-                                disabled={currentPage === 1}
-                                onClick={() => setCurrentPage(p => p - 1)}
-                            >
-                                Previous
-                            </Button>
-
-                            <div className="pagination-info">
-                                Page {currentPage} of {totalPages}
-                            </div>
-
-                            <Button
-                                variant="tinted"
-                                size="sm"
-                                disabled={currentPage === totalPages}
-                                onClick={() => setCurrentPage(p => p + 1)}
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    )}
+                    <Pagination
+                        page={currentPage}
+                        totalPages={totalPages}
+                        totalItems={totalResults}
+                        itemLabel="objects"
+                        onPageChange={setCurrentPage}
+                    />
                 </>
             )}
 

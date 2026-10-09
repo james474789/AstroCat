@@ -1,5 +1,14 @@
 # U1: UI/UX design system and information architecture (handover)
 
+## P2 status (2026-10-09): done, committed, deployed as VERSION 20261009.07. U1 is complete.
+
+- **Focus:** global `:focus-visible` ring (2px `--color-primary`, offset 2px) in `index.css`; `.input` keeps its own border+glow ring. Nine other `outline: none` rules remain on bespoke inputs that draw their own focus styling (SpatialSearchInput, Inspector, FITSExplore, FitsStats, Login, Search, Settings); audit them if keyboard focus looks missing.
+- **Motion:** `@media (prefers-reduced-motion: reduce)` disables animations/transitions app-wide; spinners slow to 2.5s instead of stopping.
+- **`transition: all`:** none left in the codebase.
+- **Accessibility:** aria-labels on remaining icon-only buttons (sidebar pin, overlay/seen-in close); clickable cards/rows made keyboard-operable (Admin job-queue card, Equipment site cards, Night report rows, FITSExplore rows); FolderTree context menu is real `<button role="menuitem">`s.
+- **Pagination:** new `ui/Pagination` (numbered, windowed, jump field >7 pages) on Search (grid + list), Catalogs, Targets, FITSExplore.
+- **Not done / by design:** dismiss-only backdrops (BottomSheet, Inspector scrim, SeenIn, filters) keep `onClick` since Esc/close buttons exist; label association was only audited on Search; the Inspector sheet still has no focus trap; selection model/Undo for bulk edits remain descoped.
+
 ## P1b status (2026-10-09): done, committed, deployed as VERSION 20261009.06
 
 **Owner decisions applied:** bulk edits stay filter-based (no selection model, no Undo, no backend change); Metadata Search merged into Images with list at 100/page; nav renamed (Home, Images) and grouped; Home loses Monthly Activity/Top Objects (now on Statistics) and the fake 57% bar.
@@ -42,7 +51,7 @@ Base was `c3cf52c` (the sky-overlay edits mentioned below were already committed
 - Judgement calls to review: `→` range separators and link arrows became `ArrowRight`; Catalogs object-type icon mapping; StarQualityAdmin warning colour moved `#fbbf24` to `--color-warning`; rating `<option>` text lost the star glyph.
 
 
-Status: **Proposed, not started** · Written: 2026-10-09 · Author: Claude (design review session) · For: the agent or developer picking up U1
+Status: **Complete (P0, P1a, P1b, P2 shipped)** · Written: 2026-10-09 · Author: Claude (design review session) · For: the agent or developer picking up U1
 
 Base: `main` at **`f8c41ab`**. The working tree also has uncommitted, unrelated A1 sky-overlay edits (`VERSION`, `backend/app/api/images.py`, `backend/app/services/sky_overlay.py`, `backend/tests/test_sky_overlay.py`, `frontend/src/hooks/useSkyOverlay.js`). Don't fold those into U1 commits.
 

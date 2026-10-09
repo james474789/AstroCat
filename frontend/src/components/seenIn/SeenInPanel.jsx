@@ -94,7 +94,7 @@ export default function SeenInPanel({ seenIn, onClose }) {
                             </button>
                         ))}
                     </div>
-                    <button className="seen-in-close" onClick={onClose} title="Close"><X size={16} /></button>
+                    <button className="seen-in-close" onClick={onClose} title="Close" aria-label="Close"><X size={16} /></button>
                 </header>
                 <div className="seen-in-body">
                     {isLoading && <div className="seen-in-note">Searching…</div>}

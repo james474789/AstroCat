@@ -20,7 +20,7 @@ import FolderTree from '../components/layout/FolderTree';
 import ActionMenu from '../components/layout/ActionMenu';
 import { useQualityUnits } from '../context/QualityUnitsContext';
 import { useIsMobile } from '../hooks/useMediaQuery';
-import { Button, Dialog, EmptyState, PageHeader, SegmentedControl, Skeleton, useToast } from '../components/ui';
+import { Button, Dialog, EmptyState, PageHeader, Pagination, SegmentedControl, Skeleton, useToast } from '../components/ui';
 import './Search.css';
 
 const PAGE_SIZE = 100;
@@ -1301,39 +1301,18 @@ export default function Search() {
                     )}
 
                     {/* Pagination */}
-                    {totalPages > 1 && (
-                        <div className="pagination">
-                            <Button
-                                className="pagination-btn"
-                                disabled={currentPage === 1}
-                                onClick={() => {
-                                    const params = new URLSearchParams(searchParams);
-                                    params.set('page', (currentPage - 1).toString());
-                                    setSearchParams(params);
-                                    window.scrollTo(0, 0);
-                                }}
-                            >
-                                Previous
-                            </Button>
-
-                            <div className="pagination-info">
-                                Page {currentPage} of {totalPages}
-                            </div>
-
-                            <Button
-                                className="pagination-btn"
-                                disabled={currentPage === totalPages}
-                                onClick={() => {
-                                    const params = new URLSearchParams(searchParams);
-                                    params.set('page', (currentPage + 1).toString());
-                                    setSearchParams(params);
-                                    window.scrollTo(0, 0);
-                                }}
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    )}
+                    <Pagination
+                        page={currentPage}
+                        totalPages={totalPages}
+                        totalItems={totalCount}
+                        itemLabel="images"
+                        onPageChange={(n) => {
+                            const params = new URLSearchParams(searchParams);
+                            params.set('page', n.toString());
+                            setSearchParams(params);
+                            window.scrollTo(0, 0);
+                        }}
+                    />
                 </div>
             </div>
 

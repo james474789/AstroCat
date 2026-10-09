@@ -247,6 +247,7 @@ export default function FolderTree({ selectedPath, onSelect, showContextMenu = t
             {contextMenu && (
                 <div
                     className="folder-context-menu"
+                    role="menu"
                     style={{
                         position: 'fixed',
                         top: contextMenu.y,
@@ -255,18 +256,18 @@ export default function FolderTree({ selectedPath, onSelect, showContextMenu = t
                     }}
                     onClick={e => e.stopPropagation()}
                 >
-                    <div className="menu-item" onClick={() => handleAction('thumbnails')}>
+                    <button type="button" role="menuitem" className="menu-item" onClick={() => handleAction('thumbnails')}>
                         <ImageIcon size={14} /> Update thumbnails
-                    </div>
-                    <div className="menu-item" onClick={() => handleAction('metadata')}>
+                    </button>
+                    <button type="button" role="menuitem" className="menu-item" onClick={() => handleAction('metadata')}>
                         <FileText size={14} /> Pull Metadata from files
-                    </div>
-                    <div className="menu-item" onClick={() => handleAction('scan')}>
+                    </button>
+                    <button type="button" role="menuitem" className="menu-item" onClick={() => handleAction('scan')}>
                         <RefreshCw size={14} /> Rescan folder
-                    </div>
-                    <div className="menu-item" onClick={() => handleAction('astrometry')}>
+                    </button>
+                    <button type="button" role="menuitem" className="menu-item" onClick={() => handleAction('astrometry')}>
                         <TelescopeIcon size={14} /> Bulk Astrometry
-                    </div>
+                    </button>
                 </div>
             )}
         </div>

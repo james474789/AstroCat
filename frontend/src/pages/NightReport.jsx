@@ -217,7 +217,9 @@ export default function NightReport() {
                                 </thead>
                                 <tbody>
                                     {rows.map((p) => (
-                                        <tr key={p.image_id} className={p.flag ? 'flagged' : ''} onClick={() => navigate(`/images/${p.image_id}`)}>
+                                        <tr key={p.image_id} className={p.flag ? 'flagged' : ''} tabIndex={0}
+                                            onClick={() => navigate(`/images/${p.image_id}`)}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/images/${p.image_id}`); }}>
                                             <td>{p.t ? fmt.format(new Date(`${p.t}Z`)) : '—'}</td>
                                             <td>{p.target_key || <span className="text-muted">—</span>}</td>
                                             <td>{p.filter}</td>

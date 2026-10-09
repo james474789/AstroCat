@@ -173,22 +173,6 @@
   }
 }
 
-/* Pagination */
-.page-catalogs .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: var(--spacing-lg);
-    margin-top: var(--spacing-xl);
-    padding-top: var(--spacing-lg);
-    border-top: 1px solid var(--color-border);
-}
-
-.page-catalogs .pagination-info {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-}
-
 /* Loading State */
 .page-catalogs .loading-state {
     display: flex;

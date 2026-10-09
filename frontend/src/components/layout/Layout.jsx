@@ -121,6 +121,8 @@ export default function Layout({ children }) {
                         className="sidebar-toggle"
                         onClick={togglePin}
                         title={isPinned ? "Enable Auto-hide" : "Pin Sidebar"}
+                        aria-label="Pin sidebar"
+                        aria-pressed={isPinned}
                     >
                         <PinIcon pinned={isPinned} />
                     </button>

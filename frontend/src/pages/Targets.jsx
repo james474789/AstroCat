@@ -6,7 +6,7 @@ import FilterSection from '../components/layout/FilterSection';
 import FolderTree from '../components/layout/FolderTree';
 import QualityValue from '../components/quality/QualityValue';
 import { filterColor } from '../utils/filterColors';
-import { Button, PageHeader, EmptyState, Spinner } from '../components/ui';
+import { Button, PageHeader, EmptyState, Spinner, Pagination } from '../components/ui';
 import './Targets.css';
 
 function FilterBar({ filters, totalSeconds }) {
@@ -289,17 +289,13 @@ export default function Targets() {
                         </div>
                     )}
 
-                    {totalPages > 1 && (
-                        <div className="pagination">
-                            <Button variant="tinted" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-                                Previous
-                            </Button>
-                            <div className="pagination-info">Page {page} of {totalPages}</div>
-                            <Button variant="tinted" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
-                                Next
-                            </Button>
-                        </div>
-                    )}
+                    <Pagination
+                        page={page}
+                        totalPages={totalPages}
+                        totalItems={total}
+                        itemLabel="targets"
+                        onPageChange={setPage}
+                    />
                 </div>
             </div>
         </div>

@@ -715,7 +715,13 @@ function Admin() {
                                 </div>
 
                                 {/* 2. Job Queue */}
-                                <div className={`pipeline-card clickable ${queueClass}`} onClick={handleOpenQueueModal}>
+                                <div
+                                    className={`pipeline-card clickable ${queueClass}`}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={handleOpenQueueModal}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenQueueModal(); } }}
+                                >
                                     <div className="card-icon"><Library size={32} /></div>
                                     <div className="card-title">Job Queue</div>
                                     <div className="card-value text-orange-400">

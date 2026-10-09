@@ -43,6 +43,11 @@ Toasts sit under an open Dialog (the dialog is in the top layer and makes the pa
 
 **EmptyState** `icon`, `title`, `description`, `action`, `className`. **Spinner** `size` (px, 24), `label` ('Loading', screen-reader only), `className`. **Skeleton** `width`, `height`, `radius` (number = px, or any CSS length), `lines`, `className`; decorative, so set `aria-busy` on the loading container.
 
+**Pagination** `page` (1-based), `totalPages`, `onPageChange(n)`, `totalItems` (adds "· 48,102 images" to the summary), `itemLabel` (plural noun for the summary, default `items`), `disabled`, `className`, `aria-label` (default `Pagination`). Renders nothing when `totalPages <= 1`. A `nav` landmark with Previous/Next buttons, numbered buttons (`aria-current="page"` on the current one; first, last and current +/- 1, other runs collapse to an `aria-hidden` ellipsis), and a "Go to page" field plus Go button when there are more than 7 pages (clamped to 1..totalPages, invalid input ignored). Under 640px only the current number shows. Do the scroll-to-top / URL update in `onPageChange`.
+```jsx
+<Pagination page={page} totalPages={totalPages} totalItems={total} itemLabel="images" onPageChange={setPage} />
+```
+
 ## Migration map
 
 | Old | New |
@@ -61,6 +66,7 @@ Toasts sit under an open Dialog (the dialog is in the top layer and makes the pa
 | `.empty-state*` | `<EmptyState>` |
 | `.spinner`, `<Loader2 className="icon-spin">` | `<Spinner>` (inside buttons use `loading`) |
 | `.skeleton` | `<Skeleton>` |
+| `.pagination/.pagination-info/.pagination-btn` (Previous/Next only) | `<Pagination>` |
 | page `@keyframes spin/fadeIn/slideUp` copies | `ui-spin`, `ui-fade-in`, `ui-slide-up` |
 
 ## Page CSS convention

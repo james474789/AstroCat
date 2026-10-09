@@ -130,6 +130,11 @@
     color: var(--text-primary);
     transition: background-color 0.15s;
     font-size: 0.9rem;
+    width: 100%;
+    background: none;
+    border: none;
+    font-family: inherit;
+    text-align: left;
 }
 
 @media (hover: hover) {

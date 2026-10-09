@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
-    Search, Filter, Info, ChevronLeft, ChevronRight, AlertTriangle
+    Search, Filter, Info, AlertTriangle
 } from 'lucide-react';
 import { API_BASE_URL, fetchImage } from '../api/client';
-import { Button, Dialog, EmptyState, PageHeader, Spinner } from '../components/ui';
+import { Button, Dialog, EmptyState, PageHeader, Pagination, Spinner } from '../components/ui';
 import './FITSExplore.css';
 
 const FITSExplore = () => {
@@ -124,7 +124,19 @@ const FITSExplore = () => {
                                 </thead>
                                 <tbody>
                                     {data?.items.map((img) => (
-                                        <tr key={img.id} onClick={() => setSelectedImage(img)} className="clickable-row">
+                                        <tr
+                                            key={img.id}
+                                            onClick={() => setSelectedImage(img)}
+                                            onKeyDown={(e) => {
+                                                if (e.target !== e.currentTarget) return;
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    setSelectedImage(img);
+                                                }
+                                            }}
+                                            tabIndex={0}
+                                            className="clickable-row"
+                                        >
                                             <td className="font-medium">{img.file_name}</td>
                                             <td>
                                                 {img.capture_date ? new Date(img.capture_date).toLocaleDateString() : '-'}
@@ -159,25 +171,13 @@ const FITSExplore = () => {
                         </div>
 
                         {/* Pagination */}
-                        <div className="pagination">
-                            <Button
-                                variant="tinted"
-                                iconOnly
-                                icon={<ChevronLeft size={20} />}
-                                aria-label="Previous page"
-                                disabled={page === 1}
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                            />
-                            <span>Page {page} of {data?.total_pages || 1}</span>
-                            <Button
-                                variant="tinted"
-                                iconOnly
-                                icon={<ChevronRight size={20} />}
-                                aria-label="Next page"
-                                disabled={page >= (data?.total_pages || 1)}
-                                onClick={() => setPage(p => p + 1)}
-                            />
-                        </div>
+                        <Pagination
+                            page={page}
+                            totalPages={data?.total_pages || 1}
+                            totalItems={data?.total}
+                            itemLabel="headers"
+                            onPageChange={setPage}
+                        />
                     </>
                 )}
             </div>

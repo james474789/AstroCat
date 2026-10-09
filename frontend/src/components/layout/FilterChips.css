@@ -76,7 +76,7 @@
     color: white;
     cursor: pointer;
     font-size: 0.7em;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
     flex-shrink: 0;
 }
 
