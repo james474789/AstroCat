@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchTargets, fetchUnassignedTargetsSummary, formatHours, formatDate, API_BASE_URL } from '../api/client';
-import { FolderOpen, X, ArrowUp, ArrowDown } from 'lucide-react';
+import { FolderOpen, X, ArrowUp, ArrowDown, Target } from 'lucide-react';
 import FilterSection from '../components/layout/FilterSection';
 import FolderTree from '../components/layout/FolderTree';
 import QualityValue from '../components/quality/QualityValue';
 import { filterColor } from '../utils/filterColors';
+import { Button, PageHeader, EmptyState, Spinner } from '../components/ui';
 import './Targets.css';
 
 function FilterBar({ filters, totalSeconds }) {
@@ -116,13 +117,8 @@ export default function Targets() {
     }
 
     return (
-        <div className="targets-page">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Targets</h1>
-                    <p className="page-subtitle">Integration time per target, by filter</p>
-                </div>
-            </div>
+        <div className="page-targets">
+            <PageHeader title="Targets" subtitle="Integration time per target, by filter" />
 
             <div className="targets-layout">
                 <div className="targets-sidebar">
@@ -188,14 +184,13 @@ export default function Targets() {
                             <option value="fwhm">Sort: Sharpest (FWHM)</option>
                         </select>
 
-                        <button
-                            className="btn btn-icon"
+                        <Button
+                            iconOnly
+                            variant="tinted"
+                            icon={order === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
                             onClick={() => setOrder(order === 'asc' ? 'desc' : 'asc')}
-                            title={order === 'asc' ? 'Ascending' : 'Descending'}
                             aria-label={order === 'asc' ? 'Sort ascending' : 'Sort descending'}
-                        >
-                            {order === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
-                        </button>
+                        />
 
                         <div className="catalog-chip-group">
                             {['', 'MESSIER', 'NGC', 'IC', 'CALDWELL', 'SH2', 'OTHER'].map((c) => (
@@ -231,17 +226,15 @@ export default function Targets() {
 
                     {loading ? (
                         <div className="loading-state">
-                            <div className="spinner" />
+                            <Spinner size={32} label="Loading targets" />
                             <p>Loading targets...</p>
                         </div>
                     ) : items.length === 0 ? (
-                        <div className="empty-state">
-                            <div className="empty-state-icon">&#127919;</div>
-                            <h3 className="empty-state-title">No targets found</h3>
-                            <p className="empty-state-text">
-                                {path ? 'No targets have images in this folder.' : 'Try adjusting your filters, or run the target backfill.'}
-                            </p>
-                        </div>
+                        <EmptyState
+                            icon={<Target size={48} strokeWidth={1.5} />}
+                            title="No targets found"
+                            description={path ? 'No targets have images in this folder.' : 'Try adjusting your filters, or run the target backfill.'}
+                        />
                     ) : (
                         <div className="targets-list">
                             {items.map((t) => (
@@ -298,13 +291,13 @@ export default function Targets() {
 
                     {totalPages > 1 && (
                         <div className="pagination">
-                            <button className="btn btn-secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+                            <Button variant="tinted" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
                                 Previous
-                            </button>
+                            </Button>
                             <div className="pagination-info">Page {page} of {totalPages}</div>
-                            <button className="btn btn-secondary" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
+                            <Button variant="tinted" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>
                                 Next
-                            </button>
+                            </Button>
                         </div>
                     )}
                 </div>

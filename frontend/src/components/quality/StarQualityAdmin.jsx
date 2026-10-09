@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Star } from 'lucide-react';
 import { fetchStarMetricsStatus, requestStarMetricsRemeasure, updateSettings } from '../../api/client';
+import { useConfirm, useToast } from '../ui';
 import './Quality.css';
 
 // Q1 Admin section: star-quality settings, backfill progress, re-measure actions
@@ -33,6 +34,8 @@ function SettingRow({ title, description, children, first }) {
 }
 
 export default function StarQualityAdmin({ systemSettings, onSettingsChange }) {
+    const confirm = useConfirm();
+    const toast = useToast();
     const [status, setStatus] = useState(null);
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState('');
@@ -51,14 +54,14 @@ export default function StarQualityAdmin({ systemSettings, onSettingsChange }) {
             onSettingsChange(await updateSettings({ ...systemSettings, ...patch }));
             load();
         } catch (err) {
-            alert('Failed to update settings: ' + err.message);
+            toast.error('Failed to update settings: ' + err.message);
         } finally {
             setSaving(false);
         }
     }
 
-    async function remeasure(scope, confirmText) {
-        if (confirmText && !confirm(confirmText)) return;
+    async function remeasure(scope, confirmOptions) {
+        if (confirmOptions && !(await confirm(confirmOptions))) return;
         try {
             const res = await requestStarMetricsRemeasure(scope);
             setMessage(`${res.queued_for_remeasure.toLocaleString()} images will be re-measured by the background sweep.`);
@@ -131,7 +134,11 @@ export default function StarQualityAdmin({ systemSettings, onSettingsChange }) {
                         <button type="button" className="btn btn-secondary" disabled={!status?.counts.no_stars}
                             onClick={() => remeasure('no_stars')}>Re-check “no stars”</button>
                         <button type="button" className="btn btn-secondary" disabled={!status?.done}
-                            onClick={() => remeasure('all', 'Re-measure every image? Current values stay visible until each one is redone. This re-reads the whole library from storage.')}>
+                            onClick={() => remeasure('all', {
+                                title: 'Re-measure every image?',
+                                description: 'Current values stay visible until each one is redone. This re-reads the whole library from storage.',
+                                confirmLabel: `Re-measure ${status.done.toLocaleString()} images`,
+                            })}>
                             Re-measure all
                         </button>
                     </div>

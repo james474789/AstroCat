@@ -1,29 +1,13 @@
 /* FITS Statistics Page Styles */
 
-.fits-stats-page {
+.page-fits-stats {
     padding: 2rem;
     color: var(--color-text-primary);
     min-height: 100vh;
 }
 
-.stats-header {
-    margin-bottom: 2rem;
-}
-
-.stats-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    color: var(--color-text-primary);
-}
-
-.stats-subtitle {
-    color: var(--color-text-secondary);
-    font-size: 1rem;
-}
-
 /* Filters Section */
-.stats-filters {
+.page-fits-stats .stats-filters {
     display: flex;
     gap: 1rem;
     margin-bottom: 2rem;
@@ -36,20 +20,20 @@
     align-items: center;
 }
 
-.filter-group {
+.page-fits-stats .filter-group {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
 }
 
-.filter-label {
+.page-fits-stats .filter-label {
     font-size: 0.8rem;
     color: var(--color-text-secondary);
     font-weight: 500;
 }
 
-.filter-select,
-.filter-input {
+.page-fits-stats .filter-select,
+.page-fits-stats .filter-input {
     background: rgba(15, 23, 42, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: var(--color-text-primary);
@@ -60,20 +44,20 @@
     font-family: inherit;
 }
 
-.filter-select:focus,
-.filter-input:focus {
+.page-fits-stats .filter-select:focus,
+.page-fits-stats .filter-input:focus {
     border-color: var(--color-primary);
 }
 
 /* Overview Cards */
-.stats-overview {
+.page-fits-stats .stats-overview {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 1.5rem;
     margin-bottom: 2rem;
 }
 
-.stat-card {
+.page-fits-stats .stat-card {
     background: rgba(30, 41, 59, 0.4);
     backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.05);
@@ -81,16 +65,16 @@
     padding: 1.5rem;
     position: relative;
     overflow: hidden;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: border-color 0.2s ease;
 }
 
 @media (hover: hover) {
-  .stat-card:hover {
+  .page-fits-stats .stat-card:hover {
       border-color: var(--color-border-light);
   }
 }
 
-.stat-card.highlight::before {
+.page-fits-stats .stat-card.highlight::before {
     content: '';
     position: absolute;
     top: 0;
@@ -100,19 +84,19 @@
     background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
 }
 
-.stat-value {
+.page-fits-stats .stat-value {
     font-size: 2rem;
     font-weight: 700;
     color: var(--color-text-primary);
     margin-bottom: 0.25rem;
 }
 
-.stat-label {
+.page-fits-stats .stat-label {
     color: var(--color-text-secondary);
     font-size: 0.9rem;
 }
 
-.stat-icon {
+.page-fits-stats .stat-icon {
     position: absolute;
     top: 1.5rem;
     right: 1.5rem;
@@ -121,14 +105,14 @@
 }
 
 /* Charts Grid */
-.charts-grid {
+.page-fits-stats .charts-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 1.5rem;
     margin-bottom: 2rem;
 }
 
-.chart-card {
+.page-fits-stats .chart-card {
     background: rgba(30, 41, 59, 0.4);
     backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.05);
@@ -137,25 +121,25 @@
     min-height: 380px;
 }
 
-.chart-card.full-width {
+.page-fits-stats .chart-card.full-width {
     grid-column: 1 / -1;
 }
 
-.chart-header {
+.page-fits-stats .chart-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1.5rem;
 }
 
-.chart-title {
+.page-fits-stats .chart-title {
     font-size: 1.1rem;
     font-weight: 600;
     color: var(--color-text-primary);
 }
 
 /* Loading State */
-.loading-container {
+.page-fits-stats .loading-container {
     display: flex;
     justify-content: center;
     align-items: center;
@@ -164,40 +148,25 @@
     gap: 1rem;
 }
 
-.spinner {
-    width: 40px;
-    height: 40px;
-    border: 3px solid rgba(91, 141, 238, 0.3);
-    border-radius: 50%;
-    border-top-color: var(--color-primary);
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
 /* Responsive */
 @media (max-width: 1024px) {
-    .charts-grid {
+    .page-fits-stats .charts-grid {
         grid-template-columns: 1fr;
     }
 }
 
 @media (max-width: 640px) {
-    .fits-stats-page {
+    .page-fits-stats {
         padding: 1rem;
     }
 
-    .stats-filters {
+    .page-fits-stats .stats-filters {
         flex-direction: column;
         align-items: stretch;
     }
 
-    .filter-select,
-    .filter-input {
+    .page-fits-stats .filter-select,
+.page-fits-stats .filter-input {
         width: 100%;
     }
 }

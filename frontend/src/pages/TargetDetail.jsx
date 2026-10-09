@@ -13,7 +13,8 @@ import QualityValue from '../components/quality/QualityValue';
 import { filterColor } from '../utils/filterColors';
 import SessionQualityChart from '../components/quality/SessionQualityChart';
 import SessionSummary from '../components/quality/SessionSummary';
-import './NightReport.css';
+import { Button, EmptyState, Spinner } from '../components/ui';
+import './NightReport.css'; // shared .night-table-head
 import { useQualityUnits } from '../context/QualityUnitsContext';
 import './TargetDetail.css';
 
@@ -156,7 +157,7 @@ export default function TargetDetail() {
     if (loading) {
         return (
             <div className="loading-state">
-                <div className="spinner" />
+                <Spinner />
                 <p>Loading target...</p>
             </div>
         );
@@ -164,16 +165,16 @@ export default function TargetDetail() {
 
     if (error || !target) {
         return (
-            <div className="empty-state">
-                <div className="empty-state-icon">&#128561;</div>
-                <h3 className="empty-state-title">{error || 'Target not found'}</h3>
-                <Link to="/targets" className="btn btn-secondary">Back to Targets</Link>
-            </div>
+            <EmptyState
+                icon={<span aria-hidden="true">&#128561;</span>}
+                title={error || 'Target not found'}
+                action={<Button to="/targets">Back to Targets</Button>}
+            />
         );
     }
 
     return (
-        <div className="target-detail-page">
+        <div className="page-target-detail">
             <nav className="breadcrumb">
                 <Link to="/targets">Targets</Link>
                 <span>/</span>
@@ -233,30 +234,26 @@ export default function TargetDetail() {
                     </div>
                     <div className="target-hero-actions">
                         {inPool && (
-                            <button
-                                type="button"
-                                className={`btn btn-secondary${pinned ? ' active' : ''}`}
+                            <Button
+                                className={pinned ? 'is-pinned' : ''}
                                 onClick={handleTogglePin}
                                 disabled={pinBusy}
                                 title={pinned ? 'Unpin from Tonight' : 'Pin for Tonight'}
+                                icon={pinned ? <PinOff size={16} /> : <Pin size={16} />}
                             >
-                                {pinned ? <PinOff size={16} /> : <Pin size={16} />}
                                 {pinned ? 'Pinned for Tonight' : 'Pin for Tonight'}
-                            </button>
+                            </Button>
                         )}
-                        <Link
+                        <Button
                             to={`/search?target_key=${encodeURIComponent(targetKey)}&frame_type=LIGHT`}
-                            className="btn btn-primary"
+                            variant="filled"
                         >
                             View all subs &rarr;
-                        </Link>
+                        </Button>
                         {target.catalog && (
-                            <Link
-                                to={`/catalogs/${target.catalog.catalog_type.toLowerCase()}/${encodeURIComponent(target.catalog.designation)}`}
-                                className="btn btn-secondary"
-                            >
+                            <Button to={`/catalogs/${target.catalog.catalog_type.toLowerCase()}/${encodeURIComponent(target.catalog.designation)}`}>
                                 Catalog entry
-                            </Link>
+                            </Button>
                         )}
                     </div>
                 </div>
@@ -320,9 +317,9 @@ export default function TargetDetail() {
                     </tbody>
                 </table>
                 <div className="target-goals-actions">
-                    <button className="btn btn-primary btn-sm" onClick={handleSaveGoals} disabled={savingGoals}>
+                    <Button variant="filled" size="sm" onClick={handleSaveGoals} loading={savingGoals}>
                         {savingGoals ? 'Saving...' : 'Save Goals'}
-                    </button>
+                    </Button>
                     {goalMessage && <span className="text-sm" style={{ marginLeft: '0.75rem' }}>{goalMessage}</span>}
                 </div>
             </section>
@@ -429,12 +426,12 @@ export default function TargetDetail() {
                     <div className="night-table-head">
                         <h3 className="section-title">Night of {selectedNight}</h3>
                         <span style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <Link className="btn btn-secondary btn-sm" to={`/nights/${selectedNight}?target=${encodeURIComponent(targetKey)}`}>Night report</Link>
-                            <Link className="btn btn-secondary btn-sm" to={`/nights/${selectedNight}`}>Whole night</Link>
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedNight(null)}>Close</button>
+                            <Button size="sm" to={`/nights/${selectedNight}?target=${encodeURIComponent(targetKey)}`}>Night report</Button>
+                            <Button size="sm" to={`/nights/${selectedNight}`}>Whole night</Button>
+                            <Button variant="plain" size="sm" onClick={() => setSelectedNight(null)}>Close</Button>
                         </span>
                     </div>
-                    {nightTimeline.loading && !nightTimeline.data && <div className="loading-state"><div className="spinner" /></div>}
+                    {nightTimeline.loading && !nightTimeline.data && <div className="loading-state"><Spinner /></div>}
                     {nightTimeline.error && <p className="text-muted">{nightTimeline.error}</p>}
                     {nightTimeline.data && (
                         <div style={{ opacity: nightTimeline.loading ? 0.5 : 1 }}>

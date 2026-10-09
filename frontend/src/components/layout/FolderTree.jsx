@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Loader2, Folder, FolderOpen, Home, MoreHorizontal, Image as ImageIcon, FileText, RefreshCw } from 'lucide-react';
 import TelescopeIcon from '../icons/TelescopeIcon';
 import { fetchDirectoryListing, triggerBulkThumbnails, triggerBulkMetadata, triggerMountRescan, triggerFolderScan } from '../../api/client';
+import { useToast } from '../ui';
 import './FolderTree.css';
 
 // Robust path-prefix check to avoid partial matches (e.g. /data matching /data2)
@@ -85,7 +86,7 @@ function FolderNode({ item, level, selectedPath, onSelect, onContextMenu, showMe
                 >
                     {item.has_children ? (
                         <span className="toggle-icon">
-                            {loading ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} aria-hidden="true" /> : (isExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />)}
+                            {loading ? <Loader2 size={12} className="ui-spin" aria-hidden="true" /> : (isExpanded ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />)}
                         </span>
                     ) : <span className="toggle-spacer"></span>}
                 </div>
@@ -140,6 +141,7 @@ export default function FolderTree({ selectedPath, onSelect, showContextMenu = t
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [contextMenu, setContextMenu] = useState(null); // { x, y, path }
+    const toast = useToast();
 
     useEffect(() => {
         loadRoots();
@@ -203,13 +205,13 @@ export default function FolderTree({ selectedPath, onSelect, showContextMenu = t
                 if (result?.error) {
                     throw new Error(result.error);
                 }
-                alert(`Folder scan started for ${path}${result?.task_id ? ` (task ${result.task_id})` : ''}`);
+                toast.success(`Folder scan started for ${path}${result?.task_id ? ` (task ${result.task_id})` : ''}`);
             } else if (action === 'astrometry') {
                 await triggerMountRescan(path, true); // true to force rescan
             }
         } catch (err) {
             console.error(`Failed to trigger ${action}:`, err);
-            alert(`Failed: ${err.message}`);
+            toast.error(`Failed: ${err.message}`);
         }
     };
 

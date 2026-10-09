@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Camera, Clock, Target, Star, Moon, Circle, Square, Contrast } from 'lucide-react';
+import { Camera, Clock, Target, Star, Moon, Circle, Square, Contrast, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { fetchStatsOverview, fetchImages, fetchStatsByMonth, fetchTopObjects, fetchRecommendations } from '../api/client';
 import { CHART_PRIMARY, CHART_AXIS_MUTED, CHART_TOOLTIP_DASHBOARD } from '../utils/chartColors';
 import ImageCard from '../components/images/ImageCard';
 import LastNightTile from '../components/quality/LastNightTile';
+import { Button, EmptyState, PageHeader, Spinner } from '../components/ui';
 import './Dashboard.css';
 
 // Binding contract for the Tonight tile: docs/design/R2a-feedback-dashboard.md §7. The backend
@@ -111,7 +112,7 @@ function TonightTile() {
                 {context?.rig_mode === 'ALL_FALLBACK' && (
                     <p className="tonight-tile-hint text-muted text-sm">No rig mounted: showing the best rig per target.</p>
                 )}
-                <Link to="/tonight" className="btn btn-secondary btn-sm">Open Tonight →</Link>
+                <Button to="/tonight" size="sm">Open Tonight →</Button>
             </div>
         </div>
     );
@@ -123,47 +124,64 @@ export default function Dashboard() {
     const [monthlyData, setMonthlyData] = useState([]);
     const [topObjects, setTopObjects] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        async function loadDashboard() {
-            try {
-                const [statsData, imagesData, monthly, objects] = await Promise.all([
-                    fetchStatsOverview(),
-                    fetchImages({ page: 1, page_size: 6, sort_by: 'capture_date', sort_order: 'desc' }),
-                    fetchStatsByMonth(),
-                    fetchTopObjects(),
-                ]);
+    const loadDashboard = useCallback(async () => {
+        setLoading(true);
+        setLoadError(false);
+        try {
+            const [statsData, imagesData, monthly, objects] = await Promise.all([
+                fetchStatsOverview(),
+                fetchImages({ page: 1, page_size: 6, sort_by: 'capture_date', sort_order: 'desc' }),
+                fetchStatsByMonth(),
+                fetchTopObjects(),
+            ]);
 
-                setStats(statsData);
-                setRecentImages(imagesData.items);
-                setMonthlyData(monthly);
-                setTopObjects(objects);
-            } catch (error) {
-                console.error('Failed to load dashboard:', error);
-            } finally {
-                setLoading(false);
-            }
+            setStats(statsData);
+            setRecentImages(imagesData.items);
+            setMonthlyData(monthly);
+            setTopObjects(objects);
+        } catch (error) {
+            console.error('Failed to load dashboard:', error);
+            setLoadError(true);
+        } finally {
+            setLoading(false);
         }
-
-        loadDashboard();
     }, []);
+
+    useEffect(() => {
+        loadDashboard();
+    }, [loadDashboard]);
 
     if (loading) {
         return (
-            <div className="dashboard-loading">
-                <div className="spinner" />
-                <p>Loading dashboard...</p>
+            <div className="page-dashboard">
+                <div className="dashboard-loading">
+                    <Spinner size={32} />
+                    <p>Loading dashboard...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (loadError) {
+        return (
+            <div className="page-dashboard">
+                <PageHeader title="Dashboard" subtitle="Your astronomical image collection at a glance" />
+                <EmptyState
+                    icon={<AlertTriangle size={32} aria-hidden="true" />}
+                    title="Couldn't load the dashboard"
+                    description="The server didn't return your collection stats. Check that the backend is running, then try again."
+                    action={<Button variant="filled" onClick={loadDashboard}>Retry</Button>}
+                />
             </div>
         );
     }
 
     return (
-        <div className="dashboard">
-            <div className="page-header">
-                <h1 className="page-title">Dashboard</h1>
-                <p className="page-subtitle">Your astronomical image collection at a glance</p>
-            </div>
+        <div className="page-dashboard">
+            <PageHeader title="Dashboard" subtitle="Your astronomical image collection at a glance" />
 
             {/* Stats Grid */}
             <div className="stats-grid">
@@ -322,9 +340,7 @@ export default function Dashboard() {
             <div className="recent-images-section">
                 <div className="section-header">
                     <h3>Recent Images</h3>
-                    <Link to="/search" className="btn btn-secondary btn-sm">
-                        View All Images
-                    </Link>
+                    <Button to="/search" size="sm">View All Images</Button>
                 </div>
 
                 <div className="image-grid">

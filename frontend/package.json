@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "stylelint \"src/**/*.css\" && eslint .",
+    "lint": "stylelint \"src/**/*.css\" && npm run lint:scope && eslint .",
     "lint:css": "stylelint \"src/**/*.css\"",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint:scope": "node scripts/check-css-scope.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "latest",

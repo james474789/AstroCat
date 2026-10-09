@@ -487,6 +487,9 @@ a {
 .text-secondary { color: var(--color-text-secondary); }
 .text-primary { color: var(--color-primary); }
 .text-center { text-align: center; }
+.text-success { color: var(--color-success); }
+.text-error { color: var(--color-error); }
+.muted { color: var(--color-text-secondary); }
 .font-mono { font-family: var(--font-mono); }
 .font-bold { font-weight: 700; }
 
@@ -627,6 +630,17 @@ a {
 .tab.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
+}
+
+/* Centered loading placeholder */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  min-height: 200px;
+  color: var(--color-text-secondary);
 }
 
 /* Empty State */

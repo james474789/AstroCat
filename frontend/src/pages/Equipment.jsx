@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Camera as CameraIcon, Aperture, SlidersHorizontal, MapPin,
-    Plus, Pencil, Trash2, ChevronDown, ChevronRight, MoreVertical, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon, X,
+    Plus, Pencil, Trash2, ChevronDown, ChevronRight, MoreVertical, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon,
 } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -22,6 +22,9 @@ import {
     computePixelScale, computeFovDeg, computeFocalRatio,
     formatDateTime, formatHours,
 } from '../api/client';
+import {
+    Button, Dialog, EmptyState, PageHeader, Spinner, Tabs, TabPanel, useConfirm, useToast,
+} from '../components/ui';
 import './Equipment.css';
 import QualityValue from '../components/quality/QualityValue';
 
@@ -54,11 +57,11 @@ function browserTimezone() {
 }
 
 const TABS = [
-    { key: 'rigs', label: 'Rigs', icon: TelescopeIcon },
-    { key: 'cameras', label: 'Cameras', icon: CameraIcon },
-    { key: 'optics', label: 'Optics', icon: Aperture },
-    { key: 'filters', label: 'Filters', icon: SlidersHorizontal },
-    { key: 'sites', label: 'Sites', icon: MapPin },
+    { value: 'rigs', label: 'Rigs', icon: <TelescopeIcon size={16} /> },
+    { value: 'cameras', label: 'Cameras', icon: <CameraIcon size={16} /> },
+    { value: 'optics', label: 'Optics', icon: <Aperture size={16} /> },
+    { value: 'filters', label: 'Filters', icon: <SlidersHorizontal size={16} /> },
+    { value: 'sites', label: 'Sites', icon: <MapPin size={16} /> },
 ];
 
 function formatArcsec(v) {
@@ -118,29 +121,26 @@ function mergeHorizonSeries(learnedPoints, savedPoints) {
 
 // ============ Modal shell ============
 
-function ModalShell({ title, onClose, children, wide }) {
+// Thin wrapper around the shared Dialog. Dialogs are portalled to <body>, so their content is
+// styled from `.dlg-equipment` rather than the page scope.
+function ModalShell({ title, onClose, children, footer, wide }) {
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className={`modal-content equipment-modal${wide ? ' wide' : ''}`} onClick={(e) => e.stopPropagation()}>
-                <header className="modal-header">
-                    <h2>{title}</h2>
-                    <button className="close-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
-                </header>
-                <div className="modal-body">{children}</div>
-            </div>
-        </div>
+        <Dialog open onClose={onClose} title={title} size={wide ? 'lg' : 'md'} className="dlg-equipment" footer={footer}>
+            {children}
+        </Dialog>
     );
 }
 
-// ============ Toast (page-local, matches Admin.jsx pattern) ============
+// The single-form modals share one id so the footer's submit button (outside the <form>) can target it.
+const FORM_ID = 'equipment-form';
 
-function useToast() {
-    const [toast, setToast] = useState(null);
-    function showToast(message, type = 'info', durationMs = 4000) {
-        setToast({ message, type });
-        if (durationMs > 0) setTimeout(() => setToast(null), durationMs);
-    }
-    return [toast, showToast];
+function FormFooter({ onClose, saving }) {
+    return (
+        <>
+            <Button variant="plain" onClick={onClose}>Cancel</Button>
+            <Button variant="filled" type="submit" form={FORM_ID} loading={saving}>Save</Button>
+        </>
+    );
 }
 
 // ============ Rig row ============
@@ -191,11 +191,10 @@ function RigRow({ rig, isAdmin, mountLimit, expanded, onToggleExpand, onEdit, on
                     Active
                 </label>
                 <div className="rig-row-menu">
-                    <button className="btn btn-ghost btn-sm" onClick={() => setMenuOpen((o) => !o)}
+                    <Button variant="plain" size="sm" iconOnly icon={<MoreVertical size={16} />}
+                        onClick={() => setMenuOpen((o) => !o)}
                         onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
-                        aria-label="Rig actions" aria-haspopup="menu" aria-expanded={menuOpen}>
-                        <MoreVertical size={16} />
-                    </button>
+                        aria-label="Rig actions" aria-haspopup="menu" aria-expanded={menuOpen} />
                     {menuOpen && (
                         <div className="rig-row-menu-list" role="menu">
                             <button role="menuitem" onClick={() => onEdit(rig)} disabled={!isAdmin}><Pencil size={14} /> Edit</button>
@@ -341,8 +340,8 @@ function RigModal({ rig, cameras, optics, filters, onClose, onSave }) {
     }
 
     return (
-        <ModalShell title={rig ? 'Edit Rig' : 'Add Rig'} onClose={onClose}>
-            <form onSubmit={handleSubmit} className="equip-form">
+        <ModalShell title={rig ? 'Edit Rig' : 'Add Rig'} onClose={onClose} footer={<FormFooter onClose={onClose} saving={saving} />}>
+            <form id={FORM_ID} onSubmit={handleSubmit} className="equip-form">
                 {error && <div className="form-error">{error}</div>}
                 <label>Name
                     <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -417,10 +416,6 @@ function RigModal({ rig, cameras, optics, filters, onClose, onSave }) {
                     </div>
                 </div>
 
-                <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-                </div>
             </form>
         </ModalShell>
     );
@@ -469,8 +464,8 @@ function CameraModal({ camera, onClose, onSave }) {
     }
 
     return (
-        <ModalShell title={camera ? 'Edit Camera' : 'Add Camera'} onClose={onClose}>
-            <form onSubmit={handleSubmit} className="equip-form">
+        <ModalShell title={camera ? 'Edit Camera' : 'Add Camera'} onClose={onClose} footer={<FormFooter onClose={onClose} saving={saving} />}>
+            <form id={FORM_ID} onSubmit={handleSubmit} className="equip-form">
                 {error && <div className="form-error">{error}</div>}
                 <label>Name
                     <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -511,10 +506,6 @@ function CameraModal({ camera, onClose, onSave }) {
                 <label>Notes
                     <textarea className="input" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                 </label>
-                <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-                </div>
             </form>
         </ModalShell>
     );
@@ -555,8 +546,8 @@ function OpticModal({ optic, onClose, onSave }) {
     }
 
     return (
-        <ModalShell title={optic ? 'Edit Optic' : 'Add Optic'} onClose={onClose}>
-            <form onSubmit={handleSubmit} className="equip-form">
+        <ModalShell title={optic ? 'Edit Optic' : 'Add Optic'} onClose={onClose} footer={<FormFooter onClose={onClose} saving={saving} />}>
+            <form id={FORM_ID} onSubmit={handleSubmit} className="equip-form">
                 {error && <div className="form-error">{error}</div>}
                 <label>Name
                     <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -577,10 +568,6 @@ function OpticModal({ optic, onClose, onSave }) {
                 <label>Notes
                     <textarea className="input" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                 </label>
-                <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-                </div>
             </form>
         </ModalShell>
     );
@@ -619,8 +606,8 @@ function FilterModal({ filter, onClose, onSave }) {
     }
 
     return (
-        <ModalShell title={filter ? 'Edit Filter' : 'Add Filter'} onClose={onClose}>
-            <form onSubmit={handleSubmit} className="equip-form">
+        <ModalShell title={filter ? 'Edit Filter' : 'Add Filter'} onClose={onClose} footer={<FormFooter onClose={onClose} saving={saving} />}>
+            <form id={FORM_ID} onSubmit={handleSubmit} className="equip-form">
                 {error && <div className="form-error">{error}</div>}
                 <label>Name
                     <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -638,10 +625,6 @@ function FilterModal({ filter, onClose, onSave }) {
                 <label>Match patterns (comma-separated)
                     <input className="input" value={form.match_patterns} onChange={(e) => setForm({ ...form, match_patterns: e.target.value })} />
                 </label>
-                <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-                </div>
             </form>
         </ModalShell>
     );
@@ -691,8 +674,8 @@ function SiteModal({ site, onClose, onSave }) {
     }
 
     return (
-        <ModalShell title={site ? 'Edit Site' : 'Add Site'} onClose={onClose}>
-            <form onSubmit={handleSubmit} className="equip-form">
+        <ModalShell title={site ? 'Edit Site' : 'Add Site'} onClose={onClose} footer={<FormFooter onClose={onClose} saving={saving} />}>
+            <form id={FORM_ID} onSubmit={handleSubmit} className="equip-form">
                 {error && <div className="form-error">{error}</div>}
                 <label>Name
                     <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -728,10 +711,6 @@ function SiteModal({ site, onClose, onSave }) {
                     <input type="checkbox" checked={form.is_default} onChange={(e) => setForm({ ...form, is_default: e.target.checked })} />
                     Default site
                 </label>
-                <div className="modal-footer">
-                    <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                    <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-                </div>
             </form>
         </ModalShell>
     );
@@ -768,6 +747,7 @@ function DetectReviewPanel({ detect, existingOptics, telescopiusAvailable, onClo
     const [applying, setApplying] = useState(false);
     const [importing, setImporting] = useState(false);
     const [error, setError] = useState(null);
+    const [notice, setNotice] = useState(null);
 
     function toggleAccept(id) {
         setAccepted((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -779,14 +759,17 @@ function DetectReviewPanel({ detect, existingOptics, telescopiusAvailable, onClo
 
     async function handleImportTelescopius() {
         setImporting(true);
+        setError(null);
+        setNotice(null);
         try {
             const result = await importFromTelescopius();
             const summary = ['cameras', 'optics', 'filters']
                 .map((k) => `${k}: +${result[k].created}/${result[k].updated}~/${result[k].skipped} skip`)
                 .join(', ');
-            showToast(`Telescopius import done — ${summary}`, 'success', 6000);
+            // Shown inline: toasts sit under an open dialog.
+            setNotice(`Telescopius import done — ${summary}`);
         } catch (err) {
-            showToast(`Telescopius import failed: ${err.message}`, 'error', 6000);
+            setError(`Telescopius import failed: ${err.message}`);
         } finally {
             setImporting(false);
         }
@@ -825,8 +808,24 @@ function DetectReviewPanel({ detect, existingOptics, telescopiusAvailable, onClo
     }
 
     return (
-        <ModalShell title="Review detected setups" onClose={onClose} wide>
+        <ModalShell
+            title="Review detected setups"
+            onClose={onClose}
+            wide
+            footer={(
+                <>
+                    {telescopiusAvailable && (
+                        <Button onClick={handleImportTelescopius} loading={importing} disabled={!isAdmin}>
+                            Import from Telescopius
+                        </Button>
+                    )}
+                    <Button variant="plain" onClick={onClose}>Cancel</Button>
+                    <Button variant="filled" onClick={handleApply} loading={applying} disabled={!isAdmin}>Apply</Button>
+                </>
+            )}
+        >
             {error && <div className="form-error">{error}</div>}
+            {notice && <div className="form-notice" role="status">{notice}</div>}
 
             {(detect.rigs || []).length > 0 && (
                 <div className="detect-section">
@@ -947,18 +946,6 @@ function DetectReviewPanel({ detect, existingOptics, telescopiusAvailable, onClo
                     ))}
                 </div>
             )}
-
-            <div className="modal-footer">
-                {telescopiusAvailable && (
-                    <button type="button" className="btn btn-secondary" onClick={handleImportTelescopius} disabled={importing || !isAdmin}>
-                        {importing ? 'Importing…' : 'Import from Telescopius'}
-                    </button>
-                )}
-                <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                <button type="button" className="btn btn-primary" onClick={handleApply} disabled={applying || !isAdmin}>
-                    {applying ? 'Applying…' : 'Apply'}
-                </button>
-            </div>
         </ModalShell>
     );
 }
@@ -1039,12 +1026,12 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
 
     if (sites.length === 0) {
         return (
-            <div className="empty-state">
-                <div className="empty-state-icon"><MapPin size={64} strokeWidth={1.5} /></div>
-                <h3 className="empty-state-title">No sites yet</h3>
-                <p className="empty-state-text">Add an observing site to enable horizon-aware planning.</p>
-                <button className="btn btn-primary" onClick={onAdd} disabled={!isAdmin}><Plus size={16} /> Add site</button>
-            </div>
+            <EmptyState
+                icon={<MapPin strokeWidth={1.5} />}
+                title="No sites yet"
+                description="Add an observing site to enable horizon-aware planning."
+                action={<Button variant="filled" icon={<Plus size={16} />} onClick={onAdd} disabled={!isAdmin}>Add site</Button>}
+            />
         );
     }
 
@@ -1063,20 +1050,20 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
                                 Measured {s.measured_seeing.fwhm_arcsec.toFixed(2)}″
                                 <span className="muted"> ({s.measured_seeing.rig_name})</span>
                                 {Math.abs(s.measured_seeing.fwhm_arcsec - s.typical_seeing_arcsec) >= 0.1 && (
-                                    <button className="btn btn-ghost btn-sm" disabled={!isAdmin}
+                                    <Button variant="plain" size="sm" disabled={!isAdmin}
                                         onClick={(e) => { e.stopPropagation(); handleUseMeasuredSeeing(s); }}>
                                         Use as typical seeing
-                                    </button>
+                                    </Button>
                                 )}
                             </div>
                         )}
                         <div className="equip-card-actions">
-                            <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onEdit(s); }} disabled={!isAdmin}><Pencil size={14} /> Edit</button>
-                            <button className="btn btn-ghost btn-sm danger" onClick={(e) => { e.stopPropagation(); onDelete(s); }} disabled={!isAdmin}><Trash2 size={14} /> Delete</button>
+                            <Button variant="plain" size="sm" icon={<Pencil size={14} />} onClick={(e) => { e.stopPropagation(); onEdit(s); }} disabled={!isAdmin}>Edit</Button>
+                            <Button variant="destructive" size="sm" icon={<Trash2 size={14} />} onClick={(e) => { e.stopPropagation(); onDelete(s); }} disabled={!isAdmin}>Delete</Button>
                         </div>
                     </div>
                 ))}
-                <button className="btn btn-secondary add-card-btn" onClick={onAdd} disabled={!isAdmin}><Plus size={16} /> Add site</button>
+                <Button className="add-card-btn" icon={<Plus size={16} />} onClick={onAdd} disabled={!isAdmin}>Add site</Button>
             </div>
 
             {selectedSite && (
@@ -1084,12 +1071,12 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
                     <div className="horizon-header">
                         <h3>Horizon — {selectedSite.name}</h3>
                         <div className="horizon-actions">
-                            <button className="btn btn-secondary btn-sm" onClick={handleUseLearned} disabled={!isAdmin || !learnedQuery.data?.points?.length}>Use learned</button>
+                            <Button size="sm" onClick={handleUseLearned} disabled={!isAdmin || !learnedQuery.data?.points?.length}>Use learned</Button>
                             <label className="btn btn-secondary btn-sm file-btn">
                                 <Upload size={14} /> Import .hrz
                                 <input type="file" accept=".hrz,.txt" onChange={handleImportFile} disabled={!isAdmin} hidden />
                             </label>
-                            <button className="btn btn-secondary btn-sm" onClick={handleExport} disabled={!selectedSite.horizon}><Download size={14} /> Export .hrz</button>
+                            <Button size="sm" icon={<Download size={14} />} onClick={handleExport} disabled={!selectedSite.horizon}>Export .hrz</Button>
                         </div>
                     </div>
                     <ResponsiveContainer width="100%" height={300}>
@@ -1104,7 +1091,7 @@ function SitesTab({ sites, isAdmin, onEdit, onDelete, onAdd, showToast, refetchS
                         </LineChart>
                     </ResponsiveContainer>
                     {!selectedSite.horizon && !learnedQuery.data?.points?.length && (
-                        <p className="empty-state-text">No horizon data yet. Import a .hrz file, or use the learned profile once enough subs have been captured at this site.</p>
+                        <p className="muted small">No horizon data yet. Import a .hrz file, or use the learned profile once enough subs have been captured at this site.</p>
                     )}
                 </div>
             )}
@@ -1179,7 +1166,7 @@ function UnassignedImagesSection({ rigs, isAdmin, showToast }) {
     if (query.isLoading) {
         return (
             <div className="unassigned-section">
-                <p className="muted small"><span className="spinner spinner-inline" /> Looking for unassigned images…</p>
+                <p className="muted small"><Spinner size={14} className="spinner-inline" /> Looking for unassigned images…</p>
             </div>
         );
     }
@@ -1261,15 +1248,15 @@ function UnassignedImagesSection({ rigs, isAdmin, showToast }) {
                 <>
                     {isAdmin && (
                         <div className="unassigned-toolbar">
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={selectSuggested} disabled={suggestedCount === 0 && Object.keys(choices).length === 0}>
+                            <Button variant="plain" size="sm" onClick={selectSuggested} disabled={suggestedCount === 0 && Object.keys(choices).length === 0}>
                                 Select all with a rig ({groups.filter((g) => rigFor(g)).length})
-                            </button>
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelected({})} disabled={ready.length === 0}>
+                            </Button>
+                            <Button variant="plain" size="sm" onClick={() => setSelected({})} disabled={ready.length === 0}>
                                 Clear selection
-                            </button>
-                            <button type="button" className="btn btn-primary btn-sm" onClick={handleAssign} disabled={busy || ready.length === 0}>
+                            </Button>
+                            <Button variant="filled" size="sm" onClick={handleAssign} loading={busy} disabled={ready.length === 0}>
                                 {busy ? 'Assigning…' : `Assign selected (${ready.length} bucket${ready.length === 1 ? '' : 's'} · ${readyImages} image${readyImages === 1 ? '' : 's'})`}
-                            </button>
+                            </Button>
                         </div>
                     )}
                     <div className="unassigned-table-wrap">
@@ -1356,13 +1343,14 @@ function UnassignedImagesSection({ rigs, isAdmin, showToast }) {
                                                 )}
                                             </td>
                                             <td>
-                                                <Link
-                                                    className="btn btn-ghost btn-sm"
+                                                <Button
+                                                    variant="plain"
+                                                    size="sm"
                                                     to={bucketSearchLink(g)}
                                                     title={`Show the ${g.count} images in this bucket`}
                                                 >
                                                     View images
-                                                </Link>
+                                                </Button>
                                             </td>
                                         </tr>
                                     );
@@ -1384,7 +1372,10 @@ export default function Equipment() {
     const [expandedRigId, setExpandedRigId] = useState(null);
     const [rigSearch, setRigSearch] = useState('');
     const [rigFilter, setRigFilter] = useState('all');
-    const [toast, showToast] = useToast();
+    const toast = useToast();
+    const confirm = useConfirm();
+    // Adapter keeping the (message, type, durationMs) call shape used across this page's sections.
+    const showToast = (message, type = 'info', durationMs) => toast.show({ message, type, durationMs });
 
     const [rigModal, setRigModal] = useState(null); // { rig: null|Rig }
     const [cameraModal, setCameraModal] = useState(null);
@@ -1460,7 +1451,12 @@ export default function Equipment() {
     }
 
     async function handleDeleteRig(rig) {
-        if (!window.confirm(`Delete rig "${rig.name}"? Images using it keep their history but lose the rig link.`)) return;
+        if (!(await confirm({
+            title: `Delete rig "${rig.name}"?`,
+            description: 'Images using it keep their history but lose the rig link.',
+            confirmLabel: 'Delete rig',
+            destructive: true,
+        }))) return;
         try {
             await deleteRig(rig.id);
             invalidateAll();
@@ -1470,7 +1466,11 @@ export default function Equipment() {
     }
 
     async function handleDeleteCamera(camera) {
-        if (!window.confirm(`Delete camera "${camera.name}"?`)) return;
+        if (!(await confirm({
+            title: `Delete camera "${camera.name}"?`,
+            confirmLabel: 'Delete camera',
+            destructive: true,
+        }))) return;
         try {
             await deleteCamera(camera.id);
             invalidateAll();
@@ -1480,7 +1480,11 @@ export default function Equipment() {
     }
 
     async function handleDeleteOptic(optic) {
-        if (!window.confirm(`Delete optic "${optic.name}"?`)) return;
+        if (!(await confirm({
+            title: `Delete optic "${optic.name}"?`,
+            confirmLabel: 'Delete optic',
+            destructive: true,
+        }))) return;
         try {
             await deleteOptic(optic.id);
             invalidateAll();
@@ -1490,7 +1494,11 @@ export default function Equipment() {
     }
 
     async function handleDeleteFilter(filter) {
-        if (!window.confirm(`Delete filter "${filter.name}"?`)) return;
+        if (!(await confirm({
+            title: `Delete filter "${filter.name}"?`,
+            confirmLabel: 'Delete filter',
+            destructive: true,
+        }))) return;
         try {
             await deleteFilter(filter.id);
             invalidateAll();
@@ -1500,7 +1508,11 @@ export default function Equipment() {
     }
 
     async function handleDeleteSite(site) {
-        if (!window.confirm(`Delete site "${site.name}"?`)) return;
+        if (!(await confirm({
+            title: `Delete site "${site.name}"?`,
+            confirmLabel: 'Delete site',
+            destructive: true,
+        }))) return;
         try {
             await deleteSite(site.id);
             invalidateAll();
@@ -1511,8 +1523,8 @@ export default function Equipment() {
 
     if (equipmentQuery.isLoading) {
         return (
-            <div className="loading-state">
-                <div className="spinner" />
+            <div className="page-equipment loading-state">
+                <Spinner />
                 <p>Loading equipment…</p>
             </div>
         );
@@ -1520,11 +1532,12 @@ export default function Equipment() {
 
     if (equipmentQuery.isError) {
         return (
-            <div className="empty-state">
-                <h3 className="empty-state-title">Failed to load equipment</h3>
-                <p className="empty-state-text">{equipmentQuery.error?.message}</p>
-                <button className="btn btn-primary" onClick={() => equipmentQuery.refetch()}>Retry</button>
-            </div>
+            <EmptyState
+                className="page-equipment"
+                title="Failed to load equipment"
+                description={equipmentQuery.error?.message}
+                action={<Button variant="filled" onClick={() => equipmentQuery.refetch()}>Retry</Button>}
+            />
         );
     }
 
@@ -1540,54 +1553,39 @@ export default function Equipment() {
         || [r.name, r.camera_name, r.optic_name].some((v) => (v || '').toLowerCase().includes(rigQuery)))));
 
     return (
-        <div className="equipment-page">
-            {toast && (
-                <div className={`equip-toast ${toast.type}`} role="status" aria-live="polite">{toast.message}</div>
-            )}
-
-            <div className="page-header">
-                <h1 className="page-title">Equipment &amp; Sites</h1>
-                <p className="page-subtitle">Rigs, cameras, optics, filters and observing sites</p>
-            </div>
+        <div className="page-equipment">
+            <PageHeader title="Equipment & Sites" subtitle="Rigs, cameras, optics, filters and observing sites" />
 
             {hasDetected && (
                 <div className="detect-banner">
                     <Sparkles size={18} />
                     <span>AstroCat found {detectedRigCount || totalNewProposals} setup{(detectedRigCount || totalNewProposals) === 1 ? '' : 's'} in your library.</span>
-                    <button className="btn btn-primary btn-sm" onClick={() => setReviewOpen(true)}>Review</button>
+                    <Button variant="filled" size="sm" onClick={() => setReviewOpen(true)}>Review</Button>
                 </div>
             )}
 
             <div className="equip-tabs">
-                {TABS.map((tab) => {
-                    const TabIcon = tab.icon;
-                    return (
-                        <button
-                            key={tab.key}
-                            className={`equip-tab${activeTab === tab.key ? ' active' : ''}`}
-                            onClick={() => setActiveTab(tab.key)}
-                        >
-                            <TabIcon size={16} /> {tab.label}
-                        </button>
-                    );
-                })}
+                <Tabs className="equip-tabs-list" aria-label="Equipment" items={TABS} value={activeTab} onChange={setActiveTab} panelIdPrefix="equip" />
                 {activeTab === 'rigs' && (
-                    <button className="btn btn-secondary btn-sm assign-now-btn" onClick={handleAssignImages} disabled={!isAdmin}>
-                        <RefreshCw size={14} /> Assign images now
-                    </button>
+                    <Button size="sm" icon={<RefreshCw size={14} />} className="assign-now-btn" onClick={handleAssignImages} disabled={!isAdmin}>
+                        Assign images now
+                    </Button>
                 )}
             </div>
 
+            <TabPanel panelIdPrefix="equip" value={activeTab} className="equip-panel">
             {activeTab === 'rigs' && (
                 rigs.length === 0 ? (
-                    <div className="empty-state">
-                        <div className="empty-state-icon"><TelescopeIcon size={64} strokeWidth={1.5} /></div>
-                        <h3 className="empty-state-title">No rigs yet</h3>
-                        <p className="empty-state-text">Add a rig manually, or review AstroCat's detected setups above once your library has been scanned.</p>
-                        <button className="btn btn-primary" onClick={() => setRigModal({ rig: null })} disabled={!isAdmin || cameras.length === 0 || optics.length === 0}>
-                            <Plus size={16} /> Add rig
-                        </button>
-                    </div>
+                    <EmptyState
+                        icon={<TelescopeIcon strokeWidth={1.5} />}
+                        title="No rigs yet"
+                        description="Add a rig manually, or review AstroCat's detected setups above once your library has been scanned."
+                        action={(
+                            <Button variant="filled" icon={<Plus size={16} />} onClick={() => setRigModal({ rig: null })} disabled={!isAdmin || cameras.length === 0 || optics.length === 0}>
+                                Add rig
+                            </Button>
+                        )}
+                    />
                 ) : (
                     <>
                     <p className="muted small mount-summary">
@@ -1612,9 +1610,9 @@ export default function Equipment() {
                                 </button>
                             ))}
                         </div>
-                        <button className="btn btn-secondary btn-sm rigs-add-btn" onClick={() => setRigModal({ rig: null })} disabled={!isAdmin}>
-                            <Plus size={14} /> Add rig
-                        </button>
+                        <Button size="sm" icon={<Plus size={14} />} className="rigs-add-btn" onClick={() => setRigModal({ rig: null })} disabled={!isAdmin}>
+                            Add rig
+                        </Button>
                     </div>
                     <div className="rig-list">
                         {visibleRigs.length === 0 && <p className="muted small rig-list-empty">No rigs match.</p>}
@@ -1648,12 +1646,12 @@ export default function Equipment() {
                             </div>
                             <div className="rig-line muted small">Used by {c.rig_count} rig{c.rig_count === 1 ? '' : 's'}</div>
                             <div className="equip-card-actions">
-                                <button className="btn btn-ghost btn-sm" onClick={() => setCameraModal({ camera: c })} disabled={!isAdmin}><Pencil size={14} /> Edit</button>
-                                <button className="btn btn-ghost btn-sm danger" onClick={() => handleDeleteCamera(c)} disabled={!isAdmin}><Trash2 size={14} /> Delete</button>
+                                <Button variant="plain" size="sm" icon={<Pencil size={14} />} onClick={() => setCameraModal({ camera: c })} disabled={!isAdmin}>Edit</Button>
+                                <Button variant="destructive" size="sm" icon={<Trash2 size={14} />} onClick={() => handleDeleteCamera(c)} disabled={!isAdmin}>Delete</Button>
                             </div>
                         </div>
                     ))}
-                    <button className="btn btn-secondary add-card-btn" onClick={() => setCameraModal({ camera: null })} disabled={!isAdmin}><Plus size={16} /> Add camera</button>
+                    <Button className="add-card-btn" icon={<Plus size={16} />} onClick={() => setCameraModal({ camera: null })} disabled={!isAdmin}>Add camera</Button>
                 </div>
             )}
 
@@ -1665,12 +1663,12 @@ export default function Equipment() {
                             <div className="rig-line muted small">{o.kind} · {o.focal_length_mm}mm{o.aperture_mm ? ` · f/${(o.focal_length_mm / o.aperture_mm).toFixed(1)}` : ''}</div>
                             <div className="rig-line muted small">Used by {o.rig_count} rig{o.rig_count === 1 ? '' : 's'}</div>
                             <div className="equip-card-actions">
-                                <button className="btn btn-ghost btn-sm" onClick={() => setOpticModal({ optic: o })} disabled={!isAdmin}><Pencil size={14} /> Edit</button>
-                                <button className="btn btn-ghost btn-sm danger" onClick={() => handleDeleteOptic(o)} disabled={!isAdmin}><Trash2 size={14} /> Delete</button>
+                                <Button variant="plain" size="sm" icon={<Pencil size={14} />} onClick={() => setOpticModal({ optic: o })} disabled={!isAdmin}>Edit</Button>
+                                <Button variant="destructive" size="sm" icon={<Trash2 size={14} />} onClick={() => handleDeleteOptic(o)} disabled={!isAdmin}>Delete</Button>
                             </div>
                         </div>
                     ))}
-                    <button className="btn btn-secondary add-card-btn" onClick={() => setOpticModal({ optic: null })} disabled={!isAdmin}><Plus size={16} /> Add optic</button>
+                    <Button className="add-card-btn" icon={<Plus size={16} />} onClick={() => setOpticModal({ optic: null })} disabled={!isAdmin}>Add optic</Button>
                 </div>
             )}
 
@@ -1681,12 +1679,12 @@ export default function Equipment() {
                             <div className="rig-card-header"><span className="rig-name">{f.name}</span><span className="badge">{f.band}</span></div>
                             <div className="rig-line muted small">{f.bandwidth_nm ? `${f.bandwidth_nm}nm` : 'bandwidth unknown'} · {f.source}</div>
                             <div className="equip-card-actions">
-                                <button className="btn btn-ghost btn-sm" onClick={() => setFilterModal({ filter: f })} disabled={!isAdmin}><Pencil size={14} /> Edit</button>
-                                <button className="btn btn-ghost btn-sm danger" onClick={() => handleDeleteFilter(f)} disabled={!isAdmin}><Trash2 size={14} /> Delete</button>
+                                <Button variant="plain" size="sm" icon={<Pencil size={14} />} onClick={() => setFilterModal({ filter: f })} disabled={!isAdmin}>Edit</Button>
+                                <Button variant="destructive" size="sm" icon={<Trash2 size={14} />} onClick={() => handleDeleteFilter(f)} disabled={!isAdmin}>Delete</Button>
                             </div>
                         </div>
                     ))}
-                    <button className="btn btn-secondary add-card-btn" onClick={() => setFilterModal({ filter: null })} disabled={!isAdmin}><Plus size={16} /> Add filter</button>
+                    <Button className="add-card-btn" icon={<Plus size={16} />} onClick={() => setFilterModal({ filter: null })} disabled={!isAdmin}>Add filter</Button>
                 </div>
             )}
 
@@ -1704,6 +1702,7 @@ export default function Equipment() {
                     }}
                 />
             )}
+            </TabPanel>
 
             {rigModal && (
                 <RigModal

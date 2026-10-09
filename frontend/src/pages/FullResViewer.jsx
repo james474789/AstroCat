@@ -20,6 +20,7 @@ import useSkyOverlay from '../hooks/useSkyOverlay';
 import { hitTestSky, searchNameFor } from '../utils/skyOverlay';
 import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
 import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
+import { Button } from '../components/ui';
 import './FullResViewer.css';
 
 const PRESET_LABELS = {
@@ -477,16 +478,16 @@ export default function FullResViewer() {
 
     if (phase.kind === 'missing') {
         return (
-            <div className="fullres-viewer fullres-message">
+            <div className="page-fullres fullres-message">
                 <h2>Source file missing</h2>
                 <p>The original file for this image can&apos;t be found, so it can&apos;t be opened at full resolution.</p>
-                <button className="btn btn-primary" onClick={back}>Back</button>
+                <Button variant="filled" onClick={back}>Back</Button>
             </div>
         );
     }
 
     return (
-        <div className="fullres-viewer">
+        <div className="page-fullres">
             <div
                 className={`fullres-bar ${barVisible ? '' : 'hidden'}`}
                 onMouseEnter={() => { barHoverRef.current = true; setBarVisible(true); }}
@@ -597,13 +598,13 @@ export default function FullResViewer() {
 
             {phase.kind === 'building' && (
                 <div className="fullres-chip">
-                    <Loader2 size={14} className="spin" />
+                    <Loader2 size={14} className="ui-spin" />
                     Rendering full resolution… {STATE_LABELS[phase.state] || phase.state}
                     {phase.pct != null ? ` ${phase.pct}%` : ''}
                 </div>
             )}
             {phase.kind === 'loading' && (
-                <div className="fullres-chip"><Loader2 size={14} className="spin" /> Opening…</div>
+                <div className="fullres-chip"><Loader2 size={14} className="ui-spin" /> Opening…</div>
             )}
             {phase.kind === 'error' && (
                 <div className="fullres-chip error">

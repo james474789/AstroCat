@@ -1,5 +1,6 @@
 import { Download, Check } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '../ui';
 import './MetadataTab.css';
 
 export default function MetadataExportTab({ image, headerData, fileName }) {
@@ -187,7 +188,7 @@ export default function MetadataExportTab({ image, headerData, fileName }) {
     };
 
     return (
-        <div className="metadata-export-tab">
+        <div className="metadata-tab metadata-export-tab">
             <div className="export-container">
                 <h3>Export Metadata</h3>
                 <p className="export-description">
@@ -206,19 +207,21 @@ export default function MetadataExportTab({ image, headerData, fileName }) {
                                 </p>
                             </div>
                             <div className="format-actions">
-                                <button
-                                    className="btn btn-secondary btn-sm"
+                                <Button
+                                    size="sm"
+                                    className="format-btn"
+                                    icon={<Download size={16} />}
                                     onClick={() => handleDownload(format)}
                                 >
-                                    <Download size={16} />
                                     Download
-                                </button>
-                                <button
-                                    className="btn btn-secondary btn-sm"
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    className="format-btn"
                                     onClick={() => handleCopyToClipboard(format)}
                                 >
                                     {copied ? <Check size={16} /> : 'Copy'}
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     ))}

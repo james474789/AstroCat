@@ -1,53 +1,28 @@
 /* Q1c Night Report */
-.night-report {
+.page-night-report {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md, 1rem);
 }
 
-.night-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 1rem;
-}
-
-.night-title {
-    font-size: 1.5rem;
-    margin: 0;
-}
-
-.night-subtitle {
-    color: var(--color-text-secondary);
-    font-size: 0.9rem;
-    margin-top: 0.25rem;
-}
-
-.night-nav {
+.page-night-report .night-nav {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
 }
 
-.night-nav .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-}
-
-.night-nav .select {
+.page-night-report .night-nav .select {
     min-width: 0;
     max-width: 100%;
 }
 
-.night-scope {
+.page-night-report .night-scope {
     font-size: 0.85rem;
     color: var(--color-text-secondary);
 }
 
-.btn-link {
+.page-night-report .btn-link {
     background: none;
     border: 0;
     padding: 0;
@@ -56,47 +31,48 @@
     font: inherit;
 }
 
-.night-rigs {
+.page-night-report .night-rigs {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
 }
 
-.night-section {
+.page-night-report .night-section {
     margin-top: 0;
 }
 
-.night-table-head {
+.page-night-report .night-table-head,
+.page-target-detail .night-table-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
 }
 
-.night-table-wrap {
+.page-night-report .night-table-wrap {
     overflow-x: auto;
 }
 
-.night-table tbody tr {
+.page-night-report .night-table tbody tr {
     cursor: pointer;
 }
 
 @media (hover: hover) {
-  .night-table tbody tr:hover {
+  .page-night-report .night-table tbody tr:hover {
       background: var(--color-surface-hover);
   }
 }
 
-.night-table tr.flagged td:first-child {
+.page-night-report .night-table tr.flagged td:first-child {
     box-shadow: inset 3px 0 0 var(--color-warning);
 }
 
-.night-flag {
+.page-night-report .night-flag {
     color: var(--color-warning);
     white-space: nowrap;
 }
 
-.th-sort {
+.page-night-report .th-sort {
     background: none;
     border: 0;
     padding: 0;
@@ -107,11 +83,7 @@
 }
 
 @media (max-width: 768px) {
-    .night-header {
-        align-items: stretch;
-    }
-
-    .night-nav .select {
+    .page-night-report .night-nav .select {
         flex: 1 1 100%;
     }
 }

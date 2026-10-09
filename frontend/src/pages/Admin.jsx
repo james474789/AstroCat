@@ -30,11 +30,14 @@ import {
 import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityAdmin from '../components/quality/StarQualityAdmin';
+import { Button, Dialog, PageHeader, SegmentedControl, Spinner, useConfirm, useToast } from '../components/ui';
 import './Admin.css';
 import './Settings.css';
 
 function Admin() {
     const { user } = useAuth();
+    const confirm = useConfirm();
+    const toast = useToast();
     // Admin Dashboard State
     const [stats, setStats] = useState(null);
     const [workerStats, setWorkerStats] = useState(null);
@@ -61,7 +64,6 @@ function Admin() {
     const [bulkActionLoading, setBulkActionLoading] = useState({}); // { [path]: 'match' | 'rescan' | null }
     const [forceRescan, setForceRescan] = useState({}); // { [path]: bool }
     const [onlyUnsolvedRescan, setOnlyUnsolvedRescan] = useState({}); // { [path]: bool }
-    const [toast, setToast] = useState(null); // { message, type: 'info'|'success'|'error' }
     const [rescanModal, setRescanModal] = useState({ open: false, path: null, force: false, onlyUnsolved: false, dontShowAgain: false });
 
     // User Management State
@@ -173,13 +175,19 @@ function Admin() {
     }
 
     async function handleClearFullResCache() {
-        if (!confirm('Delete all cached full-resolution views? They are rebuilt on demand when an image is opened at full resolution.')) return;
+        const count = fullResStats?.count || 0;
+        if (!(await confirm({
+            title: 'Clear the full-resolution cache?',
+            description: 'Cached full-resolution views are rebuilt on demand when an image is opened at full resolution.',
+            confirmLabel: `Clear ${count.toLocaleString()} cached ${count === 1 ? 'view' : 'views'}`,
+            destructive: true,
+        }))) return;
         setCacheActionLoading(true);
         try {
             await clearFullResCache();
             await loadCacheStats();
         } catch (err) {
-            alert('Failed to clear the full-resolution cache: ' + err.message);
+            toast.error('Failed to clear the full-resolution cache: ' + err.message);
         } finally {
             setCacheActionLoading(false);
         }
@@ -212,7 +220,7 @@ function Admin() {
             setSystemSettings(updated);
         } catch (err) {
             console.error("Failed to update settings:", err);
-            alert("Failed to update settings: " + err.message);
+            toast.error("Failed to update settings: " + err.message);
             loadSystemSettings();
         } finally {
             setSettingsLoading(false);
@@ -220,16 +228,22 @@ function Admin() {
     }
 
     async function handleClearCache() {
-        if (!confirm('Are you sure you want to clear all cached thumbnails? accessible images will need to regenerate them.')) return;
+        const count = cacheStats?.count;
+        if (!(await confirm({
+            title: 'Clear the thumbnail cache?',
+            description: 'Thumbnails are regenerated the next time each image is shown.',
+            confirmLabel: count != null ? `Clear ${count.toLocaleString()} cached ${count === 1 ? 'thumbnail' : 'thumbnails'}` : 'Clear thumbnail cache',
+            destructive: true,
+        }))) return;
 
         setCacheActionLoading(true);
         try {
             await clearThumbnailCache();
             await loadCacheStats();
-            alert('Thumbnail cache cleared successfully.');
+            toast.success('Thumbnail cache cleared successfully.');
         } catch (err) {
             console.error('Failed to clear cache:', err);
-            alert('Failed to clear cache.');
+            toast.error('Failed to clear cache.');
         } finally {
             setCacheActionLoading(false);
         }
@@ -239,10 +253,10 @@ function Admin() {
         setCacheActionLoading(true);
         try {
             await regenerateThumbnails();
-            alert('Thumbnail regeneration started in background.');
+            toast.success('Thumbnail regeneration started in background.');
         } catch (err) {
             console.error('Failed to start regeneration:', err);
-            alert('Failed to start regeneration.');
+            toast.error('Failed to start regeneration.');
         } finally {
             setCacheActionLoading(false);
         }
@@ -331,22 +345,19 @@ function Admin() {
         setBulkActionLoading(prev => ({ ...prev, [path]: 'match' }));
         try {
             await triggerMountMatches(path);
-            alert(`Bulk matching started for ${path}`);
+            toast.success(`Bulk matching started for ${path}`);
             // Single refresh after 2s instead of multiple staggered calls
             setTimeout(loadData, 2000);
         } catch (err) {
             console.error(err);
-            alert("Failed to start bulk matching: " + err.message);
+            toast.error("Failed to start bulk matching: " + err.message);
         } finally {
             setBulkActionLoading(prev => ({ ...prev, [path]: null }));
         }
     }
 
     function showToast(message, type = 'info', durationMs = 4000) {
-        setToast({ message, type });
-        if (durationMs > 0) {
-            setTimeout(() => setToast(null), durationMs);
-        }
+        toast.show({ message, type, durationMs });
     }
 
     async function startBulkRescan(path, force, onlyUnsolved = false) {
@@ -414,6 +425,17 @@ function Admin() {
         }
     }
 
+    // The dialog closes first so the resulting toast is not hidden behind it.
+    async function handleBackupDialogConfirm() {
+        const { type, file } = backupModal;
+        setBackupModal({ open: false, type: '', file: null });
+        if (type === 'backup') {
+            await handleBackup();
+        } else if (type === 'restore' && file) {
+            await handleRestore(file);
+        }
+    }
+
     async function handleRestoreFileSelected(e) {
         const file = e.target.files[0];
         if (file) {
@@ -422,7 +444,12 @@ function Admin() {
     }
 
     async function handleRestore(file) {
-        if (!window.confirm('WARNING: This will REPLACE ALL existing data in the database. This action cannot be undone!\n\nAre you sure you want to continue?')) {
+        if (!(await confirm({
+            title: 'Replace all database data?',
+            description: `Restoring ${file.name} will replace ALL existing data in the database. This action cannot be undone.`,
+            confirmLabel: 'Restore and replace all data',
+            destructive: true,
+        }))) {
             return;
         }
 
@@ -433,16 +460,41 @@ function Admin() {
             await uploadBackup(formData);
 
             showToast('Database restored successfully. Please refresh the page to see updated data.', 'success', 5000);
-            // Reset file input
-            const fileInput = document.getElementById('backup-restore-file-input');
-            if (fileInput) {
-                fileInput.value = '';
-            }
-            setBackupModal({ open: false, type: '', file: null });
         } catch (error) {
             console.error('Restore error:', error);
             showToast(`Restore failed: ${error.message}`, 'error', 7000);
         }
+    }
+
+    function handleAddMountPoint() {
+        return confirm({
+            title: 'Add a mount point',
+            description: 'To add a new mount point:',
+            children: (
+                <ol>
+                    <li>Add the path to your .env file (IMAGE_PATH_X)</li>
+                    <li>Add the volume mapping in docker-compose.yml</li>
+                    <li>Restart the application</li>
+                </ol>
+            ),
+            confirmLabel: 'Got it',
+            hideCancel: true,
+        });
+    }
+
+    function closeRescanModal() {
+        setRescanModal({ open: false, path: null, force: false, onlyUnsolved: false, dontShowAgain: false });
+    }
+
+    function handleRescanModalConfirm() {
+        if (rescanModal.dontShowAgain) localStorage.setItem('suppressBulkRescanConfirm', '1');
+        const { path, force, onlyUnsolved } = rescanModal;
+        closeRescanModal();
+        startBulkRescan(path, force, onlyUnsolved);
+    }
+
+    function closeBackupModal() {
+        setBackupModal({ open: false, type: '', file: null });
     }
 
     function toggleForceRescan(path) {
@@ -480,7 +532,7 @@ function Admin() {
     async function handleCreateUser(e) {
         e.preventDefault();
         if (newUser.password !== newUser.confirmPassword) {
-            alert("Passwords do not match");
+            toast.error("Passwords do not match");
             return;
         }
         setUserActionLoading(true);
@@ -491,21 +543,26 @@ function Admin() {
             showToast('User created successfully', 'success');
         } catch (err) {
             console.error('Failed to create user:', err);
-            alert('Failed to create user: ' + err.message);
+            toast.error('Failed to create user: ' + err.message);
         } finally {
             setUserActionLoading(false);
         }
     }
 
     async function handleDeleteUser(userId, email) {
-        if (!confirm(`Are you sure you want to delete user ${email}?`)) return;
+        if (!(await confirm({
+            title: 'Delete this user?',
+            description: `The account for ${email} will be removed.`,
+            confirmLabel: `Delete ${email}`,
+            destructive: true,
+        }))) return;
         try {
             await deleteUser(userId);
             await loadUsers();
             showToast('User deleted', 'success');
         } catch (err) {
             console.error('Failed to delete user:', err);
-            alert('Failed to delete user: ' + err.message);
+            toast.error('Failed to delete user: ' + err.message);
         }
     }
 
@@ -516,7 +573,7 @@ function Admin() {
             showToast('User role updated', 'success');
         } catch (err) {
             console.error('Failed to update role:', err);
-            alert('Failed to update role: ' + err.message);
+            toast.error('Failed to update role: ' + err.message);
         }
     }
 
@@ -577,12 +634,12 @@ function Admin() {
     );
 
     // Early returns after all hooks
-    if (loading && !stats) return <div className="admin-page center">Loading System Telemetry...</div>;
+    if (loading && !stats) return <div className="page-admin center">Loading System Telemetry...</div>;
     if (error && !stats) return (
-        <div className="admin-page">
+        <div className="page-admin">
             <div style={{ color: 'var(--color-error)', padding: '2rem', textAlign: 'center' }}>
                 <p>{error}</p>
-                <button className="btn btn-primary" onClick={() => window.location.reload()} style={{ marginTop: '1rem' }}>Retry</button>
+                <Button variant="filled" onClick={() => window.location.reload()} style={{ marginTop: '1rem' }}>Retry</Button>
             </div>
         </div>
     );
@@ -598,14 +655,13 @@ function Admin() {
     if (activeTaskCount > 0) processorClass = "processing";
 
     return (
-        <div className="admin-page">
-            <header className="admin-header">
-                <div className="logo-glow"><Orbit size={32} /></div>
-                <div>
-                    <h1 className="admin-title">System Administration</h1>
-                    <p className="admin-subtitle">Real-time Pipeline Observability</p>
-                </div>
-            </header>
+        <div className="page-admin">
+            <PageHeader
+                title="System Administration"
+                subtitle="Real-time Pipeline Observability"
+                icon={<Orbit size={32} />}
+                className="admin-page-header"
+            />
 
             {/* PIPELINE VISUALIZATION */}
             <section className="pipeline-section">
@@ -704,12 +760,8 @@ function Admin() {
                         )}
                         <div className="text-caption text-muted mt-sm text-center">
                             <div className="flex gap-sm justify-center">
-                                <button className="btn btn-sm btn-ghost" onClick={handleOpenBackupModal}>
-                                    <DatabaseBackup size={16} /> Backup
-                                </button>
-                                <button className="btn btn-sm btn-ghost" onClick={handleOpenRestoreModal}>
-                                    <RotateCcw size={16} /> Restore
-                                </button>
+                                <Button variant="plain" size="sm" icon={<DatabaseBackup size={16} />} onClick={handleOpenBackupModal}>Backup</Button>
+                                <Button variant="plain" size="sm" icon={<RotateCcw size={16} />} onClick={handleOpenRestoreModal}>Restore</Button>
                             </div>
                         </div>
                     </div>
@@ -812,101 +864,9 @@ function Admin() {
             {/* SETTINGS CONTENT BELOW */}
             {settingsSectionReady && (
                 <div className="settings-page" style={{ padding: 0, marginTop: '4rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4rem' }}>
-                    {/* Toast */}
-                    {toast && (
-                        <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 1000, background: toast.type === 'error' ? 'color-mix(in srgb, var(--color-error) 40%, var(--color-background))' : toast.type === 'success' ? 'color-mix(in srgb, var(--color-success) 40%, var(--color-background))' : 'var(--color-surface-elevated)', color: 'white', padding: '10px 14px', borderRadius: '6px', boxShadow: '0 6px 18px rgba(0,0,0,0.25)' }} role="status" aria-live="polite">
-                            {toast.message}
-                        </div>
-                    )}
-
-                    {/* Bulk Rescan Confirm Modal */}
-                    {rescanModal.open && (
-                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999 }}>
-                            <div style={{ width: 'min(480px, 92vw)', margin: '10vh auto', background: 'var(--color-surface)', color: 'white', borderRadius: '8px', border: '1px solid var(--color-border)', boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
-                                <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--color-border)', fontWeight: 600 }}>Confirm Bulk Rescan</div>
-                                <div style={{ padding: '16px 18px' }}>
-                                    <p style={{ marginBottom: '10px' }}>Start bulk rescan for <span className="font-mono">{rescanModal.path}</span>?</p>
-                                    <p style={{ marginBottom: '12px', color: 'var(--color-text-secondary)' }}>Force Re-solve: {rescanModal.force ? 'YES' : 'NO'} · Unsolved/Failed only: {rescanModal.onlyUnsolved ? 'YES' : 'NO'}</p>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95em' }}>
-                                        <input type="checkbox" checked={rescanModal.dontShowAgain} onChange={(e) => setRescanModal(prev => ({ ...prev, dontShowAgain: e.target.checked }))} />
-                                        Don't show again
-                                    </label>
-                                </div>
-                                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--color-border)' }}>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => setRescanModal({ open: false, path: null, force: false, dontShowAgain: false })}>Cancel</button>
-                                    <button className="btn btn-primary btn-sm" onClick={() => { if (rescanModal.dontShowAgain) localStorage.setItem('suppressBulkRescanConfirm', '1'); const { path, force, onlyUnsolved } = rescanModal; setRescanModal({ open: false, path: null, force: false, onlyUnsolved: false, dontShowAgain: false }); startBulkRescan(path, force, onlyUnsolved); }}>Start</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Backup/Restore Confirm Modal */}
-                    {backupModal.open && (
-                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999 }}>
-                            <div style={{ width: 'min(480px, 92vw)', margin: '10vh auto', background: 'var(--color-surface)', color: 'white', borderRadius: '8px', border: '1px solid var(--color-border)', boxShadow: '0 10px 30px rgba(0,0,0,0.35)' }}>
-                                <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--color-border)', fontWeight: 600 }}>
-                                    {backupModal.type === 'backup' ? 'Confirm Database Backup' : 'Confirm Database Restore'}
-                                </div>
-                                <div style={{ padding: '16px 18px' }}>
-                                    {backupModal.type === 'backup' ? (
-                                        <>
-                                            <p style={{ marginBottom: '12px' }}>This will create a backup of the AstroCat database and download it as a .sql.gz file.</p>
-                                            <p style={{ marginBottom: '8px', color: 'var(--color-warning)', fontSize: '0.9em' }}>
-                                                <strong>Warning:</strong> Depending on database size, this may take a moment and temporarily affect performance.
-                                            </p>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <p style={{ marginBottom: '12px' }}>This will restore the AstroCat database from the selected backup file.</p>
-                                            <p style={{ marginBottom: '8px', color: 'var(--color-error)', fontSize: '0.9em' }}>
-                                                <strong>Warning:</strong> This will REPLACE ALL existing data in the database. This action cannot be undone!
-                                            </p>
-                                            <p style={{ marginBottom: '12px', color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>
-                                                Only select .sql or .sql.gz files that were exported from this AstroCat instance.
-                                            </p>
-                                            <div style={{ marginBottom: '16px' }}>
-                                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>Select Backup File</label>
-                                                <input
-                                                    type="file"
-                                                    id="backup-restore-file-input"
-                                                    accept=".sql,.sql.gz"
-                                                    onChange={handleRestoreFileSelected}
-                                                    style={{ width: '100%', padding: '10px', background: 'var(--color-border)', border: '1px solid var(--color-border-light)', borderRadius: '4px', color: 'white' }}
-                                                />
-                                                {backupModal.file && (
-                                                    <p style={{ marginTop: '8px', fontSize: '0.9em', color: 'var(--color-success)' }}>
-                                                        Selected: {backupModal.file.name}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                                <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--color-border)' }}>
-                                    <button className="btn btn-secondary btn-sm" onClick={() => setBackupModal({ open: false, type: '', file: null })}>Cancel</button>
-                                    <button
-                                        className="btn btn-primary btn-sm"
-                                        onClick={() => {
-                                            if (backupModal.type === 'backup') {
-                                                handleBackup().then(() => setBackupModal({ open: false, type: '', file: null }));
-                                            } else if (backupModal.type === 'restore' && backupModal.file) {
-                                                handleRestore(backupModal.file).then(() => setBackupModal({ open: false, type: '', file: null }));
-                                            } else if (backupModal.type === 'restore' && !backupModal.file) {
-                                                // Show error if no file selected for restore
-                                                alert('Please select a backup file to restore');
-                                            }
-                                        }}
-                                    >
-                                        {backupModal.type === 'backup' ? 'Create Backup' : 'Restore Database'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="page-header">
-                        <h1 className="page-title">Settings</h1>
-                        <p className="page-subtitle">Manage indexing and application preferences</p>
+                    <div className="settings-heading">
+                        <h2 className="settings-heading-title">Settings</h2>
+                        <p className="settings-heading-subtitle">Manage indexing and application preferences</p>
                     </div>
 
                     {/* Indexer Section */}
@@ -921,7 +881,7 @@ function Admin() {
                                         <><div className="status-dot" /><span>Idle</span></>
                                     )}
                                 </div>
-                                <button className="btn btn-primary" onClick={handleStartScan} disabled={scanning}>{scanning ? 'Scanning...' : 'Start Scan'}</button>
+                                <Button variant="filled" onClick={handleStartScan} disabled={scanning}>{scanning ? 'Scanning...' : 'Start Scan'}</Button>
                             </div>
                             {indexerStatus && (
                                 <div className="indexer-details">
@@ -945,10 +905,16 @@ function Admin() {
                                     <div className="setting-label" style={{ fontWeight: 'bold' }}>Astrometry Provider</div>
                                     <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>Choose between the public Nova.astrometry.net service or a local Astrometry server.</div>
                                 </div>
-                                <div className="toggle-group" style={{ display: 'flex', gap: '0.5rem', background: 'var(--color-border)', padding: '0.25rem', borderRadius: '0.5rem' }}>
-                                    <button className={`btn btn-sm ${systemSettings.astrometry_provider === 'nova' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => handleProviderChange('nova')} disabled={settingsLoading}><Cloud size={16} /> Nova Web</button>
-                                    <button className={`btn btn-sm ${systemSettings.astrometry_provider === 'local' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => handleProviderChange('local')} disabled={settingsLoading}><HardDrive size={16} /> Local Server</button>
-                                </div>
+                                <SegmentedControl
+                                    aria-label="Astrometry provider"
+                                    size="sm"
+                                    value={systemSettings.astrometry_provider}
+                                    onChange={handleProviderChange}
+                                    items={[
+                                        { value: 'nova', label: 'Nova Web', icon: <Cloud size={16} />, disabled: settingsLoading },
+                                        { value: 'local', label: 'Local Server', icon: <HardDrive size={16} />, disabled: settingsLoading },
+                                    ]}
+                                />
                             </div>
                             {systemSettings.astrometry_provider === 'local' && (
                                 <div style={{ padding: '0 1rem 1rem 1rem', fontSize: '0.9em', color: 'var(--color-text-secondary)' }}>Using configured local URL. Ensure your local server is running.</div>
@@ -959,7 +925,7 @@ function Admin() {
                                     <div className="setting-description text-muted text-sm" style={{ marginTop: '0.25rem' }}>Limit concurrent submissions to the astrometry server.</div>
                                 </div>
                                 <div>
-                                    <input type="number" min="1" max="50" className="input" style={{ width: '80px', background: 'var(--color-border)', border: '1px solid var(--color-border-light)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }} value={systemSettings.astrometry_max_submissions || 8} onChange={(e) => { const val = parseInt(e.target.value) || 1; updateSettings({ ...systemSettings, astrometry_max_submissions: val }).then(setSystemSettings).catch(err => alert("Failed to update: " + err.message)); }} disabled={settingsLoading} />
+                                    <input type="number" min="1" max="50" className="input" style={{ width: '80px', background: 'var(--color-border)', border: '1px solid var(--color-border-light)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '0.25rem' }} value={systemSettings.astrometry_max_submissions || 8} onChange={(e) => { const val = parseInt(e.target.value) || 1; updateSettings({ ...systemSettings, astrometry_max_submissions: val }).then(setSystemSettings).catch(err => toast.error("Failed to update: " + err.message)); }} disabled={settingsLoading} />
                                 </div>
                             </div>
                         </div>
@@ -985,8 +951,10 @@ function Admin() {
                                                         setSystemSettings({ ...systemSettings, mount_friendly_names: newNames });
                                                     }}
                                                 />
-                                                <button
-                                                    className="btn btn-ghost btn-sm"
+                                                <Button
+                                                    variant="plain"
+                                                    size="sm"
+                                                    icon={<Save size={16} />}
                                                     title="Save Friendly Name"
                                                     onClick={() => {
                                                         updateSettings(systemSettings)
@@ -995,8 +963,8 @@ function Admin() {
                                                     }}
                                                     disabled={settingsLoading}
                                                 >
-                                                    <Save size={16} /> Save
-                                                </button>
+                                                    Save
+                                                </Button>
                                             </div>
                                         </div>
                                         <span className={`mount-status ${mount.status}`}>{mount.status === 'connected' ? <><Check size={14} /> Connected</> : <><X size={14} /> Disconnected</>}</span>
@@ -1035,13 +1003,13 @@ function Admin() {
                                         );
                                     })()}
                                     <div className="mount-actions-footer">
-                                        <div className="action-group"><button className="btn btn-sm btn-secondary" onClick={() => handleBulkMatch(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}><RefreshCw size={16} /> Recalc Matches</button></div>
-                                        <div className="action-group right"><label className="checkbox-label"><input type="checkbox" checked={forceRescan[mount.path] || false} onChange={() => toggleForceRescan(mount.path)} />Force</label><label className="checkbox-label" title="Submit only UNSOLVED and FAILED images"><input type="checkbox" checked={onlyUnsolvedRescan[mount.path] || false} onChange={() => toggleOnlyUnsolvedRescan(mount.path)} />Unsolved/Failed only</label><button className="btn btn-sm btn-primary" onClick={() => handleBulkRescan(mount.path)} disabled={bulkActionLoading[mount.path] || mount.status !== 'connected'}>{bulkActionLoading[mount.path] === 'rescan' ? 'Starting...' : <><TelescopeIcon size={16} /> Bulk Rescan</>}</button></div>
+                                        <div className="action-group"><Button size="sm" icon={<RefreshCw size={16} />} onClick={() => handleBulkMatch(mount.path)} disabled={!!bulkActionLoading[mount.path] || mount.status !== 'connected'}>Recalc Matches</Button></div>
+                                        <div className="action-group right"><label className="checkbox-label"><input type="checkbox" checked={forceRescan[mount.path] || false} onChange={() => toggleForceRescan(mount.path)} />Force</label><label className="checkbox-label" title="Submit only UNSOLVED and FAILED images"><input type="checkbox" checked={onlyUnsolvedRescan[mount.path] || false} onChange={() => toggleOnlyUnsolvedRescan(mount.path)} />Unsolved/Failed only</label><Button variant="filled" size="sm" icon={<TelescopeIcon size={16} />} loading={bulkActionLoading[mount.path] === 'rescan'} onClick={() => handleBulkRescan(mount.path)} disabled={!!bulkActionLoading[mount.path] || mount.status !== 'connected'}>{bulkActionLoading[mount.path] === 'rescan' ? 'Starting...' : 'Bulk Rescan'}</Button></div>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                        <div className="mount-actions"><button className="btn btn-secondary" onClick={() => alert("To add a new mount point:\n\n1. Add the path to your .env file (IMAGE_PATH_X)\n2. Add the volume mapping in docker-compose.yml\n3. Restart the application")}>+ Add Mount Point</button><p className="text-sm text-muted mt-sm">Note: Mount points are configured in docker-compose.yml</p></div>
+                        <div className="mount-actions"><Button onClick={handleAddMountPoint}>+ Add Mount Point</Button><p className="text-sm text-muted mt-sm">Note: Mount points are configured in docker-compose.yml</p></div>
                     </section>
 
                     {/* Thumbnail Cache Section */}
@@ -1058,10 +1026,10 @@ function Admin() {
                                     <span className="cache-label">Full-res cache{fullResStats ? ` · ${fullResStats.count.toLocaleString()} images` : ''}</span>
                                 </div>
                                 <div className="cache-stat">
-                                    <button className="btn btn-secondary" onClick={handleClearFullResCache} disabled={cacheActionLoading || !fullResStats?.count}>Clear</button>
+                                    <Button onClick={handleClearFullResCache} disabled={cacheActionLoading || !fullResStats?.count}>Clear</Button>
                                 </div>
                             </div>
-                            <div className="cache-actions"><button className="btn btn-secondary" onClick={handleClearCache} disabled={cacheActionLoading}>{cacheActionLoading ? 'Processing...' : 'Clear Cache'}</button><button className="btn btn-primary" onClick={handleRegenerateThumbnails} disabled={cacheActionLoading} style={{ marginLeft: '1rem' }}>Regenerate All</button></div>
+                            <div className="cache-actions"><Button onClick={handleClearCache} disabled={cacheActionLoading}>{cacheActionLoading ? 'Processing...' : 'Clear Cache'}</Button><Button variant="filled" onClick={handleRegenerateThumbnails} disabled={cacheActionLoading} style={{ marginLeft: '1rem' }}>Regenerate All</Button></div>
                         </div>
                     </section>
 
@@ -1078,9 +1046,9 @@ function Admin() {
                                 </div>
                             </div>
                             <div className="cache-actions">
-                                <button className="btn btn-secondary" onClick={handleReclassifyFrameTypes} disabled={reclassifyLoading}>
-                                    {reclassifyLoading ? 'Starting...' : <><Contrast size={16} /> Reclassify frame types</>}
-                                </button>
+                                <Button icon={<Contrast size={16} />} loading={reclassifyLoading} onClick={handleReclassifyFrameTypes}>
+                                    {reclassifyLoading ? 'Starting...' : 'Reclassify frame types'}
+                                </Button>
                             </div>
                         </div>
                         <div className="cache-card" style={{ marginTop: '1rem' }}>
@@ -1090,9 +1058,9 @@ function Admin() {
                                 </div>
                             </div>
                             <div className="cache-actions">
-                                <button className="btn btn-secondary" onClick={handleBackfillTargets} disabled={backfillTargetsLoading}>
-                                    {backfillTargetsLoading ? 'Starting...' : <><Target size={16} /> Re-resolve all targets</>}
-                                </button>
+                                <Button icon={<Target size={16} />} loading={backfillTargetsLoading} onClick={handleBackfillTargets}>
+                                    {backfillTargetsLoading ? 'Starting...' : 'Re-resolve all targets'}
+                                </Button>
                             </div>
                         </div>
                         <div className="cache-card" style={{ marginTop: '1rem', flexDirection: 'column', alignItems: 'stretch' }}>
@@ -1116,13 +1084,12 @@ function Admin() {
                                                 </div>
                                             </div>
                                             <span style={{ color: statusColor, fontSize: '0.8rem', textTransform: 'capitalize' }}>{m.status}</span>
-                                            <button
-                                                className="btn btn-secondary"
+                                            <Button
                                                 onClick={() => handleRunDataMigration(m.id)}
                                                 disabled={dataMigrations.running || dataMigrationStarting !== null}
                                             >
                                                 {dataMigrationStarting === m.id ? 'Starting...' : m.status === 'pending' ? 'Run now' : 'Run again'}
-                                            </button>
+                                            </Button>
                                         </div>
                                     );
                                 })}
@@ -1173,14 +1140,14 @@ function Admin() {
                                             required
                                         />
                                     </div>
-                                    <button
+                                    <Button
                                         type="submit"
-                                        className="btn btn-primary"
-                                        disabled={userActionLoading}
+                                        variant="filled"
+                                        loading={userActionLoading}
                                         style={{ height: '42px' }}
                                     >
                                         {userActionLoading ? 'Creating...' : 'Add User'}
-                                    </button>
+                                    </Button>
                                 </form>
                             </div>
 
@@ -1210,27 +1177,28 @@ function Admin() {
                                                         }}>
                                                             {u.is_admin ? 'Administrator' : 'General User'}
                                                         </span>
-                                                        <button
-                                                            className="btn btn-ghost btn-xs"
-                                                            style={{ fontSize: '0.65rem', opacity: u.id === user?.id ? 0.3 : 1 }}
+                                                        <Button
+                                                            variant="plain"
+                                                            size="sm"
+                                                            icon={<RefreshCw size={16} />}
                                                             onClick={() => handleUpdateRole(u.id, !u.is_admin)}
                                                             disabled={u.id === user?.id}
                                                             title={u.id === user?.id ? "Cannot change your own role" : "Toggle Role"}
                                                         >
-                                                            <RefreshCw size={16} /> Switch
-                                                        </button>
+                                                            Switch
+                                                        </Button>
                                                     </div>
                                                 </td>
                                                 <td className="text-muted text-footnote">{new Date(u.created_at).toLocaleDateString()}</td>
                                                 <td>
-                                                    <button
-                                                        className="btn btn-ghost btn-sm"
-                                                        style={{ color: 'var(--color-error)' }}
+                                                    <Button
+                                                        variant="destructive"
+                                                        size="sm"
                                                         onClick={() => handleDeleteUser(u.id, u.email)}
                                                         disabled={u.id === user?.id}
                                                     >
                                                         Delete
-                                                    </button>
+                                                    </Button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -1306,87 +1274,160 @@ function Admin() {
                 </div>
             )}
 
-            {/* QUEUE DETAILS MODAL */}
-            {isModalOpen && (
-                <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
-                    <div className="modal-content admin-modal" onClick={e => e.stopPropagation()}>
-                        <header className="modal-header">
-                            <h2 className="text-title-2 font-bold">Task Queue Inspection</h2>
-                            <button className="close-button" onClick={() => setIsModalOpen(false)} aria-label="Close"><X size={20} /></button>
-                        </header>
-                        <div className="modal-body">
-                            {isQueueLoading && !queueDetails ? (
-                                <div className="p-lg text-center text-secondary">Loading queue topology...</div>
-                            ) : (
-                                <div className="queue-tables">
-                                    <section>
-                                        <h3 className="queue-heading queue-heading-active">
-                                            <div className="queue-dot queue-dot-active pulse" />
-                                            Active Tasks ({queueDetails?.active?.length || 0})
-                                        </h3>
-                                        <div className="table-wrapper">
-                                            <table className="admin-table">
-                                                <thead><tr><th>Task</th><th>Worker</th><th>Args</th><th>Started</th></tr></thead>
-                                                <tbody>
-                                                    {queueDetails?.active?.length > 0 ? queueDetails.active.map(t => (
-                                                        <tr key={t.id}>
-                                                            <td className="font-mono text-footnote queue-cell-active">{t.name?.split('.').pop()}</td>
-                                                            <td className="text-footnote text-secondary">{t.worker?.split('@').shift()}</td>
-                                                            <td className="queue-args text-caption text-muted" title={JSON.stringify(t.args)}>{JSON.stringify(t.args)}</td>
-                                                            <td className="text-footnote text-secondary">{t.time_start ? new Date(t.time_start * 1000).toLocaleTimeString() : '-'}</td>
-                                                        </tr>
-                                                    )) : <tr><td colSpan="4" className="queue-empty text-sm">No active tasks</td></tr>}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </section>
-                                    <section>
-                                        <h3 className="queue-heading queue-heading-pending">
-                                            <div className="queue-dot queue-dot-pending" />
-                                            Pending In Queue ({queueDetails?.pending?.length || 0})
-                                        </h3>
-                                        <div className="table-wrapper">
-                                            <table className="admin-table">
-                                                <thead><tr><th>Task</th><th>Queue</th><th>Args</th></tr></thead>
-                                                <tbody>
-                                                    {queueDetails?.pending?.length > 0 ? queueDetails.pending.map((t, idx) => (
-                                                        <tr key={t.id || idx}>
-                                                            <td className="font-mono text-footnote queue-cell-pending">{t.name?.split('.').pop() || 'Unknown'}</td>
-                                                            <td className="text-footnote text-secondary">{t.queue}</td>
-                                                            <td className="queue-args text-caption text-muted" title={JSON.stringify(t.args)}>{JSON.stringify(t.args)}</td>
-                                                        </tr>
-                                                    )) : <tr><td colSpan="3" className="queue-empty text-sm">No pending tasks</td></tr>}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </section>
-                                    {queueDetails?.scheduled?.length > 0 && (
-                                        <section>
-                                            <h3 className="queue-heading queue-heading-scheduled">
-                                                <div className="queue-dot queue-dot-scheduled" />
-                                                Scheduled Tasks ({queueDetails.scheduled.length})
-                                            </h3>
-                                            <div className="table-wrapper">
-                                                <table className="admin-table">
-                                                    <thead><tr><th>Task</th><th>ETA</th></tr></thead>
-                                                    <tbody>
-                                                        {queueDetails.scheduled.map(t => (
-                                                            <tr key={t.id}>
-                                                                <td className="font-mono text-footnote queue-cell-scheduled">{t.name?.split('.').pop()}</td>
-                                                                <td className="text-footnote text-secondary">{t.eta}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </section>
-                                    )}
+            {/* QUEUE DETAILS DIALOG */}
+            <Dialog
+                open={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title="Task Queue Inspection"
+                size="lg"
+                className="dlg-admin-queue"
+            >
+                {isQueueLoading && !queueDetails ? (
+                    <div className="queue-loading">
+                        <Spinner label="Loading queue topology" />
+                        <span>Loading queue topology...</span>
+                    </div>
+                ) : (
+                    <div className="queue-tables">
+                        <section>
+                            <h3 className="queue-heading queue-heading-active">
+                                <div className="queue-dot queue-dot-active pulse" />
+                                Active Tasks ({queueDetails?.active?.length || 0})
+                            </h3>
+                            <div className="table-wrapper">
+                                <table className="admin-table">
+                                    <thead><tr><th>Task</th><th>Worker</th><th>Args</th><th>Started</th></tr></thead>
+                                    <tbody>
+                                        {queueDetails?.active?.length > 0 ? queueDetails.active.map(t => (
+                                            <tr key={t.id}>
+                                                <td className="font-mono text-footnote queue-cell-active">{t.name?.split('.').pop()}</td>
+                                                <td className="text-footnote text-secondary">{t.worker?.split('@').shift()}</td>
+                                                <td className="queue-args text-caption text-muted" title={JSON.stringify(t.args)}>{JSON.stringify(t.args)}</td>
+                                                <td className="text-footnote text-secondary">{t.time_start ? new Date(t.time_start * 1000).toLocaleTimeString() : '-'}</td>
+                                            </tr>
+                                        )) : <tr><td colSpan="4" className="queue-empty text-sm">No active tasks</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                        <section>
+                            <h3 className="queue-heading queue-heading-pending">
+                                <div className="queue-dot queue-dot-pending" />
+                                Pending In Queue ({queueDetails?.pending?.length || 0})
+                            </h3>
+                            <div className="table-wrapper">
+                                <table className="admin-table">
+                                    <thead><tr><th>Task</th><th>Queue</th><th>Args</th></tr></thead>
+                                    <tbody>
+                                        {queueDetails?.pending?.length > 0 ? queueDetails.pending.map((t, idx) => (
+                                            <tr key={t.id || idx}>
+                                                <td className="font-mono text-footnote queue-cell-pending">{t.name?.split('.').pop() || 'Unknown'}</td>
+                                                <td className="text-footnote text-secondary">{t.queue}</td>
+                                                <td className="queue-args text-caption text-muted" title={JSON.stringify(t.args)}>{JSON.stringify(t.args)}</td>
+                                            </tr>
+                                        )) : <tr><td colSpan="3" className="queue-empty text-sm">No pending tasks</td></tr>}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                        {queueDetails?.scheduled?.length > 0 && (
+                            <section>
+                                <h3 className="queue-heading queue-heading-scheduled">
+                                    <div className="queue-dot queue-dot-scheduled" />
+                                    Scheduled Tasks ({queueDetails.scheduled.length})
+                                </h3>
+                                <div className="table-wrapper">
+                                    <table className="admin-table">
+                                        <thead><tr><th>Task</th><th>ETA</th></tr></thead>
+                                        <tbody>
+                                            {queueDetails.scheduled.map(t => (
+                                                <tr key={t.id}>
+                                                    <td className="font-mono text-footnote queue-cell-scheduled">{t.name?.split('.').pop()}</td>
+                                                    <td className="text-footnote text-secondary">{t.eta}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
+                            </section>
+                        )}
+                    </div>
+                )}
+            </Dialog>
+
+            {/* BULK RESCAN CONFIRM DIALOG */}
+            <Dialog
+                open={rescanModal.open}
+                onClose={closeRescanModal}
+                title="Confirm Bulk Rescan"
+                size="sm"
+                className="dlg-admin-rescan"
+                footer={
+                    <>
+                        <Button variant="plain" onClick={closeRescanModal}>Cancel</Button>
+                        <Button variant="filled" onClick={handleRescanModalConfirm}>Start bulk rescan</Button>
+                    </>
+                }
+            >
+                <p>Start bulk rescan for <span className="font-mono">{rescanModal.path}</span>?</p>
+                <p className="rescan-options">Force Re-solve: {rescanModal.force ? 'YES' : 'NO'} · Unsolved/Failed only: {rescanModal.onlyUnsolved ? 'YES' : 'NO'}</p>
+                <label className="rescan-suppress">
+                    <input type="checkbox" checked={rescanModal.dontShowAgain} onChange={(e) => setRescanModal(prev => ({ ...prev, dontShowAgain: e.target.checked }))} />
+                    Don't show again
+                </label>
+            </Dialog>
+
+            {/* BACKUP / RESTORE DIALOG */}
+            <Dialog
+                open={backupModal.open}
+                onClose={closeBackupModal}
+                title={backupModal.type === 'backup' ? 'Confirm Database Backup' : 'Confirm Database Restore'}
+                description={backupModal.type === 'backup'
+                    ? 'This will create a backup of the AstroCat database and download it as a .sql.gz file.'
+                    : 'This will restore the AstroCat database from the selected backup file.'}
+                size="sm"
+                destructive={backupModal.type === 'restore'}
+                className="dlg-admin-backup"
+                footer={
+                    <>
+                        <Button variant="plain" onClick={closeBackupModal}>Cancel</Button>
+                        <Button
+                            variant={backupModal.type === 'restore' ? 'destructive' : 'filled'}
+                            onClick={handleBackupDialogConfirm}
+                            disabled={backupModal.type === 'restore' && !backupModal.file}
+                        >
+                            {backupModal.type === 'backup' ? 'Create Backup' : 'Restore Database'}
+                        </Button>
+                    </>
+                }
+            >
+                {backupModal.type === 'backup' ? (
+                    <p className="backup-warning backup-warning-caution">
+                        <strong>Warning:</strong> Depending on database size, this may take a moment and temporarily affect performance.
+                    </p>
+                ) : (
+                    <>
+                        <p className="backup-warning backup-warning-danger">
+                            <strong>Warning:</strong> This will REPLACE ALL existing data in the database. This action cannot be undone!
+                        </p>
+                        <p className="backup-note">
+                            Only select .sql or .sql.gz files that were exported from this AstroCat instance.
+                        </p>
+                        <div className="backup-file">
+                            <label htmlFor="backup-restore-file-input">Select Backup File</label>
+                            <input
+                                type="file"
+                                id="backup-restore-file-input"
+                                accept=".sql,.sql.gz"
+                                onChange={handleRestoreFileSelected}
+                            />
+                            {backupModal.file && (
+                                <p className="backup-file-selected">Selected: {backupModal.file.name}</p>
                             )}
                         </div>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
+            </Dialog>
         </div>
     );
 }

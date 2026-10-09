@@ -85,7 +85,7 @@ export default function MetadataSummaryTab({ image }) {
     ];
 
     return (
-        <div className="metadata-summary-tab">
+        <div className="metadata-tab metadata-summary-tab">
             {summaryGroups.map((group, idx) => {
                 const filteredFields = group.fields.filter(f => f.value !== null && f.value !== '—');
                 if (filteredFields.length === 0) return null;

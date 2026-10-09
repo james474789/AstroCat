@@ -9,11 +9,11 @@
     /* Added a max height to prevent the sidebar from becoming too long */
 }
 
-.folder-node {
+.folder-tree .folder-node {
     user-select: none;
 }
 
-.folder-item {
+.folder-tree .folder-item {
     display: flex;
     align-items: center;
     padding: 6px 8px;
@@ -26,18 +26,18 @@
 }
 
 @media (hover: hover) {
-  .folder-item:hover {
+  .folder-tree .folder-item:hover {
       background-color: var(--color-surface-hover);
   }
 }
 
-.folder-item.selected {
+.folder-tree .folder-item.selected {
     background-color: var(--color-primary-glow);
     color: var(--color-primary);
     font-weight: 500;
 }
 
-.folder-toggle {
+.folder-tree .folder-toggle {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -48,29 +48,29 @@
     cursor: pointer;
 }
 
-.toggle-icon {
+.folder-tree .toggle-icon {
     font-size: 0.7rem;
     display: inline-block;
     width: 100%;
     text-align: center;
 }
 
-.toggle-spacer {
+.folder-tree .toggle-spacer {
     display: inline-block;
     width: 20px;
 }
 
-.folder-icon {
+.folder-tree .folder-icon {
     margin-right: 8px;
     opacity: 0.8;
 }
 
-.folder-name {
+.folder-tree .folder-name {
     white-space: nowrap;
     flex: 1;
 }
 
-.folder-count {
+.folder-tree .folder-count {
     font-size: 0.75rem;
     background-color: var(--color-surface-hover);
     color: var(--color-text-muted);
@@ -81,27 +81,27 @@
     text-align: center;
 }
 
-.selected .folder-count {
+.folder-tree .selected .folder-count {
     background-color: var(--color-primary);
     color: white;
 }
 
 /* .folder-children indent is handled via inline paddingLeft style in FolderNode */
 
-.folder-error {
+.folder-tree .folder-error {
     color: var(--color-error);
     font-size: 0.8rem;
     padding: 4px 8px;
 }
 
-.folder-empty {
+.folder-tree .folder-empty {
     font-size: 0.8rem;
     font-style: italic;
     color: var(--color-text-muted);
     padding: 4px 8px;
 }
 
-.root-item {
+.folder-tree .root-item {
     font-weight: 500;
     border-bottom: 1px solid var(--border);
     margin-bottom: 4px;
@@ -109,7 +109,7 @@
 }
 
 /* Context Menu Styles */
-.folder-context-menu {
+.folder-tree .folder-context-menu {
     background-color: var(--color-surface-elevated);
     /* Using solid color to ensure no transparency */
     border: 1px solid var(--color-border);
@@ -118,10 +118,10 @@
     min-width: 220px;
     padding: 6px 0;
     overflow: hidden;
-    animation: fadeIn 0.1s ease-out;
+    animation: ui-fade-in 0.1s ease-out;
 }
 
-.menu-item {
+.folder-tree .menu-item {
     padding: 10px 16px;
     cursor: pointer;
     display: flex;
@@ -133,25 +133,14 @@
 }
 
 @media (hover: hover) {
-  .menu-item:hover {
+  .folder-tree .menu-item:hover {
       background-color: var(--color-surface-hover);
       color: var(--color-primary);
   }
 }
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-5px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
 /* Explicit actions button for touch (no right-click) */
-.folder-more {
+.folder-tree .folder-more {
     display: none;
     margin-left: auto;
     background: transparent;
@@ -164,7 +153,7 @@
 }
 
 @media (pointer: coarse) {
-    .folder-more {
+    .folder-tree .folder-more {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -172,7 +161,7 @@
         min-height: 44px;
     }
 
-    .folder-item {
+    .folder-tree .folder-item {
         min-height: 44px;
     }
 }

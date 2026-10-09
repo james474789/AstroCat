@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea,
 } from 'recharts';
-import { Pin, PinOff, Clock, EyeOff, Camera, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { Pin, PinOff, Clock, EyeOff, Camera, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
     fetchEquipment, fetchTargets,
@@ -12,6 +12,7 @@ import {
     postRecommendationFeedback, fetchRecommendationFeedback, fetchRecommendationOutcomes,
     formatDateTime,
 } from '../api/client';
+import { Button, Dialog, EmptyState, PageHeader, Spinner, useToast } from '../components/ui';
 import PlanetarySeeingPanel from '../components/tonight/PlanetarySeeingPanel';
 import './Tonight.css';
 
@@ -266,44 +267,6 @@ function AltitudeSparkline({ curve, height = 70, showAxis = false }) {
     );
 }
 
-// ============ Toast (page-local; no shared toast component exists yet, matches the
-// Equipment.jsx / Admin.jsx page-local pattern, extended with an optional Undo action) ============
-
-function useTonightToast() {
-    const [toast, setToast] = useState(null);
-    const timerRef = useRef(null);
-
-    function showToast(message, { type = 'info', durationMs = 6000, onUndo } = {}) {
-        if (timerRef.current) clearTimeout(timerRef.current);
-        setToast({ message, type, onUndo });
-        if (durationMs > 0) {
-            timerRef.current = setTimeout(() => setToast(null), durationMs);
-        }
-    }
-    function dismissToast() {
-        if (timerRef.current) clearTimeout(timerRef.current);
-        setToast(null);
-    }
-    return [toast, showToast, dismissToast];
-}
-
-function Toast({ toast, onDismiss }) {
-    if (!toast) return null;
-    return (
-        <div className={`tonight-toast ${toast.type}`} role="status" aria-live="polite">
-            <span>{toast.message}</span>
-            {toast.onUndo && (
-                <button type="button" className="tonight-toast-undo" onClick={() => { toast.onUndo(); onDismiss(); }}>
-                    Undo
-                </button>
-            )}
-            <button type="button" className="tonight-toast-close" onClick={onDismiss} aria-label="Dismiss">
-                <X size={14} />
-            </button>
-        </div>
-    );
-}
-
 // ============ Feedback action row (Pin, Snooze, Not interested, Imaged) ============
 
 function ActionRow({ pinned, onAction }) {
@@ -329,13 +292,14 @@ function ActionRow({ pinned, onAction }) {
                 type="button"
                 className={`action-btn${pinned ? ' active' : ''}`}
                 title={pinned ? 'Unpin' : 'Pin for Tonight'}
+                aria-label={pinned ? 'Unpin' : 'Pin for Tonight'}
                 onClick={() => onAction(pinned ? 'UNPIN' : 'PIN')}
             >
                 {pinned ? <PinOff size={16} /> : <Pin size={16} />}
             </button>
 
             <div className="action-dropdown">
-                <button type="button" className="action-btn" title="Snooze" onClick={() => toggleMenu('snooze')}>
+                <button type="button" className="action-btn" title="Snooze" aria-label="Snooze" aria-haspopup="menu" aria-expanded={openMenu === 'snooze'} onClick={() => toggleMenu('snooze')}>
                     <Clock size={16} /><ChevronDown size={12} />
                 </button>
                 {openMenu === 'snooze' && (
@@ -354,7 +318,7 @@ function ActionRow({ pinned, onAction }) {
             </div>
 
             <div className="action-dropdown">
-                <button type="button" className="action-btn" title="Not interested" onClick={() => toggleMenu('dismiss')}>
+                <button type="button" className="action-btn" title="Not interested" aria-label="Not interested" aria-haspopup="menu" aria-expanded={openMenu === 'dismiss'} onClick={() => toggleMenu('dismiss')}>
                     <EyeOff size={16} /><ChevronDown size={12} />
                 </button>
                 {openMenu === 'dismiss' && (
@@ -372,7 +336,7 @@ function ActionRow({ pinned, onAction }) {
                 )}
             </div>
 
-            <button type="button" className="action-btn" title="I imaged it" onClick={() => onAction('IMAGED')}>
+            <button type="button" className="action-btn" title="I imaged it" aria-label="I imaged it" onClick={() => onAction('IMAGED')}>
                 <Camera size={16} />
             </button>
         </div>
@@ -527,9 +491,9 @@ function PickCard({ pick, laneId, rank, onAction }) {
             {pick.catalog === 'WF' ? (
                 <MemberLinks members={pick.members} />
             ) : (
-                <Link to={`/targets/${encodeURIComponent(pick.target_key)}`} className="btn btn-secondary btn-sm open-target-link">
+                <Button to={`/targets/${encodeURIComponent(pick.target_key)}`} variant="tinted" size="sm" className="open-target-link">
                     Open target
-                </Link>
+                </Button>
             )}
         </div>
     );
@@ -603,14 +567,14 @@ function PinnedUnavailableStrip({ items }) {
 function ExcludedCountsPanel({ counts }) {
     const entries = Object.entries(counts || {}).filter(([, v]) => v > 0);
     return (
-        <div className="empty-state">
-            <h3 className="empty-state-title">No feasible picks tonight</h3>
-            {entries.length > 0 && (
+        <EmptyState
+            title="No feasible picks tonight"
+            action={entries.length > 0 ? (
                 <div className="chip-row excluded-counts">
                     {entries.map(([k, v]) => <span key={k} className="chip">{k}: {v}</span>)}
                 </div>
-            )}
-        </div>
+            ) : undefined}
+        />
     );
 }
 
@@ -680,9 +644,9 @@ function WhyNotPanel({ date, siteId, rig }) {
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                 />
-                <button type="submit" className="btn btn-secondary" disabled={loading}>
+                <Button type="submit" variant="tinted" loading={loading}>
                     {loading ? 'Checking…' : 'Check'}
-                </button>
+                </Button>
             </form>
             {error && <div className="form-error">{error}</div>}
             {result && (
@@ -728,7 +692,7 @@ function ReplayPanel() {
 
     return (
         <div className="replay-panel">
-            <button type="button" className="replay-toggle" onClick={() => setOpen((o) => !o)}>
+            <button type="button" className="replay-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
                 {open ? <ChevronDown size={14} style={{ verticalAlign: '-2px' }} /> : <ChevronRight size={14} style={{ verticalAlign: '-2px' }} />} Replay report{report.generated_at ? ` (${formatDateTime(report.generated_at)})` : ''}
             </button>
             {open && (
@@ -753,11 +717,12 @@ function ReplayPanel() {
 
 // ============ Hidden-items manager ============
 
-function HiddenManagerModal({ onClose, onRestore }) {
+function HiddenManagerModal({ open, onClose, onRestore }) {
     const feedbackQuery = useQuery({
         queryKey: ['recommendationFeedback'],
         queryFn: fetchRecommendationFeedback,
         staleTime: 0,
+        enabled: open,
     });
 
     const items = feedbackQuery.data?.items || [];
@@ -765,44 +730,34 @@ function HiddenManagerModal({ onClose, onRestore }) {
     const dismissed = items.filter((i) => i.dismissed);
 
     return (
-        <div className="tonight-modal-overlay" onClick={onClose}>
-            <div className="tonight-modal-content" onClick={(e) => e.stopPropagation()}>
-                <header className="tonight-modal-header">
-                    <h2>Hidden targets</h2>
-                    <button type="button" className="tonight-modal-close" onClick={onClose} aria-label="Close">
-                        <X size={18} />
-                    </button>
-                </header>
-                <div className="tonight-modal-body">
-                    {feedbackQuery.isLoading && <p className="muted small">Loading…</p>}
-                    {feedbackQuery.isError && <p className="form-error">{feedbackQuery.error?.message}</p>}
+        <Dialog open={open} onClose={onClose} title="Hidden targets" size="md" className="dlg-tonight-hidden">
+            {feedbackQuery.isLoading && <p className="muted small">Loading…</p>}
+            {feedbackQuery.isError && <p className="form-error">{feedbackQuery.error?.message}</p>}
 
-                    <h3 className="hidden-section-title">Snoozed ({snoozed.length})</h3>
-                    {snoozed.length === 0 && <p className="muted small">Nothing snoozed.</p>}
-                    {snoozed.map((item) => (
-                        <div key={item.target_key} className="hidden-item-row">
-                            <span className="hidden-item-name">{item.name || item.target_key}</span>
-                            <span className="muted small">until {item.snoozed_until}</span>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRestore(item, 'UNSNOOZE')}>
-                                Restore
-                            </button>
-                        </div>
-                    ))}
-
-                    <h3 className="hidden-section-title">Not interested ({dismissed.length})</h3>
-                    {dismissed.length === 0 && <p className="muted small">Nothing dismissed.</p>}
-                    {dismissed.map((item) => (
-                        <div key={item.target_key} className="hidden-item-row">
-                            <span className="hidden-item-name">{item.name || item.target_key}</span>
-                            <span className="muted small">{DISMISS_REASON_LABELS[item.dismiss_reason] || item.dismiss_reason}</span>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRestore(item, 'UNDISMISS')}>
-                                Restore
-                            </button>
-                        </div>
-                    ))}
+            <h3 className="hidden-section-title">Snoozed ({snoozed.length})</h3>
+            {snoozed.length === 0 && <p className="muted small">Nothing snoozed.</p>}
+            {snoozed.map((item) => (
+                <div key={item.target_key} className="hidden-item-row">
+                    <span className="hidden-item-name">{item.name || item.target_key}</span>
+                    <span className="muted small">until {item.snoozed_until}</span>
+                    <Button variant="tinted" size="sm" onClick={() => onRestore(item, 'UNSNOOZE')}>
+                        Restore
+                    </Button>
                 </div>
-            </div>
-        </div>
+            ))}
+
+            <h3 className="hidden-section-title">Not interested ({dismissed.length})</h3>
+            {dismissed.length === 0 && <p className="muted small">Nothing dismissed.</p>}
+            {dismissed.map((item) => (
+                <div key={item.target_key} className="hidden-item-row">
+                    <span className="hidden-item-name">{item.name || item.target_key}</span>
+                    <span className="muted small">{DISMISS_REASON_LABELS[item.dismiss_reason] || item.dismiss_reason}</span>
+                    <Button variant="tinted" size="sm" onClick={() => onRestore(item, 'UNDISMISS')}>
+                        Restore
+                    </Button>
+                </div>
+            ))}
+        </Dialog>
     );
 }
 
@@ -822,7 +777,7 @@ function OutcomesPanel() {
 
     return (
         <div className="outcomes-panel">
-            <button type="button" className="replay-toggle" onClick={() => setOpen((o) => !o)}>
+            <button type="button" className="replay-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
                 {open ? <ChevronDown size={14} style={{ verticalAlign: '-2px' }} /> : <ChevronRight size={14} style={{ verticalAlign: '-2px' }} />} Advice outcomes (last 90 days)
             </button>
             {open && (
@@ -893,7 +848,7 @@ export default function Tonight() {
     const [selectedSiteId, setSelectedSiteId] = useState(null);
     const [rig, setRig] = useState('mounted');
     const [hiddenModalOpen, setHiddenModalOpen] = useState(false);
-    const [toast, showToast, dismissToast] = useTonightToast();
+    const toast = useToast();
     const perLane = 6;
 
     const equipmentQuery = useQuery({
@@ -930,7 +885,7 @@ export default function Tonight() {
                 context: extra.context,
             });
         } catch (err) {
-            showToast(`Failed: ${err.message}`, { type: 'error' });
+            toast.error(`Failed: ${err.message}`);
         } finally {
             queryClient.invalidateQueries({ queryKey: ['recommendations'] });
             queryClient.invalidateQueries({ queryKey: ['recommendationFeedback'] });
@@ -971,50 +926,58 @@ export default function Tonight() {
         else if (action === 'DISMISS') message = `Marked ${name} not interested (${DISMISS_REASON_LABELS[extra.reason] || extra.reason})`;
         else if (action === 'IMAGED') message = `Marked ${name} imaged`;
 
-        showToast(message, inverse ? { onUndo: undo } : {});
+        toast.info(message, inverse ? { action: { label: 'Undo', onClick: undo } } : {});
         sendFeedback(pick.target_key, action, { ...extra, context });
     }
 
     function handleRestore(item, action) {
         sendFeedback(item.target_key, action, {});
-        showToast(`Restored ${item.name || item.target_key}`);
+        toast.success(`Restored ${item.name || item.target_key}`);
     }
 
     if (equipmentQuery.isLoading) {
         return (
-            <div className="loading-state">
-                <div className="spinner" />
-                <p>Loading equipment…</p>
+            <div className="page-tonight">
+                <div className="tonight-loading">
+                    <Spinner />
+                    <p>Loading equipment…</p>
+                </div>
             </div>
         );
     }
 
     if (equipmentQuery.isError) {
         return (
-            <div className="empty-state">
-                <h3 className="empty-state-title">Failed to load equipment</h3>
-                <p className="empty-state-text">{equipmentQuery.error?.message}</p>
-                <button className="btn btn-primary" onClick={() => equipmentQuery.refetch()}>Retry</button>
+            <div className="page-tonight">
+                <EmptyState
+                    title="Failed to load equipment"
+                    description={equipmentQuery.error?.message}
+                    action={<Button variant="filled" onClick={() => equipmentQuery.refetch()}>Retry</Button>}
+                />
             </div>
         );
     }
 
     if (sites.length === 0) {
         return (
-            <div className="empty-state">
-                <h3 className="empty-state-title">No observing sites yet</h3>
-                <p className="empty-state-text">Add a site to get tonight's picks.</p>
-                <Link className="btn btn-primary" to="/equipment">Go to Equipment</Link>
+            <div className="page-tonight">
+                <EmptyState
+                    title="No observing sites yet"
+                    description="Add a site to get tonight's picks."
+                    action={<Button to="/equipment" variant="filled">Go to Equipment</Button>}
+                />
             </div>
         );
     }
 
     if (rigs.length === 0) {
         return (
-            <div className="empty-state">
-                <h3 className="empty-state-title">No rigs yet</h3>
-                <p className="empty-state-text">Add a rig so AstroCat knows what it's planning for.</p>
-                <Link className="btn btn-primary" to="/equipment">Go to Equipment</Link>
+            <div className="page-tonight">
+                <EmptyState
+                    title="No rigs yet"
+                    description="Add a rig so AstroCat knows what it's planning for."
+                    action={<Button to="/equipment" variant="filled">Go to Equipment</Button>}
+                />
             </div>
         );
     }
@@ -1035,24 +998,21 @@ export default function Tonight() {
     const hasAnyPicks = !!data?.hero || nonEmptyLanes.length > 0 || rigPlan.some((e) => e.items?.length > 0);
 
     return (
-        <div className="tonight-page">
-            <div className="page-header">
-                <h1 className="page-title">Tonight</h1>
-                <p className="page-subtitle">What to image tonight, ranked by your history and sky</p>
-            </div>
+        <div className="page-tonight">
+            <PageHeader title="Tonight" subtitle="What to image tonight, ranked by your history and sky" />
 
             <div className="tonight-controls">
                 <div className="date-control">
-                    <button type="button" className="btn btn-icon" onClick={handlePrev} title="Previous night">&lsaquo;</button>
+                    <Button variant="plain" iconOnly icon={<span aria-hidden="true">&lsaquo;</span>} onClick={handlePrev} aria-label="Previous night" />
                     <input
                         type="date"
                         className="input"
                         value={effectiveDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
                     />
-                    <button type="button" className="btn btn-icon" onClick={handleNext} title="Next night">&rsaquo;</button>
+                    <Button variant="plain" iconOnly icon={<span aria-hidden="true">&rsaquo;</span>} onClick={handleNext} aria-label="Next night" />
                     {selectedDate && (
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSelectedDate('')}>Tonight</button>
+                        <Button variant="plain" size="sm" onClick={() => setSelectedDate('')}>Tonight</Button>
                     )}
                 </div>
                 <select
@@ -1076,8 +1036,8 @@ export default function Tonight() {
             </div>
 
             {recQuery.isLoading && (
-                <div className="loading-state">
-                    <div className="spinner" />
+                <div className="tonight-loading">
+                    <Spinner />
                     <p>Working out tonight’s picks…</p>
                 </div>
             )}
@@ -1099,10 +1059,7 @@ export default function Tonight() {
                     )}
 
                     {context?.tier === 'NONE' ? (
-                        <div className="empty-state">
-                            <h3 className="empty-state-title">Too bright tonight</h3>
-                            <p className="empty-state-text">Sun never below −9°.</p>
-                        </div>
+                        <EmptyState title="Too bright tonight" description="Sun never below −9°." />
                     ) : !hasAnyPicks ? (
                         <ExcludedCountsPanel counts={data.excluded_counts} />
                     ) : (
@@ -1149,14 +1106,11 @@ export default function Tonight() {
 
             {isAdmin && <ReplayPanel />}
 
-            <Toast toast={toast} onDismiss={dismissToast} />
-
-            {hiddenModalOpen && (
-                <HiddenManagerModal
-                    onClose={() => setHiddenModalOpen(false)}
-                    onRestore={handleRestore}
-                />
-            )}
+            <HiddenManagerModal
+                open={hiddenModalOpen}
+                onClose={() => setHiddenModalOpen(false)}
+                onRestore={handleRestore}
+            />
         </div>
     );
 }

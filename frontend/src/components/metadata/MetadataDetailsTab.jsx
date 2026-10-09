@@ -137,7 +137,7 @@ export default function MetadataDetailsTab({ image, headerData }) {
     ];
 
     return (
-        <div className="metadata-details-tab">
+        <div className="metadata-tab metadata-details-tab">
             <div className="sections-container">
                 {detailSections.map(section => {
                     const fields = section.fields.filter(([_, val]) => val !== null);

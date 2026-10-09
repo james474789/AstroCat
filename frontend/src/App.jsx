@@ -22,6 +22,7 @@ import Login from './pages/Login';
 import Setup from './pages/Setup';
 import { useAuth } from './context/AuthContext';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import { ConfirmProvider, ToastProvider } from './components/ui';
 import { Loader2 } from 'lucide-react';
 import './index.css';
 
@@ -130,7 +131,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
-          <AppRoutes />
+          <ToastProvider>
+            <ConfirmProvider>
+              <AppRoutes />
+            </ConfirmProvider>
+          </ToastProvider>
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>

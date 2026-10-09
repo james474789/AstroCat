@@ -1,5 +1,6 @@
 import { Copy, Check, Search } from 'lucide-react';
 import { useState } from 'react';
+import { EmptyState } from '../ui';
 import './MetadataTab.css';
 
 export default function MetadataRawTab({ headerData, fileName }) {
@@ -23,16 +24,14 @@ export default function MetadataRawTab({ headerData, fileName }) {
 
     if (!headerData || Object.keys(headerData).length === 0) {
         return (
-            <div className="metadata-raw-tab">
-                <div className="empty-state">
-                    <p>No raw header data available for this image.</p>
-                </div>
+            <div className="metadata-tab metadata-raw-tab">
+                <EmptyState title="No raw header data available for this image." />
             </div>
         );
     }
 
     return (
-        <div className="metadata-raw-tab">
+        <div className="metadata-tab metadata-raw-tab">
             <div className="raw-search-container">
                 <Search size={18} />
                 <input
@@ -49,9 +48,7 @@ export default function MetadataRawTab({ headerData, fileName }) {
 
             <div className="raw-headers-container">
                 {filteredHeaders.length === 0 ? (
-                    <div className="empty-state">
-                        <p>No headers match your search.</p>
-                    </div>
+                    <EmptyState title="No headers match your search." />
                 ) : (
                     <table className="raw-headers-table">
                         <thead>

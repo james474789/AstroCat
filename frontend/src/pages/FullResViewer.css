@@ -1,5 +1,5 @@
 /* V1 full-resolution deep-zoom viewer: a black full-viewport stage with an auto-hiding top bar. */
-.fullres-viewer {
+.page-fullres {
     position: fixed;
     inset: 0;
     z-index: 1000;
@@ -9,17 +9,17 @@
     user-select: none;
 }
 
-.fullres-stage,
-.fullres-osd {
+.page-fullres .fullres-stage,
+.page-fullres .fullres-osd {
     position: absolute;
     inset: 0;
     cursor: crosshair;
     touch-action: none;
 }
 
-.fullres-osd { background: var(--color-black); }
+.page-fullres .fullres-osd { background: var(--color-black); }
 
-.fullres-bar {
+.page-fullres .fullres-bar {
     position: absolute;
     top: 0;
     left: 0;
@@ -33,12 +33,12 @@
     transition: opacity 0.25s ease;
 }
 
-.fullres-bar.hidden {
+.page-fullres .fullres-bar.hidden {
     opacity: 0;
     pointer-events: none;
 }
 
-.fr-title {
+.page-fullres .fr-title {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -47,7 +47,7 @@
     font-size: 0.9rem;
 }
 
-.fr-nav {
+.page-fullres .fr-nav {
     display: flex;
     align-items: center;
     gap: 0.35rem;
@@ -55,7 +55,7 @@
     white-space: nowrap;
 }
 
-.fr-btn {
+.page-fullres .fr-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
@@ -68,13 +68,13 @@
     cursor: pointer;
 }
 
-.fr-btn.icon { padding: 0.35rem; }
+.page-fullres .fr-btn.icon { padding: 0.35rem; }
 @media (hover: hover) {
-  .fr-btn:hover:not(:disabled) { background: var(--color-surface-hover); }
+  .page-fullres .fr-btn:hover:not(:disabled) { background: var(--color-surface-hover); }
 }
-.fr-btn:disabled { opacity: 0.4; cursor: default; }
+.page-fullres .fr-btn:disabled { opacity: 0.4; cursor: default; }
 
-.fr-select {
+.page-fullres .fr-select {
     padding: 0.35rem 0.5rem;
     border: 1px solid var(--color-border);
     border-radius: 6px;
@@ -83,7 +83,7 @@
     font-size: 0.85rem;
 }
 
-.fr-zoom {
+.page-fullres .fr-zoom {
     min-width: 3.2rem;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -92,16 +92,16 @@
 }
 
 /* Thin lines drawn in CSS (not OSD overlays) so they stay 1 px at any zoom */
-.fr-crosshair {
+.page-fullres .fr-crosshair {
     position: absolute;
     pointer-events: none;
     background: rgba(34, 211, 238, 0.55);
     z-index: 10;
 }
-.fr-crosshair.horizontal { left: 0; right: 0; height: 1px; }
-.fr-crosshair.vertical { top: 0; bottom: 0; width: 1px; }
+.page-fullres .fr-crosshair.horizontal { left: 0; right: 0; height: 1px; }
+.page-fullres .fr-crosshair.vertical { top: 0; bottom: 0; width: 1px; }
 
-.fullres-readout {
+.page-fullres .fullres-readout {
     position: absolute;
     left: 0.75rem;
     bottom: calc(0.75rem + var(--safe-bottom, 0px));
@@ -114,7 +114,7 @@
     pointer-events: none;
 }
 
-.fullres-chip {
+.page-fullres .fullres-chip {
     position: absolute;
     top: 3.6rem;
     left: 50%;
@@ -130,13 +130,10 @@
     font-size: 0.85rem;
     pointer-events: auto;
 }
-.fullres-chip.error { border-color: var(--color-error); }
-.fullres-chip.subtle { color: var(--color-text-secondary); }
-.fullres-chip .spin { animation: fr-spin 1s linear infinite; }
+.page-fullres .fullres-chip.error { border-color: var(--color-error); }
+.page-fullres .fullres-chip.subtle { color: var(--color-text-secondary); }
 
-@keyframes fr-spin { to { transform: rotate(360deg); } }
-
-.fullres-message {
+.page-fullres.fullres-message {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -147,32 +144,33 @@
 }
 
 @media (max-width: 720px) {
-    .fullres-bar { flex-wrap: wrap; gap: 0.4rem; }
-    .fr-title { flex-basis: 100%; order: -1; }
+    .page-fullres .fullres-bar { flex-wrap: wrap; gap: 0.4rem; }
+    .page-fullres .fr-title { flex-basis: 100%; order: -1; }
 }
 
 /* Images-in-field overlay */
-.fullres-stage .field-overlay-layer { z-index: 5; }
-.fullres-stage .sky-overlay-layer { z-index: 4; }
-.fullres-sky-legend {
+.page-fullres .fullres-stage .field-overlay-layer { z-index: 5; }
+.page-fullres .fullres-stage .sky-overlay-layer { z-index: 4; }
+.page-fullres .fullres-sky-legend {
     position: absolute;
     left: 0.75rem;
     top: calc(3.75rem + var(--safe-top, 0px));
     z-index: 20;
 }
-.fullres-field-legend {
+.page-fullres .fullres-field-legend {
     position: absolute;
     right: 0.75rem;
     top: calc(3.75rem + var(--safe-top, 0px));
     z-index: 20;
 }
-.fr-warn-icon { margin-left: 4px; color: var(--color-warning); }
-.fullres-osd.fo-hover,
-.fullres-osd.fo-hover * { cursor: pointer; }
-.fr-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: white; }
+.page-fullres .fr-warn-icon { margin-left: 4px; color: var(--color-warning); }
+.page-fullres .fullres-osd.fo-hover,
+.page-fullres .fullres-osd.fo-hover * { cursor: pointer; }
+.page-fullres .fr-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: white; }
 
 /* Touch: viewer toolbar controls meet the 44px target size */
 @media (pointer: coarse) {
-    .fr-btn, .fr-select { min-height: 44px; }
-    .fr-btn.icon { min-width: 44px; justify-content: center; }
+    .page-fullres .fr-btn,
+.page-fullres .fr-select { min-height: 44px; }
+    .page-fullres .fr-btn.icon { min-width: 44px; justify-content: center; }
 }

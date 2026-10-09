@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, ReferenceArea, Tooltip } from 'recharts';
 import { ChevronDown, Orbit, Check, X, Minus, AlertTriangle } from 'lucide-react';
 import { getSeeingForecast } from '../../api/client';
+import { Button } from '../ui';
 import './PlanetarySeeingPanel.css';
 
 // Design: docs/design/20261001-S1-planetary-seeing-forecast.md §7.2. The panel owns its query and its error
@@ -264,9 +265,9 @@ function HourlyStrip({ hourly, tz }) {
         <div className="seeing-hourly">
             <div className="seeing-hourly-head">
                 <span className="muted small">Hourly score (local time)</span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setOpen((v) => !v)}>
+                <Button variant="plain" size="sm" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
                     {open ? 'Hide factors' : 'Show factors'}
-                </button>
+                </Button>
             </div>
             <div className="seeing-strip" style={{ gridTemplateColumns: `repeat(${hourly.length}, minmax(0, 1fr))` }}>
                 {hourly.map((h) => (

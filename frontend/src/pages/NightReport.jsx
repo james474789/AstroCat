@@ -6,6 +6,8 @@ import SessionQualityChart from '../components/quality/SessionQualityChart';
 import SessionSummary from '../components/quality/SessionSummary';
 import QualityValue from '../components/quality/QualityValue';
 import QualityUnitsToggle from '../components/quality/QualityUnitsToggle';
+import { Button, EmptyState, PageHeader, Spinner } from '../components/ui';
+import './TargetDetail.css'; // shared .target-section / .target-filter-table rules
 import './NightReport.css';
 
 // Q1c Night Report (docs/design/20260927-Q1-star-quality.md §8.2): how star quality
@@ -120,7 +122,7 @@ export default function NightReport() {
     const flaggedCount = (timeline?.points || []).filter((p) => (rigId === 'ALL' || p.rig_id === rigId) && p.flag).length;
 
     return (
-        <div className="night-report">
+        <div className="page-night-report">
             <nav className="breadcrumb">
                 <Link to="/nights">Nights</Link>
                 <span>/</span>
@@ -128,36 +130,36 @@ export default function NightReport() {
                 {targetKey && (<><span>/</span><Link to={`/targets/${encodeURIComponent(targetKey)}`}>{targetKey}</Link></>)}
             </nav>
 
-            <header className="night-header">
-                <div>
-                    <h1 className="night-title">Night of {formatNight(night) || '…'}</h1>
-                    {timeline && (
-                        <div className="night-subtitle">
-                            {timeline.points.length} subs
-                            {timeline.targets.length > 0 && <> · {timeline.targets.map((t, i) => (
-                                <span key={t}>{i > 0 && ', '}<Link to={`/targets/${encodeURIComponent(t)}`}>{t}</Link></span>
-                            ))}</>}
-                            {timeline.site?.name && <> · {timeline.site.name}</>}
-                        </div>
-                    )}
-                </div>
-                <div className="night-nav">
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={!older} onClick={() => older && goto(older)} title="Previous night">
-                        <ChevronLeft size={16} /> Older
-                    </button>
-                    <select className="input select" value={night || ''} onChange={(e) => goto({ night: e.target.value })} aria-label="Night">
-                        {(nights || []).map((n) => (
-                            <option key={n.night} value={n.night}>
-                                {formatNight(n.night)} · {n.subs} subs{n.measured ? ` (${n.measured} measured)` : ''}
-                            </option>
-                        ))}
-                    </select>
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={!newer} onClick={() => newer && goto(newer)} title="Next night">
-                        Newer <ChevronRight size={16} />
-                    </button>
-                    <QualityUnitsToggle />
-                </div>
-            </header>
+            <PageHeader
+                title={`Night of ${formatNight(night) || '…'}`}
+                subtitle={timeline && (
+                    <>
+                        {timeline.points.length} subs
+                        {timeline.targets.length > 0 && <> · {timeline.targets.map((t, i) => (
+                            <span key={t}>{i > 0 && ', '}<Link to={`/targets/${encodeURIComponent(t)}`}>{t}</Link></span>
+                        ))}</>}
+                        {timeline.site?.name && <> · {timeline.site.name}</>}
+                    </>
+                )}
+                actions={(
+                    <div className="night-nav">
+                        <Button size="sm" disabled={!older} onClick={() => older && goto(older)} title="Previous night" icon={<ChevronLeft size={16} />}>
+                            Older
+                        </Button>
+                        <select className="input select" value={night || ''} onChange={(e) => goto({ night: e.target.value })} aria-label="Night">
+                            {(nights || []).map((n) => (
+                                <option key={n.night} value={n.night}>
+                                    {formatNight(n.night)} · {n.subs} subs{n.measured ? ` (${n.measured} measured)` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        <Button size="sm" disabled={!newer} onClick={() => newer && goto(newer)} title="Next night">
+                            Newer <ChevronRight size={16} />
+                        </Button>
+                        <QualityUnitsToggle />
+                    </div>
+                )}
+            />
 
             {targetKey && (
                 <div className="night-scope">
@@ -168,21 +170,21 @@ export default function NightReport() {
             {rigs.length > 1 && (
                 <div className="night-rigs" role="group" aria-label="Rig">
                     {rigs.map((r) => (
-                        <button key={String(r.rig_id)} type="button" className={`btn btn-sm ${rigId === r.rig_id ? 'btn-primary' : 'btn-secondary'}`}
+                        <Button key={String(r.rig_id)} size="sm" variant={rigId === r.rig_id ? 'filled' : 'tinted'}
                             onClick={() => setParam('rig', r.rig_id == null ? 'null' : String(r.rig_id))}>
                             {r.rig_name || 'Unassigned rig'} ({rigCounts.get(r.rig_id) || 0})
-                        </button>
+                        </Button>
                     ))}
-                    <button type="button" className={`btn btn-sm ${rigId === 'ALL' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setParam('rig', 'ALL')}>
+                    <Button size="sm" variant={rigId === 'ALL' ? 'filled' : 'tinted'} onClick={() => setParam('rig', 'ALL')}>
                         All rigs
-                    </button>
+                    </Button>
                 </div>
             )}
 
-            {loading && !timeline && <div className="loading-state"><div className="spinner" /><p>Loading night…</p></div>}
-            {error && !loading && <div className="empty-state"><h3 className="empty-state-title">{error}</h3></div>}
+            {loading && !timeline && <div className="loading-state"><Spinner /><p>Loading night…</p></div>}
+            {error && !loading && <EmptyState title={error} />}
             {nights && nights.length === 0 && !loading && (
-                <div className="empty-state"><h3 className="empty-state-title">No nights with Light subs yet</h3></div>
+                <EmptyState title="No nights with Light subs yet" />
             )}
 
             {timeline && (

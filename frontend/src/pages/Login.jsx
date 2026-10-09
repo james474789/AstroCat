@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, Loader2, Orbit } from 'lucide-react';
+import { LogIn, Orbit } from 'lucide-react';
+import { Button } from '../components/ui';
 import './Login.css';
 
 const Login = () => {
@@ -28,7 +29,7 @@ const Login = () => {
     };
 
     return (
-        <div className="login-container">
+        <div className="login-container page-login">
             <div className="login-card">
                 <div className="login-header">
                     <div className="logo-icon"><Orbit size={48} strokeWidth={1.5} /></div>
@@ -64,20 +65,15 @@ const Login = () => {
 
                     {authError && <div className="login-error">{authError}</div>}
 
-                    <button
+                    <Button
                         type="submit"
-                        className="login-button"
-                        disabled={isSubmitting}
+                        variant="filled"
+                        className="login-submit"
+                        icon={<LogIn size={20} />}
+                        loading={isSubmitting}
                     >
-                        {isSubmitting ? (
-                            <Loader2 className="spinner" size={20} />
-                        ) : (
-                            <>
-                                <LogIn size={20} />
-                                <span>Login</span>
-                            </>
-                        )}
-                    </button>
+                        Login
+                    </Button>
                 </form>
 
                 <div className="login-footer">

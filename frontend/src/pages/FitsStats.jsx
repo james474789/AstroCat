@@ -13,6 +13,7 @@ import { CONSTELLATION_LABELS } from '../data/constellations_labels';
 import RigStarSizeChart from '../components/quality/RigStarSizeChart';
 import QualityStatsSection from '../components/quality/QualityStatsSection';
 import { SERIES, CHART_PRIMARY, CHART_SECONDARY, CHART_ACCENT, CHART_SUCCESS, CHART_AXIS, CHART_TEXT, CHART_TOOLTIP, HEAT, FILTER_SERIES } from '../utils/chartColors';
+import { EmptyState, PageHeader, Spinner } from '../components/ui';
 import './FitsStats.css';
 
 const COLORS = SERIES;
@@ -110,19 +111,23 @@ export default function FitsStats() {
 
     if (isLoading) {
         return (
-            <div className="fits-stats-page loading-container">
-                <div className="spinner" />
-                <p>Loading statistics...</p>
+            <div className="page-fits-stats">
+                <div className="loading-container">
+                    <Spinner size={40} />
+                    <p>Loading statistics...</p>
+                </div>
             </div>
         );
     }
 
     if (isError) {
         return (
-            <div className="fits-stats-page empty-state">
-                <div className="empty-state-icon"><AlertTriangle size={40} aria-hidden="true" /></div>
-                <h3 className="empty-state-title">Failed to load statistics</h3>
-                <p className="empty-state-text">Please check your connection or try again later.</p>
+            <div className="page-fits-stats">
+                <EmptyState
+                    icon={<AlertTriangle size={40} aria-hidden="true" />}
+                    title="Failed to load statistics"
+                    description="Please check your connection or try again later."
+                />
             </div>
         );
     }
@@ -342,11 +347,11 @@ export default function FitsStats() {
     const totalImages = overview.total_images || 0;
 
     return (
-        <div className="fits-stats-page">
-            <div className="stats-header">
-                <h1 className="stats-title">Statistics</h1>
-                <p className="stats-subtitle">Deep dive into technical metadata from your FITS headers.</p>
-            </div>
+        <div className="page-fits-stats">
+            <PageHeader
+                title="Statistics"
+                subtitle="Deep dive into technical metadata from your FITS headers."
+            />
 
             {/* Filters */}
             <div className="stats-filters">

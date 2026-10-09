@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchImage, updateImage, rescanImage, solveFieldOverlaps, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
@@ -18,11 +18,14 @@ import SeenInPanel from '../components/seenIn/SeenInPanel';
 import { Maximize2, Layers, Crosshair, AlertTriangle, Frame, Orbit, Download, Sparkles, RefreshCw, ClipboardList, Hourglass, Rocket, Pencil, Check, Star, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityCard from '../components/quality/StarQualityCard';
+import { Button, EmptyState, Spinner, useConfirm, useToast } from '../components/ui';
 import './ImageDetail.css';
 
 export default function ImageDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const toast = useToast();
+    const confirm = useConfirm();
     const [image, setImage] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -180,7 +183,7 @@ export default function ImageDetail() {
             setImage(updated);
         } catch (err) {
             console.error('Failed to update rig:', err);
-            alert('Failed to update rig: ' + err.message);
+            toast.error('Failed to update rig: ' + err.message);
         } finally {
             setSaving(false);
         }
@@ -194,7 +197,7 @@ export default function ImageDetail() {
             setEditingTarget(false);
         } catch (err) {
             console.error('Failed to update target:', err);
-            alert('Failed to update target: ' + err.message);
+            toast.error('Failed to update target: ' + err.message);
         } finally {
             setSaving(false);
         }
@@ -229,7 +232,7 @@ export default function ImageDetail() {
                 loadImage();
             }
         } catch (e) {
-            alert("Error starting rescan: " + e.message);
+            toast.error("Error starting rescan: " + e.message);
         } finally {
             setSaving(false);
         }
@@ -238,14 +241,20 @@ export default function ImageDetail() {
     async function handleSolveOverlays() {
         const n = overlays.unsolvedCount;
         const capped = overlays.truncated ? ' (the list is capped; some may be left out)' : '';
-        if (!window.confirm(`Submit ${n} unsolved image${n === 1 ? '' : 's'} in view (${OVERLAY_MODE_LABELS[overlays.mode]}) for astrometry?${capped}`)) return;
+        const plural = n === 1 ? '' : 's';
+        const ok = await confirm({
+            title: `Submit ${n} unsolved image${plural} for astrometry?`,
+            description: `Images in view (${OVERLAY_MODE_LABELS[overlays.mode]}) that have no plate solution will be queued.${capped}`,
+            confirmLabel: `Submit ${n} image${plural}`,
+        });
+        if (!ok) return;
         try {
             setSaving(true);
             const res = await solveFieldOverlaps(id, overlays.mode);
-            alert(`Queued ${res.queued} for astrometry` + (res.skipped ? `, skipped ${res.skipped} (already submitted or solved)` : ''));
+            toast.success(`Queued ${res.queued} for astrometry` + (res.skipped ? `, skipped ${res.skipped} (already submitted or solved)` : ''));
             setTimeout(() => overlays.refetch(), 5000);
         } catch (e) {
-            alert('Error submitting for astrometry: ' + e.message);
+            toast.error('Error submitting for astrometry: ' + e.message);
         } finally {
             setSaving(false);
         }
@@ -255,11 +264,11 @@ export default function ImageDetail() {
         try {
             setSaving(true);
             await regenerateImageThumbnail(id);
-            alert("Thumbnail regeneration queued. It may take a few seconds to update.");
+            toast.info("Thumbnail regeneration queued. It may take a few seconds to update.");
             // Reload after short delay
             setTimeout(() => loadImage(), 3000);
         } catch (e) {
-            alert("Error regenerating thumbnail: " + e.message);
+            toast.error("Error regenerating thumbnail: " + e.message);
         } finally {
             setSaving(false);
         }
@@ -295,6 +304,8 @@ export default function ImageDetail() {
     // Keyboard shortcut for rating (0-5 keys) and navigation (arrows)
     useEffect(() => {
         const handleKeyPress = (e) => {
+            // Ignore while a dialog (e.g. a confirm) is open: it is modal, so page shortcuts must not fire behind it
+            if (document.querySelector('dialog[open]')) return;
             // Ignore if in an input field
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
 
@@ -506,8 +517,8 @@ export default function ImageDetail() {
 
     if (loading) {
         return (
-            <div className="image-detail-loading">
-                <div className="spinner" />
+            <div className="page-image-detail image-detail-loading">
+                <Spinner />
                 <p>Loading image details...</p>
             </div>
         );
@@ -515,18 +526,16 @@ export default function ImageDetail() {
 
     if (error) {
         return (
-            <div className="image-detail-error">
-                <h2>Image Not Found</h2>
-                <p>{error}</p>
-                <button className="btn btn-primary" onClick={() => navigate('/search')}>
-                    Back to Search
-                </button>
-            </div>
+            <EmptyState
+                title="Image Not Found"
+                description={error}
+                action={<Button variant="filled" onClick={() => navigate('/search')}>Back to Search</Button>}
+            />
         );
     }
 
     return (
-        <div className="image-detail">
+        <div className="page-image-detail">
             {overlayPopover && (
                 <FieldOverlayPopover
                     group={overlayPopover.group}
@@ -544,27 +553,29 @@ export default function ImageDetail() {
                 </div>
                 {navInfo.currentIndex !== -1 && (
                     <div className="image-navigation">
-                        <button
-                            className="nav-btn"
+                        <Button
+                            variant="plain"
+                            size="sm"
+                            iconOnly
                             onClick={goPrev}
                             disabled={!navInfo.prevId}
                             title="Previous Image (Left Arrow)"
                             aria-label="Previous image"
-                        >
-                            <ChevronLeft size={18} aria-hidden="true" />
-                        </button>
+                            icon={<ChevronLeft size={18} aria-hidden="true" />}
+                        />
                         <span className="nav-index">
                             Image {navInfo.currentIndex} of {navInfo.total}
                         </span>
-                        <button
-                            className="nav-btn"
+                        <Button
+                            variant="plain"
+                            size="sm"
+                            iconOnly
                             onClick={goNext}
                             disabled={!navInfo.nextId}
                             title="Next Image (Right Arrow)"
                             aria-label="Next image"
-                        >
-                            <ChevronRight size={18} aria-hidden="true" />
-                        </button>
+                            icon={<ChevronRight size={18} aria-hidden="true" />}
+                        />
                     </div>
                 )}
             </nav>
@@ -702,29 +713,29 @@ export default function ImageDetail() {
                         </div>
 
                         {view.s > 1 && (
-                            <button className="btn btn-secondary btn-sm zoom-reset" onClick={() => setView({ s: 1, x: 0, y: 0 })}>
+                            <Button size="sm" className="zoom-reset" onClick={() => setView({ s: 1, x: 0, y: 0 })}>
                                 Reset zoom ({view.s.toFixed(1)}x)
-                            </button>
+                            </Button>
                         )}
 
                         {/* Quick Actions */}
                         <div className="image-actions">
-                            <Link to={`/images/${id}/view`} className="btn btn-secondary" title="Open at full resolution (F)">
-                                <Maximize2 size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+                            <Button to={`/images/${id}/view`} title="Open at full resolution (F)" icon={<Maximize2 size={14} />}>
                                 Full resolution
-                            </Link>
-                            <a
+                            </Button>
+                            <Button
+                                as="a"
                                 href={getDownloadUrl(id, 'jpg')}
-                                className="btn btn-secondary"
                                 download // Hint to browser
+                                icon={<Download size={14} />}
                             >
-                                <Download size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
                                 Download JPG
-                            </a>
+                            </Button>
 
                             {/* AstroCat annotations on/off */}
-                            <button
-                                className={`btn ${sky.active ? 'btn-primary' : 'btn-secondary'}`}
+                            <Button
+                                variant={sky.active ? 'filled' : 'tinted'}
+                                icon={<Sparkles size={14} />}
                                 onClick={() => setAnnotationsOn((on) => !on)}
                                 disabled={!!sky.unavailable}
                                 title={sky.unavailable
@@ -732,61 +743,57 @@ export default function ImageDetail() {
                                         ? `Annotations — approximate: ${sky.warning}`
                                         : 'Annotations: catalog objects from the plate solution')}
                             >
-                                <Sparkles size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
                                 Annotations: {sky.active ? 'On' : 'Off'}
                                 {sky.active && sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
-                            </button>
+                            </Button>
 
-                            <button
-                                className={`btn ${overlays.active ? 'btn-primary' : 'btn-secondary'}`}
+                            <Button
+                                variant={overlays.active ? 'filled' : 'tinted'}
+                                icon={<Layers size={14} />}
                                 onClick={overlays.toggle}
                                 disabled={!!overlays.unavailable}
                                 title={overlays.unavailable || 'Images in this field: footprints of smaller images that overlap it (O)'}
                             >
-                                <Layers size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
                                 In field: {overlays.active ? 'On' : 'Off'}
                                 {overlays.active && !overlays.isLoading && overlays.mode && ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`}
                                 {overlays.active && overlays.isLoading && ' …'}
-                            </button>
+                            </Button>
 
-                            <button
-                                className={`btn ${seenIn.open ? 'btn-primary' : 'btn-secondary'}`}
+                            <Button
+                                variant={seenIn.open ? 'filled' : 'tinted'}
+                                icon={<Frame size={14} />}
                                 onClick={() => seenIn.setOpen(true)}
                                 disabled={!!seenIn.unavailable}
                                 title={seenIn.unavailable || 'Larger images whose field covers this image'}
                             >
-                                <Frame size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
                                 Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
-                            </button>
+                            </Button>
 
                             {overlays.active && overlays.mode && overlays.unsolvedCount > 0 && (
-                                <button
-                                    className="btn btn-secondary"
+                                <Button
+                                    icon={<Crosshair size={14} />}
                                     onClick={handleSolveOverlays}
                                     disabled={saving}
                                     title="Submit the dashed-circle footprints currently shown (no rotation yet) for astrometry"
                                 >
-                                    <Crosshair size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
                                     Solve {overlays.unsolvedCount} unsolved
-                                </button>
+                                </Button>
                             )}
 
-                            <button
-                                className="btn btn-secondary"
+                            <Button
+                                icon={<RefreshCw size={14} />}
                                 onClick={handleRegenerateThumbnail}
                                 disabled={saving}
                                 title="Force backend to regenerate the linear thumbnail"
                             >
-                                <RefreshCw size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
                                 Regenerate
-                            </button>
-                            <button
-                                className="btn btn-secondary"
+                            </Button>
+                            <Button
+                                icon={<ClipboardList size={14} />}
                                 onClick={() => navigate(`/images/${id}/metadata`)}
                             >
-                                <ClipboardList size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
                                 View Metadata
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
@@ -865,25 +872,29 @@ export default function ImageDetail() {
 
                                         {/* Actions */}
                                         <div className="astrometry-actions mt-3 flex gap-2">
-                                            <button
-                                                className="btn btn-primary btn-sm"
+                                            <Button
+                                                variant="filled"
+                                                size="sm"
                                                 onClick={handleRescan}
                                                 disabled={['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status) || saving}
+                                                icon={['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status)
+                                                    ? <Hourglass size={14} />
+                                                    : <TelescopeIcon size={14} />}
                                             >
-                                                {['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status)
-                                                    ? <><Hourglass size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Processing...</>
-                                                    : <><TelescopeIcon size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />Start Rescan</>}
-                                            </button>
+                                                {['SUBMITTED', 'PROCESSING'].includes(image.astrometry_status) ? 'Processing...' : 'Start Rescan'}
+                                            </Button>
 
                                             {image.astrometry_url && (
-                                                <a
+                                                <Button
+                                                    as="a"
                                                     href={image.astrometry_url}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
-                                                    className="btn btn-secondary btn-sm"
+                                                    size="sm"
+                                                    icon={<Rocket size={14} />}
                                                 >
-                                                    <Rocket size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />View Results
-                                                </a>
+                                                    View Results
+                                                </Button>
                                             )}
 
                                         </div>
@@ -1041,8 +1052,8 @@ export default function ImageDetail() {
                                                 placeholder="e.g. M31 (empty clears)"
                                                 autoFocus
                                             />
-                                            <button className="btn btn-primary btn-sm" onClick={handleTargetSave} disabled={saving}>Save</button>
-                                            <button className="btn btn-secondary btn-sm" onClick={() => setEditingTarget(false)} disabled={saving}>Cancel</button>
+                                            <Button variant="filled" size="sm" onClick={handleTargetSave} disabled={saving}>Save</Button>
+                                            <Button size="sm" onClick={() => setEditingTarget(false)} disabled={saving}>Cancel</Button>
                                         </span>
                                     ) : (
                                         <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1056,14 +1067,15 @@ export default function ImageDetail() {
                                                     ({image.target_source === 'MANUAL' ? 'manual' : `auto: ${image.target_source.toLowerCase()}`})
                                                 </span>
                                             )}
-                                            <button
-                                                className="btn btn-ghost btn-sm"
+                                            <Button
+                                                variant="plain"
+                                                size="sm"
+                                                iconOnly
                                                 onClick={() => { setTargetInput(image.target_key || ''); setEditingTarget(true); }}
                                                 title="Edit target"
                                                 aria-label="Edit target"
-                                            >
-                                                <Pencil size={14} aria-hidden="true" />
-                                            </button>
+                                                icon={<Pencil size={14} aria-hidden="true" />}
+                                            />
                                         </span>
                                     )}
                                 </dd>

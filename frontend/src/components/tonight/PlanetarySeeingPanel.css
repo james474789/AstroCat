@@ -7,7 +7,7 @@
     overflow: hidden;
 }
 
-.seeing-header {
+.seeing-panel .seeing-header {
     width: 100%;
     display: flex;
     align-items: center;
@@ -23,35 +23,35 @@
 }
 
 @media (hover: hover) {
-  .seeing-header:hover {
-      background: var(--color-surface-hover);
-  }
+    .seeing-panel .seeing-header:hover {
+          background: var(--color-surface-hover);
+      }
 }
 
-.seeing-header-icon {
+.seeing-panel .seeing-header-icon {
     color: var(--color-accent);
     flex-shrink: 0;
 }
 
-.seeing-title {
+.seeing-panel .seeing-title {
     font-weight: 600;
 }
 
-.seeing-best {
+.seeing-panel .seeing-best {
     color: var(--color-text-secondary);
 }
 
-.seeing-chevron {
+.seeing-panel .seeing-chevron {
     margin-left: auto;
     color: var(--color-text-secondary);
     transition: transform 0.15s ease;
 }
 
-.seeing-chevron.collapsed {
+.seeing-panel .seeing-chevron.collapsed {
     transform: rotate(-90deg);
 }
 
-.seeing-grade {
+.seeing-panel .seeing-grade {
     min-width: 2.4rem;
     text-align: center;
     padding: 0.15rem 0.55rem;
@@ -62,14 +62,17 @@
     border: 1px solid var(--color-border-light);
 }
 
-.seeing-grade.grade-VVP,
-.seeing-grade.grade-VP { color: var(--color-error); border-color: var(--color-error); }
-.seeing-grade.grade-P { color: var(--color-warning); border-color: var(--color-warning); }
-.seeing-grade.grade-A { color: var(--color-text-primary); }
-.seeing-grade.grade-G,
-.seeing-grade.grade-VG { color: var(--color-success); border-color: var(--color-success); }
+.seeing-panel .seeing-grade.grade-VVP,
+.seeing-panel .seeing-grade.grade-VP { color: var(--color-error); border-color: var(--color-error); }
 
-.seeing-verdict {
+.seeing-panel .seeing-grade.grade-P { color: var(--color-warning); border-color: var(--color-warning); }
+
+.seeing-panel .seeing-grade.grade-A { color: var(--color-text-primary); }
+
+.seeing-panel .seeing-grade.grade-G,
+.seeing-panel .seeing-grade.grade-VG { color: var(--color-success); border-color: var(--color-success); }
+
+.seeing-panel .seeing-verdict {
     padding: 0.2rem 0.7rem;
     border-radius: 999px;
     font-size: 0.78rem;
@@ -79,12 +82,15 @@
     border: 1px solid var(--color-border-light);
 }
 
-.seeing-verdict.verdict-GO { background: rgba(34, 197, 94, 0.15); border-color: var(--color-success); color: var(--color-success); }
-.seeing-verdict.verdict-MAYBE { background: rgba(234, 179, 8, 0.15); border-color: var(--color-warning); color: var(--color-warning); }
-.seeing-verdict.verdict-NO_GO { background: rgba(239, 68, 68, 0.12); border-color: var(--color-error); color: var(--color-error); }
-.seeing-verdict.verdict-CLOUD { background: var(--color-surface-elevated); color: var(--color-text-secondary); }
+.seeing-panel .seeing-verdict.verdict-GO { background: rgba(34, 197, 94, 0.15); border-color: var(--color-success); color: var(--color-success); }
 
-.seeing-body {
+.seeing-panel .seeing-verdict.verdict-MAYBE { background: rgba(234, 179, 8, 0.15); border-color: var(--color-warning); color: var(--color-warning); }
+
+.seeing-panel .seeing-verdict.verdict-NO_GO { background: rgba(239, 68, 68, 0.12); border-color: var(--color-error); color: var(--color-error); }
+
+.seeing-panel .seeing-verdict.verdict-CLOUD { background: var(--color-surface-elevated); color: var(--color-text-secondary); }
+
+.seeing-panel .seeing-body {
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -92,11 +98,11 @@
     border-top: 1px solid var(--color-border);
 }
 
-.seeing-empty {
+.seeing-panel .seeing-empty {
     margin: 0.6rem 0 0;
 }
 
-.seeing-stale {
+.seeing-panel .seeing-stale {
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -111,13 +117,13 @@
 
 /* ---- planet rows ---- */
 
-.seeing-planets {
+.seeing-panel .seeing-planets {
     display: flex;
     flex-direction: column;
     margin-top: 0.4rem;
 }
 
-.seeing-planet {
+.seeing-panel .seeing-planet {
     display: grid;
     grid-template-columns: 9rem 11rem 9rem minmax(8rem, 1fr);
     align-items: center;
@@ -126,23 +132,23 @@
     border-bottom: 1px solid var(--color-border);
 }
 
-.seeing-planet:last-child {
+.seeing-panel .seeing-planet:last-child {
     border-bottom: 0;
 }
 
-.seeing-planet-name,
-.seeing-planet-window,
-.seeing-planet-peak {
+.seeing-panel .seeing-planet-name,
+.seeing-panel .seeing-planet-window,
+.seeing-panel .seeing-planet-peak {
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
 }
 
-.seeing-planet-spark {
+.seeing-panel .seeing-planet-spark {
     min-width: 0;
 }
 
-.seeing-spark-tooltip {
+.seeing-panel .seeing-spark-tooltip {
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
@@ -154,22 +160,22 @@
     color: var(--color-text-primary);
 }
 
-.seeing-spark-empty {
+.seeing-panel .seeing-spark-empty {
     height: 52px;
 }
 
-.seeing-chips {
+.seeing-panel .seeing-chips {
     grid-column: 1 / -1;
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
 }
 
-.seeing-chips:empty {
+.seeing-panel .seeing-chips:empty {
     display: none;
 }
 
-.seeing-chip {
+.seeing-panel .seeing-chip {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
@@ -181,54 +187,54 @@
     color: var(--color-text-secondary);
 }
 
-.seeing-chip.warn {
+.seeing-panel .seeing-chip.warn {
     background: rgba(234, 179, 8, 0.12);
     border-color: var(--color-warning);
     color: var(--color-warning);
 }
 
-.seeing-chip.muted {
+.seeing-panel .seeing-chip.muted {
     color: var(--color-text-muted);
 }
 
 /* ---- hourly strip ---- */
 
-.seeing-hourly {
+.seeing-panel .seeing-hourly {
     display: flex;
     flex-direction: column;
     gap: 0.3rem;
 }
 
-.seeing-hourly-head {
+.seeing-panel .seeing-hourly-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
-.seeing-strip {
+.seeing-panel .seeing-strip {
     display: grid;
     gap: 2px;
 }
 
-.seeing-cell {
+.seeing-panel .seeing-cell {
     height: 22px;
     border-radius: 3px;
     cursor: default;
 }
 
-.seeing-cell.small-cell {
+.seeing-panel .seeing-cell.small-cell {
     height: 14px;
 }
 
-.seeing-cell.shown-only {
+.seeing-panel .seeing-cell.shown-only {
     background: var(--color-border);
 }
 
-.seeing-ticks {
+.seeing-panel .seeing-ticks {
     margin-top: -0.1rem;
 }
 
-.seeing-tick {
+.seeing-panel .seeing-tick {
     font-size: 0.65rem;
     color: var(--color-text-muted);
     text-align: left;
@@ -236,27 +242,27 @@
     white-space: nowrap;
 }
 
-.seeing-factors {
+.seeing-panel .seeing-factors {
     display: flex;
     flex-direction: column;
     gap: 3px;
     margin-top: 0.3rem;
 }
 
-.seeing-factor-row {
+.seeing-panel .seeing-factor-row {
     display: grid;
     grid-template-columns: 9.5rem 1fr;
     align-items: center;
     gap: 0.5rem;
 }
 
-.seeing-factor-label {
+.seeing-panel .seeing-factor-label {
     color: var(--color-text-secondary);
 }
 
 /* ---- checklist and sources ---- */
 
-.seeing-checklist ul {
+.seeing-panel .seeing-checklist ul {
     list-style: none;
     padding: 0;
     margin: 0.3rem 0 0;
@@ -265,38 +271,41 @@
     gap: 0.4rem 1.2rem;
 }
 
-.seeing-checklist li {
+.seeing-panel .seeing-checklist li {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     font-size: 0.85rem;
 }
 
-.seeing-checklist li.ok svg { color: var(--color-success); }
-.seeing-checklist li.bad svg { color: var(--color-error); }
-.seeing-checklist li.na { color: var(--color-text-muted); }
+.seeing-panel .seeing-checklist li.ok svg { color: var(--color-success); }
 
-.seeing-sources {
+.seeing-panel .seeing-checklist li.bad svg { color: var(--color-error); }
+
+.seeing-panel .seeing-checklist li.na { color: var(--color-text-muted); }
+
+.seeing-panel .seeing-sources {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
 }
 
 @media (max-width: 760px) {
-    .seeing-planet {
-        grid-template-columns: 1fr 1fr;
-    }
-
-    .seeing-planet-spark {
-        grid-column: 1 / -1;
-    }
-
-    .seeing-factor-row {
-        grid-template-columns: 1fr;
-        gap: 0.15rem;
-    }
-
-    .seeing-tick {
-        font-size: 0.55rem;
-    }
+    .seeing-panel .seeing-planet {
+            grid-template-columns: 1fr 1fr;
+        }
+    .seeing-panel .seeing-planet-spark {
+            grid-column: 1 / -1;
+        }
+    .seeing-panel .seeing-factor-row {
+            grid-template-columns: 1fr;
+            gap: 0.15rem;
+        }
+    .seeing-panel .seeing-tick {
+            font-size: 0.55rem;
+        }
 }
+
+/* Helpers used inside the panel, previously inherited from other pages' unscoped stylesheets */
+.seeing-panel .muted { color: var(--color-text-secondary); }
+.seeing-panel .small { font-size: 0.78rem; }

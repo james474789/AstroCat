@@ -15,6 +15,7 @@ import SpatialSearchInput from '../components/layout/SpatialSearchInput';
 import FolderTree from '../components/layout/FolderTree';
 import { useQualityUnits } from '../context/QualityUnitsContext';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { Button, Dialog, EmptyState, PageHeader, Skeleton, useToast } from '../components/ui';
 import './Search.css';
 
 // Q1d: star quality filters (units for fwhm/hfr bounds travel in quality_units).
@@ -42,8 +43,20 @@ function hmsToDegrees(hms) {
     return (h + m / 60) * 15;
 }
 
+// Result line inside the bulk-edit dialogs. Messages start with a check or cross.
+function BulkMessage({ message }) {
+    if (!message) return null;
+    const ok = message.includes('✓');
+    return (
+        <div className={`bulk-message ${ok ? 'ok' : 'err'}`} role="status">
+            {message.startsWith('✓') ? <Check size={14} aria-hidden="true" /> : <X size={14} aria-hidden="true" />}{' '}{message.replace(/^[✓✗]\s*/, '')}
+        </div>
+    );
+}
+
 export default function Search() {
     const [searchParams, setSearchParams] = useSearchParams();
+    const toast = useToast();
     const [images, setImages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [totalCount, setTotalCount] = useState(0);
@@ -59,7 +72,6 @@ export default function Search() {
     const [bulkChangeLoading, setBulkChangeLoading] = useState(false);
     const [bulkChangeMessage, setBulkChangeMessage] = useState('');
     const [syncMetadataLoading, setSyncMetadataLoading] = useState(false);
-    const [syncMetadataMessage, setSyncMetadataMessage] = useState('');
     // F1: bulk "Set frame type..." action
     const [bulkFrameTypeModalOpen, setBulkFrameTypeModalOpen] = useState(false);
     const [bulkFrameTypeValue, setBulkFrameTypeValue] = useState('DARK');
@@ -356,14 +368,13 @@ export default function Search() {
 
     async function handleSyncMetadata() {
         setSyncMetadataLoading(true);
-        setSyncMetadataMessage('');
 
         try {
             const result = await bulkSyncMetadata(effectiveSearchParams());
-            setSyncMetadataMessage(`Queued metadata sync for ${result.queued} image(s).`);
+            toast.success(`Queued metadata sync for ${result.queued} image(s).`);
         } catch (error) {
             console.error('Failed to sync metadata:', error);
-            setSyncMetadataMessage(`Metadata sync failed: ${error.message}`);
+            toast.error(`Metadata sync failed: ${error.message}`);
         } finally {
             setSyncMetadataLoading(false);
         }
@@ -506,76 +517,71 @@ export default function Search() {
     ).length;
 
     return (
-        <div className="search-page">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Search Images</h1>
-                    <p className="page-subtitle">
-                        Browse and filter your astronomical image collection
-                    </p>
-                </div>
-                <div className="header-actions">
-                    <button
-                        className="btn btn-secondary"
-                        onClick={handleExportCsv}
-                        title="Export current results to CSV"
-                    >
-                        <Download size={14} /> Export CSV
-                    </button>
-                    <button
-                        className="btn btn-secondary"
-                        onClick={handleSyncMetadata}
-                        title="Queue metadata sync for all matching search results"
-                        disabled={syncMetadataLoading || totalCount === 0}
-                    >
-                        {syncMetadataLoading ? 'Syncing...' : <><RefreshCw size={14} /> Sync Metadata</>}
-                    </button>
-                    <button
-                        className="btn btn-secondary"
-                        onClick={() => {
-                            setBulkChangeModalOpen(true);
-                            setBulkChangeMessage('');
-                        }}
-                        title="Change image type for all results"
-                        disabled={images.length === 0}
-                    >
-                        <RefreshCw size={14} /> Bulk Change Type
-                    </button>
-                    <button
-                        className="btn btn-secondary"
-                        onClick={() => {
-                            setBulkFrameTypeModalOpen(true);
-                            setBulkFrameTypeMessage('');
-                        }}
-                        title="Set frame type for all results"
-                        disabled={images.length === 0}
-                    >
-                        <Contrast size={14} /> Set Frame Type…
-                    </button>
-                    <button
-                        className="btn btn-secondary"
-                        onClick={() => {
-                            setBulkRigModalOpen(true);
-                            setBulkRigMessage('');
-                        }}
-                        title="Assign a rig to every light sub-frame and master in the results"
-                        disabled={images.length === 0}
-                    >
-                        <TelescopeIcon size={14} /> Assign Rig…
-                    </button>
-                    <button
-                        className="btn btn-primary header-filters-btn"
-                        onClick={() => setShowFilters(!showFilters)}
-                    >
-                        {showFilters ? 'Hide Filters' : `Filters${activeFilterCount ? ` (${activeFilterCount})` : ''}`}
-                    </button>
-                </div>
-                {syncMetadataMessage && (
-                    <div style={{ marginTop: '0.75rem', color: syncMetadataMessage.startsWith('Metadata sync failed') ? 'var(--color-error)' : 'var(--color-success)' }}>
-                        {syncMetadataMessage}
+        <div className="page-search">
+            <PageHeader
+                title="Search Images"
+                subtitle="Browse and filter your astronomical image collection"
+                actions={(
+                    <div className="header-actions">
+                        <Button
+                            icon={<Download size={14} />}
+                            onClick={handleExportCsv}
+                            title="Export current results to CSV"
+                        >
+                            Export CSV
+                        </Button>
+                        <Button
+                            icon={<RefreshCw size={14} />}
+                            onClick={handleSyncMetadata}
+                            title="Queue metadata sync for all matching search results"
+                            loading={syncMetadataLoading}
+                            disabled={totalCount === 0}
+                        >
+                            Sync Metadata
+                        </Button>
+                        <Button
+                            icon={<RefreshCw size={14} />}
+                            onClick={() => {
+                                setBulkChangeModalOpen(true);
+                                setBulkChangeMessage('');
+                            }}
+                            title="Change image type for all results"
+                            disabled={images.length === 0}
+                        >
+                            Bulk Change Type
+                        </Button>
+                        <Button
+                            icon={<Contrast size={14} />}
+                            onClick={() => {
+                                setBulkFrameTypeModalOpen(true);
+                                setBulkFrameTypeMessage('');
+                            }}
+                            title="Set frame type for all results"
+                            disabled={images.length === 0}
+                        >
+                            Set Frame Type…
+                        </Button>
+                        <Button
+                            icon={<TelescopeIcon size={14} />}
+                            onClick={() => {
+                                setBulkRigModalOpen(true);
+                                setBulkRigMessage('');
+                            }}
+                            title="Assign a rig to every light sub-frame and master in the results"
+                            disabled={images.length === 0}
+                        >
+                            Assign Rig…
+                        </Button>
+                        <Button
+                            variant="filled"
+                            className="header-filters-btn"
+                            onClick={() => setShowFilters(!showFilters)}
+                        >
+                            {showFilters ? 'Hide Filters' : `Filters${activeFilterCount ? ` (${activeFilterCount})` : ''}`}
+                        </Button>
                     </div>
                 )}
-            </div>
+            />
 
             <div className="search-layout">
                 {/* Filters Sidebar */}
@@ -583,15 +589,15 @@ export default function Search() {
                     <div className="filters-backdrop" onClick={() => setShowFilters(false)} aria-hidden="true" />
                 )}
                 {showFilters && (
-                    <form className="filters-sidebar"onSubmit={(e) => { e.preventDefault(); applyFilters(); }}>
+                    <form className="filters-sidebar" onSubmit={(e) => { e.preventDefault(); applyFilters(); }}>
                         <div className="filters-header">
                             <h3><SearchIcon size={16} /> Search & Filter</h3>
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>
+                            <Button variant="plain" size="sm" onClick={clearFilters}>
                                 Clear All
-                            </button>
-                            <button type="button" className="btn btn-primary btn-sm filters-done" onClick={() => setShowFilters(false)}>
+                            </Button>
+                            <Button variant="filled" size="sm" className="filters-done" onClick={() => setShowFilters(false)}>
                                 Done
-                            </button>
+                            </Button>
                         </div>
 
                         {/* Scrolls on phones while the header and Apply button stay pinned */}
@@ -946,9 +952,9 @@ export default function Search() {
                         </FilterSection>
                         </div>
 
-                        <button type="submit" className="btn btn-primary btn-lg btn-apply-filters">
-                            <Check size={16} /> Apply Filters
-                        </button>
+                        <Button type="submit" variant="filled" className="btn-apply-filters" icon={<Check size={16} />}>
+                            Apply Filters
+                        </Button>
                     </form>
                 )}
 
@@ -959,23 +965,25 @@ export default function Search() {
                             <span className="results-count">
                                 {loading ? 'Loading...' : `${totalCount.toLocaleString()} images found`}
                             </span>
-                            <div className="size-control" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>Size</span>
+                            <div className="size-control">
+                                <span className="size-label">Size</span>
                                 <input
                                     type="range"
                                     min="150"
                                     max="500"
                                     value={thumbnailSize}
                                     onChange={(e) => setThumbnailSize(Number(e.target.value))}
-                                    style={{ width: '80px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+                                    className="size-slider"
+                                    aria-label="Thumbnail size"
                                     title="Adjust thumbnail size"
                                 />
                             </div>
                         </div>
                         <div className="sort-controls">
                             <div className="sort-group">
-                                <label className="sort-label">Sort by:</label>
+                                <label className="sort-label" htmlFor="search-sort-by">Sort by:</label>
                                 <select
+                                    id="search-sort-by"
                                     className="input select sort-select"
                                     value={filters.sort_by}
                                     onChange={(e) => {
@@ -999,6 +1007,7 @@ export default function Search() {
                                 </select>
                                 <select
                                     className="input select sort-select"
+                                    aria-label="Sort order"
                                     value={filters.sort_order}
                                     onChange={(e) => {
                                         const updatedFilters = { ...filters, sort_order: e.target.value };
@@ -1014,29 +1023,29 @@ export default function Search() {
                     </div>
 
                     {loading ? (
-                        <div className="loading-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))` }}>
+                        <div className="loading-grid" aria-busy="true" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))` }}>
                             {Array.from({ length: 8 }).map((_, i) => (
-                                <div key={i} className="skeleton image-skeleton" />
+                                <Skeleton key={i} className="image-skeleton" />
                             ))}
                         </div>
                     ) : images.length === 0 && totalCount === 0 && searchParams.get('rig_bucket') ? (
                         // R0c: a bucket link whose images have since been assigned (or regrouped).
-                        <div className="empty-state">
-                            <div className="empty-state-icon"><TelescopeIcon size={64} strokeWidth={1.5} /></div>
-                            <h3 className="empty-state-title">No images found</h3>
-                            <p className="empty-state-text">
-                                This bucket no longer exists. Its images may have been assigned to a rig, or the rig list changed.
-                                Go back to <Link to="/equipment">Equipment → Unassigned images</Link> to see the current buckets.
-                            </p>
-                        </div>
+                        <EmptyState
+                            icon={<TelescopeIcon size={64} strokeWidth={1.5} />}
+                            title="No images found"
+                            description={(
+                                <>
+                                    This bucket no longer exists. Its images may have been assigned to a rig, or the rig list changed.
+                                    Go back to <Link to="/equipment">Equipment → Unassigned images</Link> to see the current buckets.
+                                </>
+                            )}
+                        />
                     ) : images.length === 0 ? (
-                        <div className="empty-state">
-                            <div className="empty-state-icon"><TelescopeIcon size={64} strokeWidth={1.5} /></div>
-                            <h3 className="empty-state-title">No images found</h3>
-                            <p className="empty-state-text">
-                                Try adjusting your filters or search criteria
-                            </p>
-                        </div>
+                        <EmptyState
+                            icon={<TelescopeIcon size={64} strokeWidth={1.5} />}
+                            title="No images found"
+                            description="Try adjusting your filters or search criteria"
+                        />
                     ) : (
                         <div className="image-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbnailSize}px, 1fr))` }}>
                             {images.map(image => (
@@ -1052,8 +1061,8 @@ export default function Search() {
                     {/* Pagination */}
                     {totalPages > 1 && (
                         <div className="pagination">
-                            <button
-                                className="btn btn-secondary"
+                            <Button
+                                className="pagination-btn"
                                 disabled={currentPage === 1}
                                 onClick={() => {
                                     const params = new URLSearchParams(searchParams);
@@ -1063,14 +1072,14 @@ export default function Search() {
                                 }}
                             >
                                 Previous
-                            </button>
+                            </Button>
 
                             <div className="pagination-info">
                                 Page {currentPage} of {totalPages}
                             </div>
 
-                            <button
-                                className="btn btn-secondary"
+                            <Button
+                                className="pagination-btn"
                                 disabled={currentPage === totalPages}
                                 onClick={() => {
                                     const params = new URLSearchParams(searchParams);
@@ -1080,7 +1089,7 @@ export default function Search() {
                                 }}
                             >
                                 Next
-                            </button>
+                            </Button>
                         </div>
                     )}
                 </div>
@@ -1088,7 +1097,8 @@ export default function Search() {
 
             {imageContextMenu && (
                 <div
-                    className="folder-context-menu"
+                    className="search-context-menu"
+                    role="menu"
                     style={{
                         position: 'fixed',
                         top: imageContextMenu.y,
@@ -1097,286 +1107,134 @@ export default function Search() {
                     }}
                     onClick={e => e.stopPropagation()}
                 >
-                    <div className="menu-item" onClick={handleExpandPath}>
+                    <button type="button" role="menuitem" className="search-menu-item" onClick={handleExpandPath}>
                         <FolderOpen size={14} /> Expand Path
-                    </div>
+                    </button>
                 </div>
             )}
 
-            {bulkChangeModalOpen && (
-                <div 
-                    className="modal-overlay" 
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 2000
-                    }}
-                    onClick={() => !bulkChangeLoading && setBulkChangeModalOpen(false)}
-                >
-                    <div 
-                        className="modal-content"
-                        style={{
-                            backgroundColor: 'var(--color-bg-secondary)',
-                            border: '1px solid var(--color-border)',
-                            borderRadius: '8px',
-                            padding: '24px',
-                            maxWidth: '400px',
-                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
-                        }}
-                        onClick={e => e.stopPropagation()}
+            <Dialog
+                open={bulkChangeModalOpen}
+                onClose={() => setBulkChangeModalOpen(false)}
+                title="Change Image Type"
+                description={`This will change the image type for all ${totalCount.toLocaleString()} matching image(s) in your search results.`}
+                size="sm"
+                dismissible={!bulkChangeLoading}
+                closeOnBackdrop={!bulkChangeLoading}
+                className="dlg-search-bulk"
+                footer={(
+                    <>
+                        <Button variant="plain" onClick={() => setBulkChangeModalOpen(false)} disabled={bulkChangeLoading}>
+                            Cancel
+                        </Button>
+                        <Button variant="filled" onClick={handleBulkChangeImageType} loading={bulkChangeLoading}>
+                            Update
+                        </Button>
+                    </>
+                )}
+            >
+                <div className="bulk-field">
+                    <label className="label" htmlFor="bulk-change-subtype">New Image Type</label>
+                    <select
+                        id="bulk-change-subtype"
+                        className="input select"
+                        value={bulkChangeSubtype}
+                        onChange={(e) => setBulkChangeSubtype(e.target.value)}
+                        disabled={bulkChangeLoading}
                     >
-                        <h3 style={{ marginTop: 0, marginBottom: '16px', color: 'var(--color-text-primary)' }}>
-                            Change Image Type
-                        </h3>
-                        
-                        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
-                            This will change the image type for all {totalCount.toLocaleString()} matching image(s) in your search results.
-                        </p>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label className="label" style={{ display: 'block', marginBottom: '8px' }}>
-                                New Image Type
-                            </label>
-                            <select
-                                className="input select"
-                                value={bulkChangeSubtype}
-                                onChange={(e) => setBulkChangeSubtype(e.target.value)}
-                                disabled={bulkChangeLoading}
-                                style={{ width: '100%' }}
-                            >
-                                <option value="SUB_FRAME">Sub Frames</option>
-                                <option value="INTEGRATION_MASTER">Masters</option>
-                                <option value="INTEGRATION_DEPRECATED">Deprecated</option>
-                                <option value="PLANETARY">Planetary</option>
-                                <option value="ALLSKY">All-sky</option>
-                                <option value="AURORA">Aurora</option>
-                            </select>
-                        </div>
-
-                        {bulkChangeMessage && (
-                            <div style={{
-                                padding: '12px',
-                                marginBottom: '16px',
-                                borderRadius: '4px',
-                                backgroundColor: bulkChangeMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
-                                color: bulkChangeMessage.includes('✓') ? 'var(--color-success)' : 'var(--color-error)',
-                                fontSize: '0.9rem'
-                            }}>
-                                {bulkChangeMessage.startsWith('✓') ? <Check size={14} /> : <X size={14} />}{' '}{bulkChangeMessage.slice(1).trim()}
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                            <button
-                                className="btn btn-secondary"
-                                onClick={() => setBulkChangeModalOpen(false)}
-                                disabled={bulkChangeLoading}
-                                style={{ minWidth: '100px' }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleBulkChangeImageType}
-                                disabled={bulkChangeLoading}
-                                style={{ minWidth: '100px' }}
-                            >
-                                {bulkChangeLoading ? 'Updating...' : 'Update'}
-                            </button>
-                        </div>
-                    </div>
+                        <option value="SUB_FRAME">Sub Frames</option>
+                        <option value="INTEGRATION_MASTER">Masters</option>
+                        <option value="INTEGRATION_DEPRECATED">Deprecated</option>
+                        <option value="PLANETARY">Planetary</option>
+                        <option value="ALLSKY">All-sky</option>
+                        <option value="AURORA">Aurora</option>
+                    </select>
                 </div>
-            )}
+                <BulkMessage message={bulkChangeMessage} />
+            </Dialog>
 
-            {bulkFrameTypeModalOpen && (
-                <div
-                    className="modal-overlay"
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 2000
-                    }}
-                    onClick={() => !bulkFrameTypeLoading && setBulkFrameTypeModalOpen(false)}
-                >
-                    <div
-                        className="modal-content"
-                        style={{
-                            backgroundColor: 'var(--color-bg-secondary)',
-                            border: '1px solid var(--color-border)',
-                            borderRadius: '8px',
-                            padding: '24px',
-                            maxWidth: '420px',
-                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
-                        }}
-                        onClick={e => e.stopPropagation()}
+            <Dialog
+                open={bulkFrameTypeModalOpen}
+                onClose={() => setBulkFrameTypeModalOpen(false)}
+                title="Set Frame Type"
+                description={`This will set the frame type for all ${totalCount.toLocaleString()} matching image(s) in your search results, and mark it as a manual override that survives re-indexing.`}
+                size="sm"
+                dismissible={!bulkFrameTypeLoading}
+                closeOnBackdrop={!bulkFrameTypeLoading}
+                className="dlg-search-bulk"
+                footer={(
+                    <>
+                        <Button variant="plain" onClick={() => setBulkFrameTypeModalOpen(false)} disabled={bulkFrameTypeLoading}>
+                            Cancel
+                        </Button>
+                        <Button variant="filled" onClick={handleBulkChangeFrameType} loading={bulkFrameTypeLoading}>
+                            Update
+                        </Button>
+                    </>
+                )}
+            >
+                <p className="bulk-note">
+                    Current filter scope: <strong>{currentFrameTypeScopeLabel()}</strong>. To relabel mislabelled frames, choose "All Frame Types" or the current (wrong) type in the Frame Type filter first.
+                </p>
+                <div className="bulk-field">
+                    <label className="label" htmlFor="bulk-frame-type">New Frame Type</label>
+                    <select
+                        id="bulk-frame-type"
+                        className="input select"
+                        value={bulkFrameTypeValue}
+                        onChange={(e) => setBulkFrameTypeValue(e.target.value)}
+                        disabled={bulkFrameTypeLoading}
                     >
-                        <h3 style={{ marginTop: 0, marginBottom: '16px', color: 'var(--color-text-primary)' }}>
-                            Set Frame Type
-                        </h3>
-
-                        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '8px', fontSize: '0.9rem' }}>
-                            This will set the frame type for all {totalCount.toLocaleString()} matching image(s) in your search results, and mark it as a manual override that survives re-indexing.
-                        </p>
-                        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '16px', fontSize: '0.85rem', fontStyle: 'italic' }}>
-                            Current filter scope: <strong>{currentFrameTypeScopeLabel()}</strong>. To relabel mislabelled frames, choose "All Frame Types" or the current (wrong) type in the Frame Type filter first.
-                        </p>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label className="label" style={{ display: 'block', marginBottom: '8px' }}>
-                                New Frame Type
-                            </label>
-                            <select
-                                className="input select"
-                                value={bulkFrameTypeValue}
-                                onChange={(e) => setBulkFrameTypeValue(e.target.value)}
-                                disabled={bulkFrameTypeLoading}
-                                style={{ width: '100%' }}
-                            >
-                                <option value="LIGHT">Light</option>
-                                <option value="DARK">Dark</option>
-                                <option value="FLAT">Flat</option>
-                                <option value="BIAS">Bias</option>
-                                <option value="DARK_FLAT">Dark Flat</option>
-                            </select>
-                        </div>
-
-                        {bulkFrameTypeMessage && (
-                            <div style={{
-                                padding: '12px',
-                                marginBottom: '16px',
-                                borderRadius: '4px',
-                                backgroundColor: bulkFrameTypeMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
-                                color: bulkFrameTypeMessage.includes('✓') ? 'var(--color-success)' : 'var(--color-error)',
-                                fontSize: '0.9rem'
-                            }}>
-                                {bulkFrameTypeMessage.startsWith('✓') ? <Check size={14} /> : <X size={14} />}{' '}{bulkFrameTypeMessage.slice(1).trim()}
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                            <button
-                                className="btn btn-secondary"
-                                onClick={() => setBulkFrameTypeModalOpen(false)}
-                                disabled={bulkFrameTypeLoading}
-                                style={{ minWidth: '100px' }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleBulkChangeFrameType}
-                                disabled={bulkFrameTypeLoading}
-                                style={{ minWidth: '100px' }}
-                            >
-                                {bulkFrameTypeLoading ? 'Updating...' : 'Update'}
-                            </button>
-                        </div>
-                    </div>
+                        <option value="LIGHT">Light</option>
+                        <option value="DARK">Dark</option>
+                        <option value="FLAT">Flat</option>
+                        <option value="BIAS">Bias</option>
+                        <option value="DARK_FLAT">Dark Flat</option>
+                    </select>
                 </div>
-            )}
+                <BulkMessage message={bulkFrameTypeMessage} />
+            </Dialog>
 
-            {bulkRigModalOpen && (
-                <div
-                    className="modal-overlay"
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 2000
-                    }}
-                    onClick={() => !bulkRigLoading && setBulkRigModalOpen(false)}
-                >
-                    <div
-                        className="modal-content"
-                        style={{
-                            backgroundColor: 'var(--color-bg-secondary)',
-                            border: '1px solid var(--color-border)',
-                            borderRadius: '8px',
-                            padding: '24px',
-                            maxWidth: '420px',
-                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
-                        }}
-                        onClick={e => e.stopPropagation()}
+            <Dialog
+                open={bulkRigModalOpen}
+                onClose={() => setBulkRigModalOpen(false)}
+                title="Assign Rig"
+                description={(
+                    <>
+                        Assigns a rig to every <strong>Light sub-frame and master</strong> in the current results ({totalCount.toLocaleString()} shown). Other frames are skipped. Assigned rigs are marked manual and won't be changed by auto-assignment.
+                    </>
+                )}
+                size="sm"
+                dismissible={!bulkRigLoading}
+                closeOnBackdrop={!bulkRigLoading}
+                className="dlg-search-bulk"
+                footer={(
+                    <>
+                        <Button variant="plain" onClick={() => setBulkRigModalOpen(false)} disabled={bulkRigLoading}>
+                            Cancel
+                        </Button>
+                        <Button variant="filled" onClick={handleBulkAssignRig} loading={bulkRigLoading} disabled={!bulkRigValue}>
+                            Assign
+                        </Button>
+                    </>
+                )}
+            >
+                <div className="bulk-field">
+                    <label className="label" htmlFor="bulk-rig">Rig</label>
+                    <select
+                        id="bulk-rig"
+                        className="input select"
+                        value={bulkRigValue}
+                        onChange={(e) => setBulkRigValue(e.target.value)}
+                        disabled={bulkRigLoading}
                     >
-                        <h3 style={{ marginTop: 0, marginBottom: '16px', color: 'var(--color-text-primary)' }}>
-                            Assign Rig
-                        </h3>
-
-                        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '16px', fontSize: '0.9rem' }}>
-                            Assigns a rig to every <strong>Light sub-frame and master</strong> in the current results ({totalCount.toLocaleString()} shown). Other frames are skipped. Assigned rigs are marked manual and won't be changed by auto-assignment.
-                        </p>
-
-                        <div style={{ marginBottom: '20px' }}>
-                            <label className="label" style={{ display: 'block', marginBottom: '8px' }}>
-                                Rig
-                            </label>
-                            <select
-                                className="input select"
-                                value={bulkRigValue}
-                                onChange={(e) => setBulkRigValue(e.target.value)}
-                                disabled={bulkRigLoading}
-                                style={{ width: '100%' }}
-                            >
-                                <option value="">Choose rig…</option>
-                                {rigs.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
-                                <option value="none">Clear rig (let auto-assign decide)</option>
-                            </select>
-                        </div>
-
-                        {bulkRigMessage && (
-                            <div style={{
-                                padding: '12px',
-                                marginBottom: '16px',
-                                borderRadius: '4px',
-                                backgroundColor: bulkRigMessage.includes('✓') ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
-                                color: bulkRigMessage.includes('✓') ? 'var(--color-success)' : 'var(--color-error)',
-                                fontSize: '0.9rem'
-                            }}>
-                                {bulkRigMessage.startsWith('✓') ? <Check size={14} /> : <X size={14} />}{' '}{bulkRigMessage.slice(1).trim()}
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                            <button
-                                className="btn btn-secondary"
-                                onClick={() => setBulkRigModalOpen(false)}
-                                disabled={bulkRigLoading}
-                                style={{ minWidth: '100px' }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleBulkAssignRig}
-                                disabled={bulkRigLoading || !bulkRigValue}
-                                style={{ minWidth: '100px' }}
-                            >
-                                {bulkRigLoading ? 'Updating...' : 'Assign'}
-                            </button>
-                        </div>
-                    </div>
+                        <option value="">Choose rig…</option>
+                        {rigs.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
+                        <option value="none">Clear rig (let auto-assign decide)</option>
+                    </select>
                 </div>
-            )}
+                <BulkMessage message={bulkRigMessage} />
+            </Dialog>
         </div>
     );
 }

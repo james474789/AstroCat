@@ -1,5 +1,17 @@
 # U1: UI/UX design system and information architecture (handover)
 
+## P1a status (2026-10-09): done, uncommitted, deployed as VERSION 20261009.05
+
+**Primitives** in `frontend/src/components/ui/` (README there has props, migration map, conventions): `Button`, `Dialog` (native `<dialog>`, portalled), `ConfirmDialog` + `useConfirm()`, `ToastProvider` + `useToast()` (Undo via `action`), `Tabs`/`TabPanel`, `SegmentedControl`, `PageHeader`, `EmptyState`, `Spinner`, `Skeleton`. Providers are mounted in `App.jsx`.
+
+**Migrated:** Admin (+Settings.css, StarQualityAdmin), Search (+FolderTree), Equipment, Tonight (+PlanetarySeeingPanel), Catalogs, Targets, MetadataViewer/MetadataSearch (+metadata tabs), Dashboard, FITSExplore, FitsStats, ImageDetail, TargetDetail, NightReport, Login/Setup, FullResViewer. All `confirm()`/`alert()` are gone except Search's bulk-edit flows, which kept their logic but now render in `<Dialog>` (P1b redesigns them). Every page stylesheet is scoped under `.page-<name>` (dialog content under `.dlg-<name>`); `npm run lint` now runs stylelint, then `npm run lint:scope` (`frontend/scripts/check-css-scope.mjs`, fails on unscoped selectors in `src/pages/*.css`), then eslint. `.page-header` leak is gone; `.text-success/.text-error/.muted/.loading-state` moved to `index.css`.
+
+**Notes for next stages:**
+- Dialogs are in the top layer, so toasts raised while a dialog is open are hidden behind it; pages close the dialog first or show inline messages.
+- ImageDetail's keyboard shortcuts are suppressed while a `dialog[open]` exists.
+- Known leftovers: `transition: all` still in `index.css` (6) and a few component CSS files (P2); local keyframes remain in BottomSheet/FilterChips/FilterSection/Quality/Admin/Settings (`admin-pulse*`: a shared `ui-pulse` would remove them); `ConfirmDialog` has no `className`/rich-description option (Admin's mount-point steps render a default `<ol>`); PageHeader has no way to hide the subtitle on phones (Search lost that rule).
+- Same pre-existing eslint errors as before (32 errors / 7 warnings); no new ones.
+
 ## P0 status (2026-10-09): done, uncommitted, deployed as VERSION 20261009.04
 
 Base was `c3cf52c` (the sky-overlay edits mentioned below were already committed there; the tree held only the docs).

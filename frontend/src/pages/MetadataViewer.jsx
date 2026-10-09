@@ -8,6 +8,7 @@ import MetadataSummaryTab from '../components/metadata/MetadataSummaryTab';
 import MetadataDetailsTab from '../components/metadata/MetadataDetailsTab';
 import MetadataRawTab from '../components/metadata/MetadataRawTab';
 import MetadataExportTab from '../components/metadata/MetadataExportTab';
+import { Button, PageHeader, Spinner, Tabs, TabPanel } from '../components/ui';
 import './MetadataViewer.css';
 
 export default function MetadataViewer() {
@@ -47,15 +48,15 @@ export default function MetadataViewer() {
 
     if (loading) {
         return (
-            <div className="metadata-viewer-page">
-                <div className="loading-state">Loading metadata...</div>
+            <div className="page-metadata-viewer">
+                <div className="loading-state"><Spinner label="Loading metadata" /></div>
             </div>
         );
     }
 
     if (error || !image) {
         return (
-            <div className="metadata-viewer-page">
+            <div className="page-metadata-viewer">
                 <div className="error-state">{error || 'Image not found'}</div>
             </div>
         );
@@ -79,19 +80,31 @@ export default function MetadataViewer() {
     const [FileTypeIcon, fileTypeText] = FILE_TYPE_INFO[image.file_format] || [FileText, image.file_format];
     const fileTypeLabel = <><FileTypeIcon size={14} /> {fileTypeText}</>;
 
+    const tabItems = [
+        { value: 'summary', label: 'Summary', icon: <ClipboardList size={14} /> },
+        { value: 'details', label: 'Details', icon: <BarChart3 size={14} /> },
+        { value: 'raw', label: 'Raw Headers', icon: <Search size={14} /> },
+        { value: 'export', label: 'Export', icon: <Save size={14} /> },
+    ];
+
     return (
-        <div className="metadata-viewer-page">
+        <div className="page-metadata-viewer">
             {/* Header */}
             <div className="metadata-header">
                 <div className="header-top">
-                    <button className="btn-back" onClick={() => navigate(-1)}>
-                        <ArrowLeft size={20} />
-                    </button>
-                    <div className="header-content">
-                        <h1 className="page-title">Metadata Viewer</h1>
-                        <p className="page-subtitle">Detailed metadata for: {image.file_name}</p>
-                    </div>
-                    <div className="file-badge">{fileTypeLabel}</div>
+                    <Button
+                        className="back-btn"
+                        iconOnly
+                        icon={<ArrowLeft size={20} />}
+                        aria-label="Go back"
+                        onClick={() => navigate(-1)}
+                    />
+                    <PageHeader
+                        className="header-content"
+                        title="Metadata Viewer"
+                        subtitle={`Detailed metadata for: ${image.file_name}`}
+                        actions={<div className="file-badge">{fileTypeLabel}</div>}
+                    />
                 </div>
 
                 {/* Status Info */}
@@ -125,36 +138,17 @@ export default function MetadataViewer() {
 
             {/* Tab Navigation */}
             <div className="tabs-container">
-                <div className="tab-buttons">
-                    <button
-                        className={`tab-button ${activeTab === 'summary' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('summary')}
-                    >
-                        <ClipboardList size={14} /> Summary
-                    </button>
-                    <button
-                        className={`tab-button ${activeTab === 'details' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('details')}
-                    >
-                        <BarChart3 size={14} /> Details
-                    </button>
-                    <button
-                        className={`tab-button ${activeTab === 'raw' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('raw')}
-                    >
-                        <Search size={14} /> Raw Headers
-                    </button>
-                    <button
-                        className={`tab-button ${activeTab === 'export' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('export')}
-                    >
-                        <Save size={14} /> Export
-                    </button>
-                </div>
+                <Tabs
+                    aria-label="Metadata sections"
+                    items={tabItems}
+                    value={activeTab}
+                    onChange={setActiveTab}
+                    panelIdPrefix="metadata"
+                />
             </div>
 
             {/* Tab Content */}
-            <div className="tab-content-container">
+            <TabPanel panelIdPrefix="metadata" value={activeTab} className="tab-content-container">
                 {activeTab === 'summary' && (
                     <MetadataSummaryTab image={image} />
                 )}
@@ -165,7 +159,7 @@ export default function MetadataViewer() {
 
                 {activeTab === 'raw' && (
                     headerLoading ? (
-                        <div className="loading-state">Loading raw headers...</div>
+                        <div className="loading-state"><Spinner label="Loading raw headers" /></div>
                     ) : (
                         <MetadataRawTab headerData={headerData} fileName={image.file_name} />
                     )
@@ -174,7 +168,7 @@ export default function MetadataViewer() {
                 {activeTab === 'export' && (
                     <MetadataExportTab image={image} headerData={headerData} fileName={image.file_name} />
                 )}
-            </div>
+            </TabPanel>
 
             {/* Image Info Preview */}
             <div className="metadata-footer">

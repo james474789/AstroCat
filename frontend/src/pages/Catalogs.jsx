@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchMessierCatalog, fetchNGCCatalog, fetchCaldwellCatalog, fetchNamedStarCatalog, fetchSh2Catalog, fetchTargetKeys, formatRA, formatDec } from '../api/client';
 import { Orbit, Sparkles, Star, Cloud, CloudFog, CircleDot, Circle, Zap, Search, ArrowUp, ArrowDown, ArrowRight } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
+import { Button, Tabs, TabPanel, PageHeader, EmptyState, Spinner } from '../components/ui';
 import './Catalogs.css';
 
 // Mirrors the backend's app.services.targets.normalize_designation just
@@ -143,59 +144,28 @@ export default function Catalogs() {
         return types[type] || <TelescopeIcon {...iconProps} />;
     };
 
+    const catalogTabs = [
+        { value: 'messier', label: 'Messier', icon: <Orbit size={18} strokeWidth={1.5} />, count: counts.messier },
+        { value: 'ngc', label: 'NGC', icon: <TelescopeIcon size={18} strokeWidth={1.5} />, count: counts.ngc },
+        { value: 'caldwell', label: 'Caldwell', icon: <Sparkles size={18} strokeWidth={1.5} />, count: counts.caldwell },
+        { value: 'stars', label: 'Stars', icon: <Star size={18} strokeWidth={1.5} />, count: counts.stars },
+        { value: 'sh2', label: 'Sharpless', icon: <CloudFog size={18} strokeWidth={1.5} />, count: counts.sh2 },
+    ];
+
     return (
-        <div className="catalogs-page">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">Catalogs</h1>
-                    <p className="page-subtitle">Browse celestial catalogs</p>
-                </div>
-            </div>
+        <div className="page-catalogs">
+            <PageHeader title="Catalogs" subtitle="Browse celestial catalogs" />
 
-            {/* Tabs */}
-            <div className="catalog-tabs">
-                <button
-                    className={`catalog-tab ${activeTab === 'messier' ? 'active' : ''}`}
-                    onClick={() => handleTabChange('messier')}
-                >
-                    <span className="tab-icon"><Orbit size={32} strokeWidth={1.5} /></span>
-                    <span className="tab-label">Messier</span>
-                    <span className="tab-count">{counts.messier.toLocaleString()} objects</span>
-                </button>
-                <button
-                    className={`catalog-tab ${activeTab === 'ngc' ? 'active' : ''}`}
-                    onClick={() => handleTabChange('ngc')}
-                >
-                    <span className="tab-icon"><TelescopeIcon size={32} strokeWidth={1.5} /></span>
-                    <span className="tab-label">NGC</span>
-                    <span className="tab-count">{counts.ngc.toLocaleString()} objects</span>
-                </button>
-                <button
-                    className={`catalog-tab ${activeTab === 'caldwell' ? 'active' : ''}`}
-                    onClick={() => handleTabChange('caldwell')}
-                >
-                    <span className="tab-icon"><Sparkles size={32} strokeWidth={1.5} /></span>
-                    <span className="tab-label">Caldwell</span>
-                    <span className="tab-count">{counts.caldwell.toLocaleString()} objects</span>
-                </button>
-                <button
-                    className={`catalog-tab ${activeTab === 'stars' ? 'active' : ''}`}
-                    onClick={() => handleTabChange('stars')}
-                >
-                    <span className="tab-icon"><Star size={32} strokeWidth={1.5} /></span>
-                    <span className="tab-label">Stars</span>
-                    <span className="tab-count">{counts.stars.toLocaleString()} objects</span>
-                </button>
-                <button
-                    className={`catalog-tab ${activeTab === 'sh2' ? 'active' : ''}`}
-                    onClick={() => handleTabChange('sh2')}
-                >
-                    <span className="tab-icon"><CloudFog size={32} strokeWidth={1.5} /></span>
-                    <span className="tab-label">Sharpless</span>
-                    <span className="tab-count">{counts.sh2.toLocaleString()} objects</span>
-                </button>
-            </div>
+            <Tabs
+                aria-label="Catalogs"
+                className="catalog-tabs"
+                items={catalogTabs}
+                value={activeTab}
+                onChange={handleTabChange}
+                panelIdPrefix="catalog"
+            />
 
+            <TabPanel panelIdPrefix="catalog" value={activeTab}>
             {/* Filters & Search */}
             <div className="catalog-toolbar">
                 <div className="catalog-search">
@@ -238,17 +208,16 @@ export default function Catalogs() {
                             <option value="ra">Right Ascension (RA)</option>
                         </select>
 
-                        <button
-                            className="btn btn-icon sort-order-btn"
-                            title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                        <Button
+                            iconOnly
+                            variant="tinted"
+                            icon={sortOrder === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
                             aria-label={sortOrder === 'asc' ? 'Sort ascending' : 'Sort descending'}
                             onClick={() => {
                                 setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
                                 setCurrentPage(1);
                             }}
-                        >
-                            {sortOrder === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
-                        </button>
+                        />
                     </div>
                 </div>
             </div>
@@ -256,7 +225,7 @@ export default function Catalogs() {
             {/* Objects Grid */}
             {loading ? (
                 <div className="loading-state">
-                    <div className="spinner" />
+                    <Spinner size={32} label="Loading catalog" />
                     <p>Loading catalog...</p>
                 </div>
             ) : (
@@ -339,39 +308,40 @@ export default function Catalogs() {
                     {/* Pagination */}
                     {totalPages > 1 && (
                         <div className="pagination">
-                            <button
-                                className="btn btn-secondary"
+                            <Button
+                                variant="tinted"
+                                size="sm"
                                 disabled={currentPage === 1}
                                 onClick={() => setCurrentPage(p => p - 1)}
                             >
                                 Previous
-                            </button>
+                            </Button>
 
                             <div className="pagination-info">
                                 Page {currentPage} of {totalPages}
                             </div>
 
-                            <button
-                                className="btn btn-secondary"
+                            <Button
+                                variant="tinted"
+                                size="sm"
                                 disabled={currentPage === totalPages}
                                 onClick={() => setCurrentPage(p => p + 1)}
                             >
                                 Next
-                            </button>
+                            </Button>
                         </div>
                     )}
                 </>
             )}
 
             {objects.length === 0 && !loading && (
-                <div className="empty-state">
-                    <div className="empty-state-icon"><Search size={64} strokeWidth={1.5} /></div>
-                    <h3 className="empty-state-title">No objects found</h3>
-                    <p className="empty-state-text">
-                        Try a different search term
-                    </p>
-                </div>
+                <EmptyState
+                    icon={<Search size={48} strokeWidth={1.5} />}
+                    title="No objects found"
+                    description="Try a different search term"
+                />
             )}
+            </TabPanel>
         </div>
     );
 }

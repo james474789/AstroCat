@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
-    Search, Filter, Info, X, ChevronLeft, ChevronRight,
-    Database, FileText, Calendar
+    Search, Filter, Info, ChevronLeft, ChevronRight, AlertTriangle
 } from 'lucide-react';
 import { API_BASE_URL, fetchImage } from '../api/client';
+import { Button, Dialog, EmptyState, PageHeader, Spinner } from '../components/ui';
 import './FITSExplore.css';
 
 const FITSExplore = () => {
@@ -62,11 +62,11 @@ const FITSExplore = () => {
     };
 
     return (
-        <div className="fits-explore-page">
-            <header className="page-header">
-                <h1>Metadata Explore</h1>
-                <p className="subtitle">Deep dive into image metadata across your entire collection</p>
-            </header>
+        <div className="page-fits-explore">
+            <PageHeader
+                title="Metadata Explore"
+                subtitle="Deep dive into image metadata across your entire collection"
+            />
 
             {/* Search Bar */}
             <div className="search-container">
@@ -102,9 +102,12 @@ const FITSExplore = () => {
             {/* Results Table */}
             <div className="results-container">
                 {isLoading ? (
-                    <div className="loading-state">Scanning database...</div>
+                    <Spinner label="Scanning database" />
                 ) : isError ? (
-                    <div className="error-state">Failed to load data</div>
+                    <EmptyState
+                        icon={<AlertTriangle size={32} aria-hidden="true" />}
+                        title="Failed to load data"
+                    />
                 ) : (
                     <>
                         <div className="table-wrapper">
@@ -132,12 +135,17 @@ const FITSExplore = () => {
                                             <td>{img.camera_name || '-'}</td>
                                             <td>{img.object_name || '-'}</td>
                                             <td>
-                                                <button className="btn-icon" onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedImage(img);
-                                                }}>
-                                                    <Info size={18} />
-                                                </button>
+                                                <Button
+                                                    variant="plain"
+                                                    size="sm"
+                                                    iconOnly
+                                                    icon={<Info size={18} />}
+                                                    aria-label={`View headers for ${img.file_name}`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedImage(img);
+                                                    }}
+                                                />
                                             </td>
                                         </tr>
                                     ))}
@@ -152,56 +160,55 @@ const FITSExplore = () => {
 
                         {/* Pagination */}
                         <div className="pagination">
-                            <button
+                            <Button
+                                variant="tinted"
+                                iconOnly
+                                icon={<ChevronLeft size={20} />}
+                                aria-label="Previous page"
                                 disabled={page === 1}
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
-                            >
-                                <ChevronLeft size={20} />
-                            </button>
+                            />
                             <span>Page {page} of {data?.total_pages || 1}</span>
-                            <button
+                            <Button
+                                variant="tinted"
+                                iconOnly
+                                icon={<ChevronRight size={20} />}
+                                aria-label="Next page"
                                 disabled={page >= (data?.total_pages || 1)}
                                 onClick={() => setPage(p => p + 1)}
-                            >
-                                <ChevronRight size={20} />
-                            </button>
+                            />
                         </div>
                     </>
                 )}
             </div>
 
-
-            {/* Detail Modal */}
-            {selectedImage && (
-                <div className="modal-overlay" onClick={() => setSelectedImage(null)}>
-                    <div className="modal-content" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h2>{selectedImage.file_name}</h2>
-                            <button onClick={() => setSelectedImage(null)}><X size={24} /></button>
-                        </div>
-                        <div className="modal-body">
-                            {headerLoading ? (
-                                <div className="loading-spinner">Loading headers...</div>
-                            ) : headerData ? (
-                                <div className="header-grid">
-                                    {Object.entries(headerData)
-                                        .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-                                        .map(([key, value]) => (
-                                            <div key={key} className="header-item">
-                                                <span className="key">{key}</span>
-                                                <span className="value" title={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}>
-                                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                                </span>
-                                            </div>
-                                        ))}
+            {/* Detail dialog (portalled to <body>, so its styles are scoped by className, not the page root) */}
+            <Dialog
+                open={!!selectedImage}
+                onClose={() => setSelectedImage(null)}
+                title={selectedImage?.file_name ?? ''}
+                size="lg"
+                className="dlg-fits-explore-headers"
+            >
+                {headerLoading ? (
+                    <Spinner label="Loading headers" />
+                ) : headerData ? (
+                    <div className="header-grid">
+                        {Object.entries(headerData)
+                            .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+                            .map(([key, value]) => (
+                                <div key={key} className="header-item">
+                                    <span className="key">{key}</span>
+                                    <span className="value" title={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}>
+                                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                    </span>
                                 </div>
-                            ) : (
-                                <div className="empty-state">No raw header data stored for this image.</div>
-                            )}
-                        </div>
+                            ))}
                     </div>
-                </div>
-            )}
+                ) : (
+                    <EmptyState title="No raw header data stored for this image." />
+                )}
+            </Dialog>
         </div>
     );
 };

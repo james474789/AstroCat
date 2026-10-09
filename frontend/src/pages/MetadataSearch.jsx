@@ -10,10 +10,12 @@ import {
 } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import { API_BASE_URL } from '../api/client';
+import { Button, EmptyState, PageHeader, Spinner, useToast } from '../components/ui';
 import './MetadataSearch.css';
 
 const MetadataSearch = () => {
     const navigate = useNavigate();
+    const toast = useToast();
     const [page, setPage] = useState(1);
     const [selectedImages, setSelectedImages] = useState(new Set());
     const [showFilters, setShowFilters] = useState(true);
@@ -135,7 +137,7 @@ const MetadataSearch = () => {
 
     const handleExportSelected = async () => {
         if (selectedImages.size === 0) {
-            alert('Please select images to export');
+            toast.info('Please select images to export');
             return;
         }
 
@@ -188,12 +190,11 @@ const MetadataSearch = () => {
     const hasActiveFilters = Object.values(filters).some(v => v && v !== 'all');
 
     return (
-        <div className="metadata-search-page">
-            {/* Header */}
-            <header className="page-header">
-                <h1>Metadata Search</h1>
-                <p className="subtitle">Powerful search and filtering across all image metadata</p>
-            </header>
+        <div className="page-metadata-search">
+            <PageHeader
+                title="Metadata Search"
+                subtitle="Powerful search and filtering across all image metadata"
+            />
 
             {/* Main Content */}
             <div className="search-layout">
@@ -375,14 +376,13 @@ const MetadataSearch = () => {
 
                         {/* Reset Button */}
                         {hasActiveFilters && (
-                            <button
-                                className="btn btn-secondary"
+                            <Button
+                                className="reset-btn"
+                                icon={<RotateCcw size={16} />}
                                 onClick={handleReset}
-                                style={{ width: '100%' }}
                             >
-                                <RotateCcw size={16} />
                                 Reset Filters
-                            </button>
+                            </Button>
                         )}
                     </div>
                 </aside>
@@ -403,13 +403,14 @@ const MetadataSearch = () => {
 
                         {selectedImages.size > 0 && (
                             <div className="action-buttons">
-                                <button
-                                    className="btn btn-secondary btn-sm"
+                                <Button
+                                    size="sm"
+                                    className="export-btn"
+                                    icon={<Download size={16} />}
                                     onClick={handleExportSelected}
                                 >
-                                    <Download size={16} />
                                     Export ({selectedImages.size})
-                                </button>
+                                </Button>
                             </div>
                         )}
                     </div>
@@ -417,18 +418,16 @@ const MetadataSearch = () => {
                     {/* Results Table */}
                     <div className="results-container">
                         {isLoading ? (
-                            <div className="loading-state">Searching metadata...</div>
+                            <div className="loading-state"><Spinner label="Searching metadata" /></div>
                         ) : isError ? (
                             <div className="error-state">Failed to load data</div>
                         ) : data?.items?.length === 0 ? (
-                            <div className="empty-state">
-                                <p>No images found matching your filters.</p>
-                                {hasActiveFilters && (
-                                    <button className="btn btn-secondary" onClick={handleReset}>
-                                        Clear Filters
-                                    </button>
+                            <EmptyState
+                                title="No images found matching your filters."
+                                action={hasActiveFilters && (
+                                    <Button onClick={handleReset}>Clear Filters</Button>
                                 )}
-                            </div>
+                            />
                         ) : (
                             <>
                                 <div className="table-wrapper">
@@ -507,13 +506,14 @@ const MetadataSearch = () => {
                                                         {img.rating ? <><Star size={14} /> {img.rating}</> : '-'}
                                                     </td>
                                                     <td className="td-actions" onClick={(e) => e.stopPropagation()}>
-                                                        <button
-                                                            className="action-btn"
+                                                        <Button
+                                                            variant="plain"
+                                                            size="sm"
+                                                            iconOnly
+                                                            icon={<Eye size={16} />}
+                                                            aria-label="View image details"
                                                             onClick={() => navigate(`/images/${img.id}`)}
-                                                            title="View image details"
-                                                        >
-                                                            <Eye size={16} />
-                                                        </button>
+                                                        />
                                                     </td>
                                                 </tr>
                                             ))}
