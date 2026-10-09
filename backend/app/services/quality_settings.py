@@ -39,6 +39,11 @@ def _runtime_overrides() -> Dict[str, Any]:
     return value
 
 
+def runtime_settings() -> Dict[str, Any]:
+    """The whole runtime settings document (cached briefly; {} when Redis is down)."""
+    return _runtime_overrides()
+
+
 def clear_cache() -> None:
     _cache.update(at=0.0, value=None)
 

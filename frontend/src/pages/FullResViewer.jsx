@@ -17,7 +17,7 @@ import FieldOverlayLegend from '../components/fieldOverlay/FieldOverlayLegend';
 import useSeenIn from '../hooks/useSeenIn';
 import SeenInPanel from '../components/seenIn/SeenInPanel';
 import useSkyOverlay from '../hooks/useSkyOverlay';
-import { hitTestSky, searchNameFor } from '../utils/skyOverlay';
+import { hitTestSky, openSkyObject } from '../utils/skyOverlay';
 import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
 import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
 import { Button } from '../components/ui';
@@ -346,7 +346,7 @@ export default function FullResViewer() {
             if (skyObj) {
                 const touch = e.originalEvent?.pointerType && e.originalEvent.pointerType !== 'mouse';
                 if (touch && skyObj.key !== hoveredSkyKey) setSkyHover({ imageId: id, key: skyObj.key });
-                else navigate(`/search?object_name=${encodeURIComponent(searchNameFor(skyObj))}`);
+                else openSkyObject(skyObj, navigate);
                 return;
             }
             const hit = overlayHitAt(e.position.x, e.position.y);
@@ -664,6 +664,7 @@ export default function FullResViewer() {
                     warning={sky.warning}
                     isLoading={sky.isLoading}
                     isError={sky.isError}
+                    online={sky.online}
                 />
             )}
 

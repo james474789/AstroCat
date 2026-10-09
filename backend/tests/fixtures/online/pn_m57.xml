@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE version="1.4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.ivoa.net/xml/VOTable/v1.3"
+  xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/v1.3">
+ <DESCRIPTION>
+   VizieR Astronomical Server vizier.cds.unistra.fr
+    Date: 2026-10-09T20:00:13 [V7.6.1]
+   Explanations and Statistics of UCDs:			See LINK below
+   In case of problem, please report to:	cds-question@unistra.fr
+ </DESCRIPTION>
+<!-- VOTable description at http://www.ivoa.net/Documents/latest/VOT.html -->
+<INFO name="service_protocol" value="ASU">  IVOID of the protocol through which the data was retrieved</INFO>
+<INFO name="request_date" value="2026-10-09T20:00:13">  Query execution date</INFO>
+<INFO name="request" value="https://vizier.cds.unistra.fr/viz-bin/votable?-source=V%2F84%2Fmain&amp;-c=283.396000%20%2B33.029000&amp;-c.rd=1.0&amp;-out=PNG%2CName&amp;-out.add=_RAJ%2C_DEJ&amp;-out.max=10">  Full request URL</INFO>
+<INFO name="contact" value="cds-question@unistra.fr">  Email or URL to contact publisher</INFO>
+<INFO name="server_software" value="VizieR/7.6.1">  Software version</INFO>
+<INFO name="publisher" value="CDS">  Data centre that produced the VOTable</INFO>
+
+<!--
+Execution Reports
+ -->
+<INFO ID="Target" name="-c" value="283.396000+33.029000,rd=1.">
+Constraint -out.max=10</INFO>
+
+<RESOURCE ID="yCat_5084" name="V/84" type="results">
+  <DESCRIPTION>Strasbourg-ESO Catalogue of Galactic Planetary Nebulae (Acker+, 1992)</DESCRIPTION>  <INFO name="ivoid" value="ivo://cds.vizier/v/84">    IVOID of underlying data collection  </INFO>
+  <INFO name="data_ivoid" value="ivo://cds.vizier/v/84">    IVOID of underlying data collection  </INFO>
+  <INFO name="creator" value="Acker A.">    First author or institution  </INFO>
+  <INFO name="cites" value="bibcode:1992ESOPN...1....1A">    Article or Data origin sources  </INFO>
+  <INFO name="journal" value="ESOP">    Journal name  </INFO>
+  <INFO name="original_date" value="1992">    Year of the article publication  </INFO>
+  <INFO name="reference_url" value="https://cdsarc.cds.unistra.fr/viz-bin/cat/V/84">    Dataset landing page  </INFO>
+  <INFO name="publication_date" value="2012-11-23">    Date of first publication in the data centre  </INFO>
+  <INFO name="rights_uri" value="https://cds.unistra.fr/vizier-org/licences_vizier.html">    Licence URI  </INFO>
+
+  <COOSYS ID="B1950" system="eq_FK4" equinox="B1950"/>
+  <COOSYS ID="J2000" system="eq_FK5" equinox="J2000"/>
+  <TABLE ID="V_84_main" name="V/84/main">
+    <DESCRIPTION>Discoverers, Designations, and Positions of True and Possible Planetary Nebulae (1)</DESCRIPTION>
+    <!-- RowName: ${PNG} -->
+    <!-- Definitions of GROUPs and FIELDs -->
+    <FIELD name="_RAJ2000" ucd="pos.eq.ra" ref="J2000" datatype="double" width="11" precision="7" unit="deg"><!-- ucd="POS_EQ_RA" -->
+      <DESCRIPTION>Right ascension (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="_DEJ2000" ucd="pos.eq.dec" ref="J2000" datatype="double" width="11" precision="7" unit="deg"><!-- ucd="POS_EQ_DEC" -->
+      <DESCRIPTION>Declination (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="PNG" ucd="meta.id;meta.main" datatype="char" arraysize="10"><!-- ucd="ID_MAIN" -->
+      <DESCRIPTION>Designation of the Galactic Planetary Nebula</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=V/84/main&amp;recno=${recno}"/>
+    </FIELD>
+    <FIELD name="Name" ucd="meta.id" datatype="char" arraysize="13*"><!-- ucd="ID_ALTERNATIVE" -->
+      <DESCRIPTION>Main designation</DESCRIPTION>
+    </FIELD>
+    <FIELD name="recno" ucd="meta.record" datatype="int" width="8" type="hidden"><!-- ucd="RECORD" -->
+      <DESCRIPTION>Record number assigned by the VizieR team. Should Not be used for identification.</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=V/84/main&amp;recno=${recno}"/>
+    </FIELD>
+<DATA><TABLEDATA>
+<TR><TD>283.3989973</TD><TD>+33.0278514</TD><TD>063.1+13.9</TD><TD>NGC 6720</TD><TD>432</TD></TR>
+</TABLEDATA></DATA>
+</TABLE>
+<INFO name="matches" value="1">matching records</INFO>
+
+<INFO name="Warning" value="vc_coo can't change epoch"/>
+<INFO name="Warning" value="increase the precision for computed column 8"/>
+<INFO name="Warning" value="increase the precision for computed column 8"/>
+</RESOURCE>
+</VOTABLE>

@@ -65,8 +65,12 @@ bcrypt==4.0.1
 slowapi==0.1.9
 
 # -------------------------------------------
-# Development Tools (optional in production)
+# Outbound HTTP (astrometry.net, weather, online catalogs)
 # -------------------------------------------
 httpx==0.26.0
+
+# -------------------------------------------
+# Development Tools (optional in production)
+# -------------------------------------------
 pytest==7.4.4
 pytest-asyncio==0.23.3

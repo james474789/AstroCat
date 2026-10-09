@@ -274,6 +274,9 @@ from app.api import quality  # noqa: E402  (Q1c)
 app.include_router(quality.router, prefix="/api/quality", tags=["Quality"], dependencies=[Depends(get_current_user)])
 from app.api import fullres  # noqa: E402  (V1)
 app.include_router(fullres.router, prefix="/api/images", tags=["Full resolution"], dependencies=[Depends(get_current_user)])
+from app.api import sky_online  # noqa: E402  (O1)
+app.include_router(sky_online.router, prefix="/api/sky", tags=["Online catalogs"], dependencies=[Depends(get_current_user)])
+app.include_router(sky_online.images_router, prefix="/api/images", tags=["Online catalogs"], dependencies=[Depends(get_current_user)])
 
 
 

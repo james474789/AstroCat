@@ -10,7 +10,7 @@ import FieldOverlayLayer from '../components/fieldOverlay/FieldOverlayLayer';
 import FieldOverlayPopover from '../components/fieldOverlay/FieldOverlayPopover';
 import FieldOverlayLegend from '../components/fieldOverlay/FieldOverlayLegend';
 import useSkyOverlay from '../hooks/useSkyOverlay';
-import { hitTestSky, searchNameFor } from '../utils/skyOverlay';
+import { hitTestSky, openSkyObject as openSkyTarget } from '../utils/skyOverlay';
 import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
 import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
 import useSeenIn from '../hooks/useSeenIn';
@@ -138,7 +138,7 @@ export default function ImageDetail({ inspector: forceInspector = false }) {
         if (px < 0 || py < 0 || px > image.width_pixels || py > image.height_pixels) return null;
         return hitTestSky(sky.objects, px, py, image.width_pixels / (imgRect.w * s));
     };
-    const openSkyObject = (obj) => navigate(`/search?object_name=${encodeURIComponent(searchNameFor(obj))}`);
+    const openSkyObject = (obj) => openSkyTarget(obj, navigate);
 
     const openOverlay = (group, clientX, clientY) => {
         if (group.count > 1) setOverlayPopover({ group, x: clientX, y: clientY });
@@ -725,6 +725,7 @@ export default function ImageDetail({ inspector: forceInspector = false }) {
                                             warning={sky.warning}
                                             isLoading={sky.isLoading}
                                             isError={sky.isError}
+                                            online={sky.online}
                                         />
                                     )}
                                     {overlays.active && !imgError && (

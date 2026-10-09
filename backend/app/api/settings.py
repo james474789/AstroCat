@@ -8,6 +8,13 @@ from typing import Optional, Dict, Literal
 
 router = APIRouter()
 
+
+class OnlineCatalogSetting(BaseModel):
+    """One online overlay catalog (O1): off unless enabled; limit is a magnitude or arcmin, per catalog."""
+    enabled: bool = False
+    limit: Optional[float] = None
+
+
 class SystemSettings(BaseModel):
     astrometry_provider: str # "nova" or "local"
     astrometry_max_submissions: int = 8
@@ -18,6 +25,9 @@ class SystemSettings(BaseModel):
     quality_units: Literal["ARCSEC", "PX"] = "ARCSEC"
     star_metrics_enabled: bool = True
     star_metrics_backfill: bool = True
+    # Online overlay catalogs (O1), keyed by app.services.online_catalogs.registry key.
+    # A missing key means off: nothing is fetched from outside until an admin opts in.
+    online_catalogs: Dict[str, OnlineCatalogSetting] = {}
 
     class Config:
         json_schema_extra = {
@@ -112,6 +122,10 @@ def update_settings(new_settings: SystemSettings):
                 status_code=400, 
                 detail="Cannot switch to Local Astrometry: Configuration (URL/Key) is missing."
             )
+    from app.services.online_catalogs.registry import BY_KEY
+    unknown = sorted(set(new_settings.online_catalogs) - set(BY_KEY))
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown online catalog(s): {', '.join(unknown)}")
 
     raw = new_settings.model_dump_json()
     # Postgres first: it is the durable copy, so a failure here must surface.

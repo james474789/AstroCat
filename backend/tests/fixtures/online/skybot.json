@@ -1,0 +1,11 @@
+[
+ {"Num": 580362, "Name": "2015 BX319", "RA (hms)": "09 59 58.2691", "DEC (dms)": "+11 59 19.028", "Class": "MB>Inner",
+  "VMag (mag)": 23.2, "Err (arcsec)": 0.026, "d (arcsec)": 48.205, "dRA (arcsec/h)": 68.5302, "dDEC (arcsec/h)": -19.1398,
+  "dg (ua)": 2.4662695369, "dh (ua)": 2.07798850233},
+ {"Num": 433, "Name": "Eros", "RA (hms)": "10 00 12.0000", "DEC (dms)": "+12 05 00.000", "Class": "NEA>Amor",
+  "VMag (mag)": 12.3, "Err (arcsec)": 0.001, "d (arcsec)": 400.1, "dRA (arcsec/h)": 120.0, "dDEC (arcsec/h)": 50.0},
+ {"Name": "C/2023 A3 (Tsuchinshan-ATLAS)", "RA (hms)": "09 59 40.0000", "DEC (dms)": "+11 55 00.000", "Class": "Comet",
+  "VMag (mag)": 9.5, "Err (arcsec)": 1.2, "d (arcsec)": 500.0, "dRA (arcsec/h)": 30.0, "dDEC (arcsec/h)": 40.0},
+ {"Name": "2020 QB52", "RA (hms)": "10 00 01.0000", "DEC (dms)": "-00 30 00.000", "Class": "Hungaria",
+  "VMag (mag)": 17.5}
+]

@@ -32,7 +32,7 @@ function unitsPerNative(toScreen) {
 
 /**
  * Drawable geometry for each visible object in layer units:
- * { obj, cx, cy, rx, ry, angle, kind: 'star' | 'ellipse' | 'point', dashed }.
+ * { obj, cx, cy, rx, ry, angle, kind: 'star' | 'diamond' | 'ellipse' | 'point', dashed }.
  * Objects whose marker is entirely outside `view` (layer-unit rect) are skipped.
  */
 export function skyGeometry(objects, toScreen, labelScale = 1, view = null) {
@@ -49,6 +49,8 @@ export function skyGeometry(objects, toScreen, labelScale = 1, view = null) {
         if (obj.catalog === 'NAMED_STAR') {
             kind = 'star';
             rx = ry = STAR_PX * labelScale;
+        } else if (obj.catalog === 'SKYBOT') {
+            kind = 'diamond';       // moving body: never sized
         } else if (obj.ellipse) {
             const erx = obj.ellipse.rx * k;
             const ery = obj.ellipse.ry * k;
@@ -192,10 +194,20 @@ export function describeSkyObject(obj) {
     if (obj.common_name && !named) parts.push(obj.common_name);
     if (obj.object_type) parts.push(obj.object_type);
     if (obj.magnitude != null) parts.push(`mag ${obj.magnitude.toFixed(1)}`);
+    if (obj.motion_arcsec_h != null) parts.push(`${obj.motion_arcsec_h.toFixed(0)}″/h`);
     return { title: named ? `${obj.label} (${designations})` : designations, detail: parts.join(' · ') };
 }
 
 /** Search query for clicking an object: its designation as the catalogs store it. */
 export function searchNameFor(obj) {
     return obj.search_name || (obj.designations[0] || obj.label).replace(/\s+/g, '');
+}
+
+/**
+ * Click on a catalog object: online-catalog objects (O1) open their external page in a new tab
+ * (they aren't in the local catalogs), local ones search the library for the designation.
+ */
+export function openSkyObject(obj, navigate) {
+    if (obj.url) window.open(obj.url, '_blank', 'noopener,noreferrer');
+    else navigate(`/search?object_name=${encodeURIComponent(searchNameFor(obj))}`);
 }

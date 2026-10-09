@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE version="1.4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.ivoa.net/xml/VOTable/v1.3"
+  xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/v1.3">
+ <DESCRIPTION>
+   VizieR Astronomical Server vizier.cds.unistra.fr
+    Date: 2026-10-09T20:00:13 [V7.6.1]
+   Explanations and Statistics of UCDs:			See LINK below
+   In case of problem, please report to:	cds-question@unistra.fr
+ </DESCRIPTION>
+<!-- VOTable description at http://www.ivoa.net/Documents/latest/VOT.html -->
+<INFO name="service_protocol" value="ASU">  IVOID of the protocol through which the data was retrieved</INFO>
+<INFO name="request_date" value="2026-10-09T20:00:13">  Query execution date</INFO>
+<INFO name="request" value="https://vizier.cds.unistra.fr/viz-bin/votable?-source=VII%2F192%2Farpord&amp;-c=10.000000%20-80.000000&amp;-c.rd=0.1&amp;-out=Arp%2CName%2CSize&amp;-out.add=_RAJ%2C_DEJ&amp;-out.max=10">  Full request URL</INFO>
+<INFO name="contact" value="cds-question@unistra.fr">  Email or URL to contact publisher</INFO>
+<INFO name="server_software" value="VizieR/7.6.1">  Software version</INFO>
+<INFO name="publisher" value="CDS">  Data centre that produced the VOTable</INFO>
+
+<!--
+Execution Reports
+ -->
+<INFO ID="Target" name="-c" value="010.000000-80.000000,rd=0.1">
+Constraint -out.max=10</INFO>
+
+<RESOURCE ID="yCat_7192" name="VII/192" type="results">
+  <DESCRIPTION>Arp's Peculiar Galaxies (Webb 1996)</DESCRIPTION>  <INFO name="ivoid" value="ivo://cds.vizier/vii/192">    IVOID of underlying data collection  </INFO>
+  <INFO name="data_ivoid" value="ivo://cds.vizier/vii/192">    IVOID of underlying data collection  </INFO>
+  <INFO name="creator" value="Webb D.">    First author or institution  </INFO>
+  <INFO name="cites" value="bibcode:1996S&amp;T....92...92W">    Article or Data origin sources  </INFO>
+  <INFO name="journal" value="S&amp;T">    Journal name  </INFO>
+  <INFO name="original_date" value="1996">    Year of the article publication  </INFO>
+  <INFO name="reference_url" value="https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/192">    Dataset landing page  </INFO>
+  <INFO name="publication_date" value="2017-10-16">    Date of first publication in the data centre  </INFO>
+  <INFO name="rights_uri" value="https://cds.unistra.fr/vizier-org/licences_vizier.html">    Licence URI  </INFO>
+
+  <COOSYS ID="J2000" system="eq_FK5" equinox="J2000"/>
+  <TABLE ID="VII_192_arpord" name="VII/192/arpord">
+    <DESCRIPTION>list of Arp views with imaging data</DESCRIPTION>
+    <!-- RowName: ${Arp} -->
+    <!-- Definitions of GROUPs and FIELDs -->
+    <FIELD name="_RAJ2000" ucd="pos.eq.ra" ref="J2000" datatype="double" width="9" precision="5" unit="deg"><!-- ucd="POS_EQ_RA" -->
+      <DESCRIPTION>Right ascension (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="_DEJ2000" ucd="pos.eq.dec" ref="J2000" datatype="double" width="9" precision="5" unit="deg"><!-- ucd="POS_EQ_DEC" -->
+      <DESCRIPTION>Declination (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="Arp" ucd="meta.id;meta.main" datatype="short" width="3"><!-- ucd="ID_MAIN" -->
+      <DESCRIPTION>Arp number from original catalog</DESCRIPTION>
+<!-- Arp number from original catalog \linkRole{involved galaxies } -->
+
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-4?-info=XML&amp;-out.add=.&amp;-source=VII/192&amp;-corr=FK=Arp&amp;-out.max=9999&amp;Arp===${Arp}"/>
+    </FIELD>
+    <FIELD name="Name" ucd="meta.id" datatype="char" arraysize="17*"><!-- ucd="ID_ALTERNATIVE" -->
+      <DESCRIPTION>Common name (group or brightest)</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=VII/192/arpord&amp;recno=${recno}"/>
+    </FIELD>
+    <FIELD name="Size" ucd="phys.angSize" datatype="float" width="4" precision="1" unit="arcmin"><!-- ucd="EXTENSION_DIAM" -->
+      <DESCRIPTION>Long dimension of Arp's original photo</DESCRIPTION>
+    </FIELD>
+    <FIELD name="recno" ucd="meta.record" datatype="int" width="8" type="hidden"><!-- ucd="RECORD" -->
+      <DESCRIPTION>Record number assigned by the VizieR team. Should Not be used for identification.</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=VII/192/arpord&amp;recno=${recno}"/>
+    </FIELD>
+
+<!--  EMPTY result, no DATA part  -->
+
+</TABLE>
+
+<INFO name="Warning" value="vc_coo can't change epoch"/>
+<INFO name="Warning" value="increase the precision for computed column 6"/>
+<INFO name="Warning" value="increase the precision for computed column 6"/>
+</RESOURCE>
+</VOTABLE>

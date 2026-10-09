@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE version="1.4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.ivoa.net/xml/VOTable/v1.3"
+  xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/v1.3">
+ <DESCRIPTION>
+   VizieR Astronomical Server vizier.cds.unistra.fr
+    Date: 2026-10-09T20:00:12 [V7.6.1]
+   Explanations and Statistics of UCDs:			See LINK below
+   In case of problem, please report to:	cds-question@unistra.fr
+ </DESCRIPTION>
+<!-- VOTable description at http://www.ivoa.net/Documents/latest/VOT.html -->
+<INFO name="service_protocol" value="ASU">  IVOID of the protocol through which the data was retrieved</INFO>
+<INFO name="request_date" value="2026-10-09T20:00:12">  Query execution date</INFO>
+<INFO name="request" value="https://vizier.cds.unistra.fr/viz-bin/votable?-source=VII%2F110A%2Ftable3%20VII%2F110A%2Ftable4&amp;-c=194.900000%20%2B27.900000&amp;-c.rd=1.0&amp;-out=ACO%2CBMtype%2CRich%2Cm10%2Cz&amp;-out.add=_RAJ%2C_DEJ&amp;-out.max=10">  Full request URL</INFO>
+<INFO name="contact" value="cds-question@unistra.fr">  Email or URL to contact publisher</INFO>
+<INFO name="server_software" value="VizieR/7.6.1">  Software version</INFO>
+<INFO name="publisher" value="CDS">  Data centre that produced the VOTable</INFO>
+<INFO name="CatalogsExamined" value="2">
+  2 catalogues with potential matches were examined.
+</INFO>
+
+<!--
+Execution Reports
+ -->
+<INFO ID="Target" name="-c" value="194.900000+27.900000,rd=1.">
+Constraint -out.max=10</INFO>
+
+<RESOURCE ID="yCat_7110" name="VII/110A" type="results">
+  <DESCRIPTION>Rich Clusters of Galaxies (Abell+ 1989)</DESCRIPTION>  <INFO name="ivoid" value="ivo://cds.vizier/vii/110a">    IVOID of underlying data collection  </INFO>
+  <INFO name="data_ivoid" value="ivo://cds.vizier/vii/110a">    IVOID of underlying data collection  </INFO>
+  <INFO name="creator" value="Abell G.O.">    First author or institution  </INFO>
+  <INFO name="cites" value="bibcode:1989ApJS...70....1A">    Article or Data origin sources  </INFO>
+  <INFO name="journal" value="ApJS">    Journal name  </INFO>
+  <INFO name="original_date" value="1989">    Year of the article publication  </INFO>
+  <INFO name="reference_url" value="https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/110A">    Dataset landing page  </INFO>
+  <INFO name="publication_date" value="2012-11-12">    Date of first publication in the data centre  </INFO>
+  <INFO name="rights_uri" value="https://cds.unistra.fr/vizier-org/licences_vizier.html">    Licence URI  </INFO>
+
+  <COOSYS ID="B1950" system="eq_FK4" equinox="B1950"/>
+  <COOSYS ID="J2000" system="eq_FK5" equinox="J2000"/>
+  <TABLE ID="VII_110A_table3" name="VII/110A/table3">
+    <DESCRIPTION>Revised northern "Abell Catalog"</DESCRIPTION>
+    <!-- RowName: ${ACO} -->
+    <!-- Definitions of GROUPs and FIELDs -->
+<!--The precision of the computed positions has been increased compared to the original positions-->
+    <FIELD name="_RAJ2000" ucd="pos.eq.ra" ref="J2000" datatype="double" width="8" precision="4" unit="deg"><!-- ucd="POS_EQ_RA" -->
+      <DESCRIPTION>Right ascension (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="_DEJ2000" ucd="pos.eq.dec" ref="J2000" datatype="double" width="8" precision="4" unit="deg"><!-- ucd="POS_EQ_DEC" -->
+      <DESCRIPTION>Declination (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="ACO" ucd="meta.id;meta.main" datatype="short" width="4"><!-- ucd="ID_MAIN" -->
+      <DESCRIPTION>[1,2712]+ "Abell" number</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=VII/110A/table3&amp;recno=${recno}"/>
+    </FIELD>
+    <FIELD name="BMtype" ucd="src.class.struct" datatype="char" arraysize="7*"><!-- ucd="CLASS_STRUCT" -->
+      <DESCRIPTION>[- I:] cluster classification in the Bautz- Morgan system</DESCRIPTION>
+    </FIELD>
+    <FIELD name="Rich" ucd="src.class.richness" datatype="unsignedByte" width="1"><!-- ucd="CLASS_RICHNESS" -->
+      <DESCRIPTION>richness, from Abell (1958ApJS....3..211A)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="m10" ucd="phot.mag" datatype="float" width="4" precision="1" unit="mag"><!-- ucd="PHOT_MAG_UNDEF" -->
+      <DESCRIPTION>red magnitude of the tenth brightest cluster member, from Abell (1958)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="z" ucd="src.redshift" datatype="float" width="7" precision="4"><!-- ucd="REDSHIFT_HC" -->
+      <DESCRIPTION>? cluster redshift from Struble and Rood (1987ApJS...63..555S)</DESCRIPTION>
+      <VALUES null="NaN" />
+    </FIELD>
+    <FIELD name="recno" ucd="meta.record" datatype="int" width="8" type="hidden"><!-- ucd="RECORD" -->
+      <DESCRIPTION>Record number assigned by the VizieR team. Should Not be used for identification.</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=VII/110A/table3&amp;recno=${recno}"/>
+    </FIELD>
+<DATA><TABLEDATA>
+<TR><TD>193.9549</TD><TD>+28.4462</TD><TD>1641</TD><TD>II-III</TD><TD>1</TD><TD>17.6</TD><TD></TD><TD>1641</TD></TR>
+<TR><TD>194.9531</TD><TD>+27.9808</TD><TD>1656</TD><TD>II</TD><TD>2</TD><TD>13.5</TD><TD>0.0232</TD><TD>1656</TD></TR>
+</TABLEDATA></DATA>
+</TABLE>
+
+<!--
+Execution Reports
+ -->
+  <TABLE ID="VII_110A_table4" name="VII/110A/table4">
+    <DESCRIPTION>Southern "Abell Catalog"</DESCRIPTION>
+    <!-- RowName: ${ACO} -->
+    <!-- Definitions of GROUPs and FIELDs -->
+<!--The precision of the computed positions has been increased compared to the original positions-->
+
+<!-- +++No column could be found to attach a LINK in table: VII/110A/table4 -->
+    <FIELD name="_RAJ2000" ucd="pos.eq.ra" ref="J2000" datatype="double" width="8" precision="4" unit="deg"><!-- ucd="POS_EQ_RA" -->
+      <DESCRIPTION>Right ascension (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="_DEJ2000" ucd="pos.eq.dec" ref="J2000" datatype="double" width="8" precision="4" unit="deg"><!-- ucd="POS_EQ_DEC" -->
+      <DESCRIPTION>Declination (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="ACO" ucd="meta.id;meta.main" datatype="short" width="4"><!-- ucd="ID_MAIN" -->
+      <DESCRIPTION>[2713,4076]+ "Abell" number for the southern rich cluster</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-4?-info=XML&amp;-out.add=.&amp;-source=VII/110A/notes&amp;Prefix=%20&amp;ACO=${ACO}"/>
+    </FIELD>
+    <FIELD name="BMtype" ucd="src.class.struct" datatype="char" arraysize="7*"><!-- ucd="CLASS_STRUCT" -->
+      <DESCRIPTION>[- I:?]! cluster classification in the Bautz-Morgan system</DESCRIPTION>
+    </FIELD>
+    <FIELD name="Rich" ucd="src.class.richness" datatype="unsignedByte" width="1"><!-- ucd="CLASS_RICHNESS" -->
+      <DESCRIPTION>richness, from Abell (1958ApJS....3..211A)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="m10" ucd="phot.mag" datatype="float" width="4" precision="1" unit="mag"><!-- ucd="PHOT_MAG_UNDEF" -->
+      <DESCRIPTION>weighted mean total V magnitude estimated for the tenth-ranked cluster member (again uncorrected)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="z" ucd="src.redshift" datatype="float" width="7" precision="4"><!-- ucd="REDSHIFT_HC" -->
+      <DESCRIPTION>? cluster redshift from Struble and Rood (1987ApJS...63..555S)</DESCRIPTION>
+      <VALUES null="NaN" />
+    </FIELD>
+
+<!--  EMPTY result, no DATA part  -->
+
+</TABLE>
+<INFO name="matches" value="2">matching records</INFO>
+
+<INFO name="Warning" value="vc_coo can't change epoch"/>
+<INFO name="Warning" value="increase the precision for computed column 5"/>
+<INFO name="Warning" value="increase the precision for computed column 5"/>
+<INFO name="Warning" value="vc_coo can't change epoch"/>
+<INFO name="Warning" value="increase the precision for computed column 5"/>
+<INFO name="Warning" value="increase the precision for computed column 5"/>
+</RESOURCE>
+</VOTABLE>

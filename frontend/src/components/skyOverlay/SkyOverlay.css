@@ -15,6 +15,30 @@
 .so-cat-SH2 { color: var(--sky-sh2); }
 .so-cat-NAMED_STAR { color: var(--sky-star); }
 
+/* Online catalogs (O1) */
+:root {
+    --sky-skybot: #facc15;
+    --sky-comet: #2dd4bf;
+    --sky-pgc: #a3e635;
+    --sky-arp: #fb923c;
+    --sky-abell: #fde68a;
+    --sky-ldn: #94a3b8;
+    --sky-lbn: #fda4af;
+    --sky-barnard: #a8a29e;
+    --sky-vdb: #93c5fd;
+    --sky-pn: #5eead4;
+}
+.so-cat-SKYBOT { color: var(--sky-skybot); }
+.so-cat-SKYBOT.so-comet, .so-comet { color: var(--sky-comet); }
+.so-cat-PGC { color: var(--sky-pgc); }
+.so-cat-ARP { color: var(--sky-arp); }
+.so-cat-ABELL { color: var(--sky-abell); }
+.so-cat-LDN { color: var(--sky-ldn); }
+.so-cat-LBN { color: var(--sky-lbn); }
+.so-cat-BARNARD { color: var(--sky-barnard); }
+.so-cat-VDB { color: var(--sky-vdb); }
+.so-cat-PN { color: var(--sky-pn); }
+
 .sky-overlay-layer {
     position: absolute;
     inset: 0;
@@ -109,4 +133,35 @@
     border-top: 1px solid var(--color-border);
     color: var(--color-warning);
     cursor: help;
+}
+
+/* Online layers (O1) */
+.so-legend-group {
+    margin-top: 4px;
+    padding: 4px 6px 2px;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.so-legend-row.static {
+    cursor: default;
+}
+.so-legend-status {
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    align-items: center;
+}
+.so-legend-status.error {
+    color: var(--color-warning);
+}
+.so-spin {
+    animation: so-spin 1s linear infinite;
+}
+@keyframes so-spin {
+    to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .so-spin { animation: none; }
 }

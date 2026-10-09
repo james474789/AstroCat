@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE version="1.4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.ivoa.net/xml/VOTable/v1.3"
+  xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/v1.3">
+ <DESCRIPTION>
+   VizieR Astronomical Server vizier.cds.unistra.fr
+    Date: 2026-10-09T20:00:12 [V7.6.1]
+   Explanations and Statistics of UCDs:			See LINK below
+   In case of problem, please report to:	cds-question@unistra.fr
+ </DESCRIPTION>
+<!-- VOTable description at http://www.ivoa.net/Documents/latest/VOT.html -->
+<INFO name="service_protocol" value="ASU">  IVOID of the protocol through which the data was retrieved</INFO>
+<INFO name="request_date" value="2026-10-09T20:00:12">  Query execution date</INFO>
+<INFO name="request" value="https://vizier.cds.unistra.fr/viz-bin/votable?-source=VII%2F7A%2Fldn&amp;-c=68.000000%20%2B26.000000&amp;-c.rd=1.5&amp;-out=LDN%2CArea%2COpacity&amp;-out.add=_RAJ%2C_DEJ&amp;-out.max=6">  Full request URL</INFO>
+<INFO name="contact" value="cds-question@unistra.fr">  Email or URL to contact publisher</INFO>
+<INFO name="server_software" value="VizieR/7.6.1">  Software version</INFO>
+<INFO name="publisher" value="CDS">  Data centre that produced the VOTable</INFO>
+
+<!--
+Execution Reports
+ -->
+<INFO ID="Target" name="-c" value="068.000000+26.000000,rd=1.5">
+Constraint -out.max=6</INFO>
+
+<RESOURCE ID="yCat_7007" name="VII/7A" type="results">
+  <DESCRIPTION>Lynds' Catalogue of Dark Nebulae (LDN) (Lynds 1962)</DESCRIPTION>  <INFO name="ivoid" value="ivo://cds.vizier/vii/7a">    IVOID of underlying data collection  </INFO>
+  <INFO name="data_ivoid" value="ivo://cds.vizier/vii/7a">    IVOID of underlying data collection  </INFO>
+  <INFO name="creator" value="Lynds B.T.">    First author or institution  </INFO>
+  <INFO name="cites" value="bibcode:1962ApJS....7....1L">    Article or Data origin sources  </INFO>
+  <INFO name="journal" value="ApJS">    Journal name  </INFO>
+  <INFO name="original_date" value="1962">    Year of the article publication  </INFO>
+  <INFO name="reference_url" value="https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/7A">    Dataset landing page  </INFO>
+  <INFO name="publication_date" value="2013-02-26">    Date of first publication in the data centre  </INFO>
+  <INFO name="rights_uri" value="https://cds.unistra.fr/vizier-org/licences_vizier.html">    Licence URI  </INFO>
+
+  <COOSYS ID="B1950" system="eq_FK4" equinox="B1950"/>
+  <COOSYS ID="J2000" system="eq_FK5" equinox="J2000"/>
+  <TABLE ID="VII_7A_ldn" name="VII/7A/ldn">
+    <DESCRIPTION>The LDN Catalogue</DESCRIPTION>
+    <!-- RowName: ${LDN} -->
+    <!-- Definitions of GROUPs and FIELDs -->
+<!--The precision of the computed positions has been increased compared to the original positions-->
+    <FIELD name="_RAJ2000" ucd="pos.eq.ra" ref="J2000" datatype="double" width="8" precision="4" unit="deg"><!-- ucd="POS_EQ_RA" -->
+      <DESCRIPTION>Right ascension (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="_DEJ2000" ucd="pos.eq.dec" ref="J2000" datatype="double" width="8" precision="4" unit="deg"><!-- ucd="POS_EQ_DEC" -->
+      <DESCRIPTION>Declination (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="LDN" ucd="meta.id" datatype="short" width="4"><!-- ucd="ID_MAIN" -->
+      <DESCRIPTION>[1/1802]?+ Catalogue number from original published version (ApJS 7, 1)</DESCRIPTION>
+      <VALUES null="-32768" />
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=VII/7A/ldn&amp;recno=${recno}"/>
+    </FIELD>
+    <FIELD name="Area" ucd="phys.area;instr" datatype="float" width="7" precision="3" unit="deg**2"><!-- ucd="INST_AREA" -->
+      <DESCRIPTION>Area, in square degrees, of the Cloud</DESCRIPTION>
+    </FIELD>
+    <FIELD name="Opacity" ucd="meta.code.class" datatype="unsignedByte" width="1"><!-- ucd="CLASS_CODE" -->
+      <DESCRIPTION>[1/6]? Opacity class</DESCRIPTION>
+      <VALUES null="255" />
+    </FIELD>
+    <FIELD name="recno" ucd="meta.record" datatype="int" width="8" type="hidden"><!-- ucd="RECORD" -->
+      <DESCRIPTION>Record number assigned by the VizieR team. Should Not be used for identification.</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=VII/7A/ldn&amp;recno=${recno}"/>
+    </FIELD>
+<DATA><TABLEDATA>
+<TR><TD>068.2667</TD><TD>+26.1048</TD><TD>1521</TD><TD>4.100</TD><TD>4</TD><TD>1511</TD></TR>
+<TR><TD>069.2657</TD><TD>+25.7669</TD><TD>1528</TD><TD>2.000</TD><TD>3</TD><TD>1518</TD></TR>
+<TR><TD>069.0608</TD><TD>+24.9179</TD><TD>1533</TD><TD>0.011</TD><TD>5</TD><TD>1523</TD></TR>
+</TABLEDATA></DATA>
+</TABLE>
+<INFO name="matches" value="3">matching records</INFO>
+
+<INFO name="Warning" value="vc_coo can't change epoch"/>
+<INFO name="Warning" value="increase the precision for computed column 5"/>
+<INFO name="Warning" value="increase the precision for computed column 5"/>
+</RESOURCE>
+</VOTABLE>

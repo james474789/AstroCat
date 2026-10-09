@@ -163,6 +163,30 @@ export async function fetchSkyOverlay(id) {
     return handleResponse(await fetch(`${API_BASE_URL}/images/${id}/sky-overlay`, { credentials: 'include' }));
 }
 
+// ============ Online catalogs (O1) ============
+
+/** Online overlay catalogs an admin has enabled: [{key, label, group}]. */
+export async function fetchOnlineCatalogs() {
+    return handleResponse(await fetch(`${API_BASE_URL}/sky/online-catalogs`, { credentials: 'include' }));
+}
+
+/** Every online catalog with its source, limit semantics and setting (admin). */
+export async function fetchOnlineCatalogsAdmin() {
+    return handleResponse(await fetch(`${API_BASE_URL}/sky/online-catalogs/admin`, { credentials: 'include' }));
+}
+
+export async function testOnlineCatalog(key) {
+    return handleResponse(await fetch(`${API_BASE_URL}/sky/online-catalogs/${encodeURIComponent(key)}/test`, {
+        method: 'POST',
+        headers: withCsrfHeaders(),
+        credentials: 'include'
+    }));
+}
+
+export async function fetchSkyOverlayOnline(id, key) {
+    return handleResponse(await fetch(`${API_BASE_URL}/images/${id}/sky-overlay/online/${encodeURIComponent(key)}`, { credentials: 'include' }));
+}
+
 export async function solveFieldOverlaps(id, mode = 'all') {
     return handleResponse(await fetch(`${API_BASE_URL}/images/${id}/field-overlaps/solve?mode=${mode}`, {
         method: 'POST',

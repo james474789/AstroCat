@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE version="1.4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.ivoa.net/xml/VOTable/v1.3"
+  xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/v1.3">
+ <DESCRIPTION>
+   VizieR Astronomical Server vizier.cds.unistra.fr
+    Date: 2026-10-09T20:00:11 [V7.6.1]
+   Explanations and Statistics of UCDs:			See LINK below
+   In case of problem, please report to:	cds-question@unistra.fr
+ </DESCRIPTION>
+<!-- VOTable description at http://www.ivoa.net/Documents/latest/VOT.html -->
+<INFO name="service_protocol" value="ASU">  IVOID of the protocol through which the data was retrieved</INFO>
+<INFO name="request_date" value="2026-10-09T20:00:11">  Query execution date</INFO>
+<INFO name="request" value="https://vizier.cds.unistra.fr/viz-bin/votable?-source=VII%2F237%2Fpgc&amp;-c=10.684700%20%2B41.269000&amp;-c.rd=1.0&amp;-out=PGC%2COType%2CMType%2ClogD25%2ClogR25%2CPA%2CANames&amp;-out.add=_RAJ%2C_DEJ&amp;-out.max=8&amp;-sort=-logD25&amp;logD25=%3E%3D0.8">  Full request URL</INFO>
+<INFO name="contact" value="cds-question@unistra.fr">  Email or URL to contact publisher</INFO>
+<INFO name="server_software" value="VizieR/7.6.1">  Software version</INFO>
+<INFO name="publisher" value="CDS">  Data centre that produced the VOTable</INFO>
+
+<!--
+Execution Reports
+ -->
+<INFO ID="Target" name="-c" value="010.684700+41.269000,rd=1.">
+Constraint logD25=&gt;=0.8</INFO>
+
+<RESOURCE ID="yCat_7237" name="VII/237" type="results">
+  <DESCRIPTION>HYPERLEDA. I. Catalog of galaxies (Paturel+, 2003)</DESCRIPTION>  <INFO name="ivoid" value="ivo://cds.vizier/vii/237">    IVOID of underlying data collection  </INFO>
+  <INFO name="data_ivoid" value="ivo://cds.vizier/vii/237">    IVOID of underlying data collection  </INFO>
+  <INFO name="creator" value="Paturel G.">    First author or institution  </INFO>
+  <INFO name="cites" value="bibcode:2003A&amp;A...412...45P">    Article or Data origin sources  </INFO>
+  <INFO name="journal" value="A&amp;A">    Journal name  </INFO>
+  <INFO name="original_date" value="2003">    Year of the article publication  </INFO>
+  <INFO name="reference_url" value="https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/237">    Dataset landing page  </INFO>
+  <INFO name="publication_date" value="2017-09-22">    Date of first publication in the data centre  </INFO>
+  <INFO name="rights_uri" value="https://cds.unistra.fr/vizier-org/licences_vizier.html">    Licence URI  </INFO>
+
+  <COOSYS ID="J2000" system="eq_FK5" equinox="J2000"/>
+  <TABLE ID="VII_237_pgc" name="VII/237/pgc">
+    <DESCRIPTION>Catalog of galaxies (table 5 in the paper)</DESCRIPTION>
+    <!-- Definitions of GROUPs and FIELDs -->
+
+<!-- +++No column could be found to attach a LINK in table: VII/237/pgc -->
+    <FIELD name="_RAJ2000" ucd="pos.eq.ra" ref="J2000" datatype="double" width="10" precision="6" unit="deg"><!-- ucd="POS_EQ_RA" -->
+      <DESCRIPTION>Right ascension (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="_DEJ2000" ucd="pos.eq.dec" ref="J2000" datatype="double" width="10" precision="6" unit="deg"><!-- ucd="POS_EQ_DEC" -->
+      <DESCRIPTION>Declination (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="PGC" ucd="meta.id;meta.main" datatype="int" width="7"><!-- ucd="ID_MAIN" -->
+      <DESCRIPTION>PGC number</DESCRIPTION>
+    </FIELD>
+    <FIELD name="OType" ucd="src.class" datatype="char" arraysize="2"><!-- ucd="CLASS_OBJECT" -->
+      <DESCRIPTION>[GM ] Object type (1)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="MType" ucd="src.morph.type" datatype="char" arraysize="5*"><!-- ucd="MORPH_TYPE" -->
+      <DESCRIPTION>Provisional morphological type from LEDA according to the RC2 code.</DESCRIPTION>
+    </FIELD>
+    <FIELD name="logD25" ucd="phys.angSize;src" datatype="float" width="5" precision="2" unit="log(0.1arcmin)"><!-- ucd="EXTENSION_DIAM" -->
+      <DESCRIPTION>? Apparent diameter (2)</DESCRIPTION>
+      <VALUES null="NaN" />
+    </FIELD>
+    <FIELD name="logR25" ucd="phys.size;arith.ratio" datatype="float" width="5" precision="2"><!-- ucd="PHYS_AXIS-RATIO" -->
+      <DESCRIPTION>? Axis ratio in log scale (log of major axis to minor axis)</DESCRIPTION>
+      <VALUES null="NaN" />
+    </FIELD>
+    <FIELD name="PA" ucd="pos.posAng" datatype="float" width="4" unit="deg"><!-- ucd="POS_POS-ANG" -->
+      <DESCRIPTION>? Adopted 1950-position angle (3)</DESCRIPTION>
+      <VALUES null="NaN" />
+    </FIELD>
+    <FIELD name="ANames" ucd="meta.id" datatype="char" arraysize="255*"><!-- ucd="ID_ALTERNATIVE" -->
+      <DESCRIPTION>Alternate names (4)</DESCRIPTION>
+    </FIELD>
+<DATA><TABLEDATA>
+<TR><TD>010.684583</TD><TD>+41.269444</TD><TD>2557</TD><TD>G</TD><TD>Sb</TD><TD>3.30</TD><TD>0.45</TD><TD>35</TD><TD>NGC224                UGC454                MCG7-02-016           CGCG535-17            GIN801</TD></TR>
+<TR><TD>010.092917</TD><TD>+41.685833</TD><TD>2429</TD><TD>G</TD><TD>E</TD><TD>2.27</TD><TD>0.25</TD><TD>170</TD><TD>NGC205                UGC426                MCG7-02-014           CGCG535-14            IRAS00376+4124</TD></TR>
+<TR><TD>010.674167</TD><TD>+40.866111</TD><TD>2555</TD><TD>G</TD><TD>E</TD><TD>1.96</TD><TD>0.16</TD><TD>170</TD><TD>NGC221                UGC452                MCG7-02-015           CGCG535-16            ARP168                ARK12                 IRAS00399+4035</TD></TR>
+<TR><TD>010.476667</TD><TD>+41.954444</TD><TD>90494</TD><TD>G</TD><TD>Sc</TD><TD>0.83</TD><TD>0.60</TD><TD>104</TD><TD>FGC79</TD></TR>
+</TABLEDATA></DATA>
+</TABLE>
+<INFO name="matches" value="4">matching records</INFO>
+
+<INFO name="Warning" value="vc_coo can't change epoch"/>
+<INFO name="Warning" value="increase the precision for computed column 7"/>
+<INFO name="Warning" value="increase the precision for computed column 7"/>
+</RESOURCE>
+</VOTABLE>

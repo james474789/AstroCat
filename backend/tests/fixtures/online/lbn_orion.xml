@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VOTABLE version="1.4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns="http://www.ivoa.net/xml/VOTable/v1.3"
+  xsi:schemaLocation="http://www.ivoa.net/xml/VOTable/v1.3 http://www.ivoa.net/xml/VOTable/v1.3">
+ <DESCRIPTION>
+   VizieR Astronomical Server vizier.cds.unistra.fr
+    Date: 2026-10-09T20:00:13 [V7.6.1]
+   Explanations and Statistics of UCDs:			See LINK below
+   In case of problem, please report to:	cds-question@unistra.fr
+ </DESCRIPTION>
+<!-- VOTable description at http://www.ivoa.net/Documents/latest/VOT.html -->
+<INFO name="service_protocol" value="ASU">  IVOID of the protocol through which the data was retrieved</INFO>
+<INFO name="request_date" value="2026-10-09T20:00:14">  Query execution date</INFO>
+<INFO name="request" value="https://vizier.cds.unistra.fr/viz-bin/votable?-source=VII%2F9%2Fcatalog&amp;-c=83.800000%20-5.400000&amp;-c.rd=1.0&amp;-out=Seq%2CDiam1%2CDiam2%2CBright%2CName&amp;-out.add=_RAJ%2C_DEJ&amp;-out.max=6">  Full request URL</INFO>
+<INFO name="contact" value="cds-question@unistra.fr">  Email or URL to contact publisher</INFO>
+<INFO name="server_software" value="VizieR/7.6.1">  Software version</INFO>
+<INFO name="publisher" value="CDS">  Data centre that produced the VOTable</INFO>
+
+<!--
+Execution Reports
+ -->
+<INFO ID="Target" name="-c" value="083.800000-05.400000,rd=1.">
+Constraint -out.max=6</INFO>
+
+<RESOURCE ID="yCat_7009" name="VII/9" type="results">
+  <DESCRIPTION>Lynds' Catalogue of Bright Nebulae (Lynds 1965)</DESCRIPTION>  <INFO name="ivoid" value="ivo://cds.vizier/vii/9">    IVOID of underlying data collection  </INFO>
+  <INFO name="data_ivoid" value="ivo://cds.vizier/vii/9">    IVOID of underlying data collection  </INFO>
+  <INFO name="creator" value="Lynds B.T.">    First author or institution  </INFO>
+  <INFO name="cites" value="bibcode:1965ApJS...12..163L">    Article or Data origin sources  </INFO>
+  <INFO name="journal" value="ApJS">    Journal name  </INFO>
+  <INFO name="original_date" value="1965">    Year of the article publication  </INFO>
+  <INFO name="reference_url" value="https://cdsarc.cds.unistra.fr/viz-bin/cat/VII/9">    Dataset landing page  </INFO>
+  <INFO name="publication_date" value="2013-02-26">    Date of first publication in the data centre  </INFO>
+  <INFO name="rights_uri" value="https://cds.unistra.fr/vizier-org/licences_vizier.html">    Licence URI  </INFO>
+
+  <COOSYS ID="B1950" system="eq_FK4" equinox="B1950"/>
+  <COOSYS ID="J2000" system="eq_FK5" equinox="J2000"/>
+  <TABLE ID="VII_9_catalog" name="VII/9/catalog">
+    <DESCRIPTION>The LBN Catalogue</DESCRIPTION>
+    <!-- RowName: ${Seq} -->
+    <!-- Definitions of GROUPs and FIELDs -->
+<!--The precision of the computed positions has been increased compared to the original positions-->
+    <FIELD name="_RAJ2000" ucd="pos.eq.ra" ref="J2000" datatype="double" width="8" precision="4" unit="deg"><!-- ucd="POS_EQ_RA" -->
+      <DESCRIPTION>Right ascension (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="_DEJ2000" ucd="pos.eq.dec" ref="J2000" datatype="double" width="8" precision="4" unit="deg"><!-- ucd="POS_EQ_DEC" -->
+      <DESCRIPTION>Declination (FK5, Equinox=J2000.0) (computed by VizieR, not part of the original data. The format may include more digits than the original data because of internal accuracy requirements in VizieR and across other CDS services)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="Seq" ucd="meta.id;meta.main" datatype="short" width="4"><!-- ucd="ID_MAIN" -->
+      <DESCRIPTION>[1/1125]+ Running number (1)</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=VII/9/catalog&amp;recno=${recno}"/>
+    </FIELD>
+    <FIELD name="Diam1" ucd="phys.size;stat.max" datatype="short" width="4" unit="arcmin"><!-- ucd="EXTENSION_DIAM" -->
+      <DESCRIPTION>Largest dimension of nebula</DESCRIPTION>
+    </FIELD>
+    <FIELD name="Diam2" ucd="phys.angSize;src" datatype="short" width="3" unit="arcmin"><!-- ucd="EXTENSION_MIN" -->
+      <DESCRIPTION>Smallest dimension of nebula</DESCRIPTION>
+    </FIELD>
+    <FIELD name="Bright" ucd="phot.mag.sb;arith.ratio" datatype="unsignedByte" width="1"><!-- ucd="PHOT_SB_RATIO" -->
+      <DESCRIPTION>[1/6] Brightness scale (3)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="Name" ucd="meta.id" datatype="char" arraysize="8*"><!-- ucd="ID_ALTERNATIVE" -->
+      <DESCRIPTION>Other name of nebulosity (5)</DESCRIPTION>
+    </FIELD>
+    <FIELD name="recno" ucd="meta.record" datatype="int" width="8" type="hidden"><!-- ucd="RECORD" -->
+      <DESCRIPTION>Record number assigned by the VizieR team. Should Not be used for identification.</DESCRIPTION>
+      <LINK href="http://vizier.cds.unistra.fr/viz-bin/VizieR-5?-info=XML&amp;-out.add=.&amp;-source=VII/9/catalog&amp;recno=${recno}"/>
+    </FIELD>
+<DATA><TABLEDATA>
+<TR><TD>083.8641</TD><TD>-5.4688</TD><TD>974</TD><TD>90</TD><TD>60</TD><TD>1</TD><TD>NGC 1976</TD><TD>974</TD></TR>
+<TR><TD>084.3616</TD><TD>-5.9712</TD><TD>977</TD><TD>240</TD><TD>180</TD><TD>3</TD><TD>NGC 1980</TD><TD>977</TD></TR>
+</TABLEDATA></DATA>
+</TABLE>
+<INFO name="matches" value="2">matching records</INFO>
+
+<INFO name="Warning" value="vc_coo can't change epoch"/>
+<INFO name="Warning" value="increase the precision for computed column 4"/>
+<INFO name="Warning" value="increase the precision for computed column 4"/>
+</RESOURCE>
+</VOTABLE>

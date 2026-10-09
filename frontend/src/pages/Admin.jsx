@@ -28,9 +28,10 @@ import {
     updateUserRole,
     fetchSystemVersion
 } from '../api/client';
-import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info, Activity, HeartPulse, Star } from 'lucide-react';
+import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info, Activity, HeartPulse, Star, Globe } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityAdmin from '../components/quality/StarQualityAdmin';
+import OnlineCatalogsAdmin from '../components/admin/OnlineCatalogsAdmin';
 import { Button, Dialog, PageHeader, SegmentedControl, Spinner, Tabs, useConfirm, useToast } from '../components/ui';
 import './Admin.css';
 import './Settings.css';
@@ -43,6 +44,7 @@ const ADMIN_SECTIONS = [
     { value: 'mounts', label: 'Mounts', icon: <Folder size={16} /> },
     { value: 'thumbnails', label: 'Thumbnails', icon: <ImageIcon size={16} /> },
     { value: 'star-quality', label: 'Star Quality', icon: <Star size={16} /> },
+    { value: 'online-catalogs', label: 'Online Catalogs', icon: <Globe size={16} /> },
     { value: 'data', label: 'Data', icon: <Database size={16} /> },
     { value: 'users', label: 'Users', icon: <Users size={16} /> },
     { value: 'about', label: 'About', icon: <Info size={16} /> },
@@ -1073,6 +1075,10 @@ function Admin() {
 
                     {activeSection === 'star-quality' && (
                         <StarQualityAdmin systemSettings={systemSettings} onSettingsChange={setSystemSettings} />
+                    )}
+
+                    {activeSection === 'online-catalogs' && (
+                        <OnlineCatalogsAdmin systemSettings={systemSettings} onSettingsChange={setSystemSettings} />
                     )}
 
                     {activeSection === 'data' && (

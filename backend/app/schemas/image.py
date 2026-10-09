@@ -278,6 +278,9 @@ class SkyOverlayObject(BaseModel):
     x: float
     y: float
     ellipse: Optional[SkyOverlayEllipse] = None
+    url: Optional[str] = None                 # online layers (O1): external page, opened instead of a search
+    motion_arcsec_h: Optional[float] = None   # SkyBoT: apparent motion
+    is_comet: Optional[bool] = None
 
 
 class SkyOverlayResponse(BaseModel):
@@ -287,3 +290,10 @@ class SkyOverlayResponse(BaseModel):
     height: Optional[int] = None
     objects: List[SkyOverlayObject] = []
     reason: Optional[str] = None              # "no_wcs" when objects can't be placed
+
+
+class OnlineSkyOverlayResponse(SkyOverlayResponse):
+    """One online catalog layer (O1). reason also: "no_capture_time" | "field_too_wide"."""
+    catalog: str
+    notice: Optional[str] = None              # caveat about this layer's data (e.g. a stack's epoch)
+    limit: Optional[float] = None             # effective magnitude / size limit used

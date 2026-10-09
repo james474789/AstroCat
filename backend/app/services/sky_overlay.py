@@ -383,11 +383,16 @@ def merge_rows(rows: Sequence[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
     return list(groups.values())
 
 
-def _priority(row: Dict[str, Any]) -> int:
+def catalog_rank(catalog: str) -> int:
+    """Position in CATALOG_PRIORITY; catalogs not listed there (online layers) rank after it."""
     try:
-        return CATALOG_PRIORITY.index(row["catalog"])
+        return CATALOG_PRIORITY.index(catalog)
     except ValueError:
         return len(CATALOG_PRIORITY)
+
+
+def _priority(row: Dict[str, Any]) -> int:
+    return catalog_rank(row["catalog"])
 
 
 def _geometry_row(group: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -440,7 +445,7 @@ def build_objects(frame: SkyFrame, rows: Iterable[Dict[str, Any]]) -> List[Dict[
         out.append({
             "key": f"{primary['catalog']}:{norm_designation(primary['designation'])}",
             "catalog": primary["catalog"],
-            "catalogs": sorted({r["catalog"] for r in group}, key=CATALOG_PRIORITY.index),
+            "catalogs": sorted({r["catalog"] for r in group}, key=catalog_rank),
             "designations": designations,
             "label": label,
             # As stored, which is what Search matches catalog designations against
@@ -452,6 +457,6 @@ def build_objects(frame: SkyFrame, rows: Iterable[Dict[str, Any]]) -> List[Dict[
             "y": y,
             "ellipse": ellipse,
         })
-    out.sort(key=lambda o: (CATALOG_PRIORITY.index(o["catalog"]),
+    out.sort(key=lambda o: (catalog_rank(o["catalog"]),
                             o["magnitude"] if o["magnitude"] is not None else 99.0))
     return out[:MAX_OBJECTS]

@@ -5,8 +5,9 @@ import './SkyOverlay.css';
 /**
  * Catalog objects drawn from the image's own plate solution, coloured by catalog: ellipses at
  * catalog size and position angle (dashed when the angle is unknown), point markers for small or
- * sizeless objects, a ring for named stars. Labels are placed greedily without overlaps; the
- * hovered object always gets its full description. Purely visual (no pointer events): the host
+ * sizeless objects, a ring for named stars, a diamond for asteroids and comets (online SkyBoT
+ * layer). Labels are placed greedily without overlaps; the hovered object always gets its full
+ * description. Purely visual (no pointer events): the host
  * page hit-tests in image pixels so its own pan/zoom gestures keep working.
  *
  * toScreen(px, py) maps native image pixels to this layer's coordinates (affine, uniform scale);
@@ -63,6 +64,13 @@ export default function SkyOverlayLayer({ objects, toScreen, clip, hoveredKey, l
                             </g>
                         );
                     }
+                    if (g.kind === 'diamond') {
+                        const r = g.rx * 1.25;
+                        return (
+                            <path key={g.obj.key} className={`${cls}${g.obj.is_comet ? ' so-comet' : ''}`} strokeWidth={sw}
+                                d={`M ${g.cx} ${g.cy - r} L ${g.cx + r} ${g.cy} L ${g.cx} ${g.cy + r} L ${g.cx - r} ${g.cy} Z`} />
+                        );
+                    }
                     return <circle key={g.obj.key} className={cls} cx={g.cx} cy={g.cy} r={g.rx} strokeWidth={sw} />;
                 })}
                 {geometry.map((g) => {
@@ -70,7 +78,7 @@ export default function SkyOverlayLayer({ objects, toScreen, clip, hoveredKey, l
                     if (!pos || g.obj.key === hoveredKey) return null;
                     return (
                         <text key={`l-${g.obj.key}`} x={pos.x} y={pos.y} fontSize={fontSize}
-                            strokeWidth={3 * labelScale} className={`so-label so-cat-${g.obj.catalog}`}>
+                            strokeWidth={3 * labelScale} className={`so-label so-cat-${g.obj.catalog}${g.obj.is_comet ? ' so-comet' : ''}`}>
                             {g.obj.label}
                         </text>
                     );
