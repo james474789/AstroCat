@@ -2066,7 +2066,7 @@ async def get_sky_overlay(image_id: int, db: AsyncSession = Depends(get_db)):
     image = await db.get(Image, image_id)
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
-    frame = sky_overlay.resolve_frame(image)
+    frame = sky_overlay.resolve_frame(image, allow_pointing=True)
     if frame is None:
         return SkyOverlayResponse(reason="no_wcs")
     ra, dec, radius = frame.field_circle()

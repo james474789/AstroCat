@@ -100,3 +100,20 @@
     color: rgb(251, 191, 36);
     font-weight: 600;
 }
+
+/* Legend rows: swatches match the footprint colours above */
+.field-overlay-legend { min-width: 150px; }
+.so-legend-title {
+    padding: 2px 6px 4px;
+    font-weight: 600;
+    color: var(--color-text-secondary, #94a3b8);
+}
+.fo-swatch {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    border-radius: 2px;
+    border: 2px solid;
+}
+.fo-swatch-masters { border-color: rgba(251, 191, 36, 0.95); background: rgba(251, 191, 36, 0.2); }
+.fo-swatch-subs { border-color: rgba(34, 211, 238, 0.7); }

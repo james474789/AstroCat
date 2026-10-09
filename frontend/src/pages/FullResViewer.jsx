@@ -9,10 +9,11 @@ import {
 } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
 import useImageNav from '../hooks/useImageNav';
-import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays';
+import useFieldOverlays from '../hooks/useFieldOverlays';
 import { hitTest } from '../utils/fieldOverlay';
 import FieldOverlayLayer from '../components/fieldOverlay/FieldOverlayLayer';
 import FieldOverlayPopover from '../components/fieldOverlay/FieldOverlayPopover';
+import FieldOverlayLegend from '../components/fieldOverlay/FieldOverlayLegend';
 import useSeenIn from '../hooks/useSeenIn';
 import SeenInPanel from '../components/seenIn/SeenInPanel';
 import useSkyOverlay from '../hooks/useSkyOverlay';
@@ -101,7 +102,7 @@ export default function FullResViewer() {
     const image = imageQuery.data && String(imageQuery.data.id) === String(id) ? imageQuery.data : null;
     const overlays = useFieldOverlays(image);
     const seenIn = useSeenIn(image);
-    const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
+    const { toggle: toggleOverlays, unavailable: overlaysUnavailable } = overlays;
     const sky = useSkyOverlay(image, skyOn);
     const skyUnavailable = sky.unavailable;
     const toggleSky = useCallback(() => {
@@ -402,7 +403,7 @@ export default function FullResViewer() {
                 0: fit, 1: oneToOne,
                 arrowleft: goPrev, arrowright: goNext,
                 f: toggleFullscreen, p: cyclePreset,
-                o: () => { if (!overlaysUnavailable) cycleOverlays(); },
+                o: () => { if (!overlaysUnavailable) toggleOverlays(); },
                 c: () => { if (!skyUnavailable) toggleSky(); },
                 escape: () => { if (!document.fullscreenElement) back(); },
                 g: returnToSearch,
@@ -414,7 +415,7 @@ export default function FullResViewer() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [zoomBy, panBy, fit, oneToOne, goPrev, goNext, toggleFullscreen, cyclePreset, back, returnToSearch, overlaysUnavailable, cycleOverlays, skyUnavailable, toggleSky]);
+    }, [zoomBy, panBy, fit, oneToOne, goPrev, goNext, toggleFullscreen, cyclePreset, back, returnToSearch, overlaysUnavailable, toggleOverlays, skyUnavailable, toggleSky]);
 
     useEffect(() => {
         const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -518,12 +519,12 @@ export default function FullResViewer() {
                 </select>
                 <button
                     className={`fr-btn${overlays.active ? ' active' : ''}`}
-                    onClick={overlays.cycle}
+                    onClick={overlays.toggle}
                     disabled={!!overlays.unavailable}
-                    title={overlays.unavailable || `Images in this field: ${OVERLAY_MODE_LABELS[overlays.mode]} — click to cycle Off / Masters / Subs / All (O)`}
+                    title={overlays.unavailable || 'Images in this field: footprints of smaller images that overlap it (O)'}
                 >
-                    <Layers size={16} /> In field: {overlays.unavailable ? 'Off' : OVERLAY_MODE_LABELS[overlays.mode]}
-                    {overlays.active && (
+                    <Layers size={16} /> In field: {overlays.active ? 'On' : 'Off'}
+                    {overlays.active && overlays.mode && (
                         overlays.isLoading ? ' …' : ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`
                     )}
                 </button>
@@ -624,6 +625,10 @@ export default function FullResViewer() {
                     isLoading={sky.isLoading}
                     isError={sky.isError}
                 />
+            )}
+
+            {overlays.active && (
+                <FieldOverlayLegend overlays={overlays} className="fullres-field-legend" />
             )}
 
             {overlayPopover && (

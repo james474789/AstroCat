@@ -8,6 +8,7 @@ import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays
 import { hitTest, containedRect } from '../utils/fieldOverlay';
 import FieldOverlayLayer from '../components/fieldOverlay/FieldOverlayLayer';
 import FieldOverlayPopover from '../components/fieldOverlay/FieldOverlayPopover';
+import FieldOverlayLegend from '../components/fieldOverlay/FieldOverlayLegend';
 import useSkyOverlay from '../hooks/useSkyOverlay';
 import { hitTestSky, searchNameFor } from '../utils/skyOverlay';
 import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
@@ -74,7 +75,7 @@ export default function ImageDetail() {
     // Images-in-field overlay: other images' footprints, hit-tested in native image pixels
     const overlays = useFieldOverlays(image);
     const seenIn = useSeenIn(image);
-    const { cycle: cycleOverlays, unavailable: overlaysUnavailable } = overlays;
+    const { toggle: toggleOverlays, unavailable: overlaysUnavailable } = overlays;
     const [hoveredOverlayId, setHoveredOverlayId] = useState(null);
     // Dynamic catalog overlay (AstroCat annotations), drawn from the image's own plate solution
     const sky = useSkyOverlay(image, annotationsOn);
@@ -318,13 +319,13 @@ export default function ImageDetail() {
                 navigate(`/images/${id}/view`);
             } else if (e.key.toLowerCase() === 'o' && !e.ctrlKey && !e.metaKey && !e.altKey && !overlaysUnavailable) {
                 e.preventDefault();
-                cycleOverlays();
+                toggleOverlays();
             }
         };
 
         window.addEventListener('keydown', handleKeyPress);
         return () => window.removeEventListener('keydown', handleKeyPress);
-    }, [image, id, navInfo, navigate, goPrev, goNext, returnToSearch, overlaysUnavailable, cycleOverlays]);
+    }, [image, id, navInfo, navigate, goPrev, goNext, returnToSearch, overlaysUnavailable, toggleOverlays]);
 
     // Generate placeholder background
     const getPlaceholderStyle = () => {
@@ -692,6 +693,9 @@ export default function ImageDetail() {
                                     isError={sky.isError}
                                 />
                             )}
+                            {overlays.active && !imgError && (
+                                <FieldOverlayLegend overlays={overlays} className="image-field-legend" />
+                            )}
                         </div>
 
                         {view.s > 1 && (
@@ -730,15 +734,14 @@ export default function ImageDetail() {
 
                             <button
                                 className={`btn ${overlays.active ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={overlays.cycle}
+                                onClick={overlays.toggle}
                                 disabled={!!overlays.unavailable}
-                                title={overlays.unavailable || `Images in this field: ${OVERLAY_MODE_LABELS[overlays.mode]} — click to cycle Off / Masters / Subs / All (O)`}
+                                title={overlays.unavailable || 'Images in this field: footprints of smaller images that overlap it (O)'}
                             >
                                 <Layers size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
-                                In field: {overlays.unavailable ? 'Off' : OVERLAY_MODE_LABELS[overlays.mode]}
-                                {overlays.active && (
-                                    overlays.isLoading ? ' …' : ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`
-                                )}
+                                In field: {overlays.active ? 'On' : 'Off'}
+                                {overlays.active && !overlays.isLoading && overlays.mode && ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`}
+                                {overlays.active && overlays.isLoading && ' …'}
                             </button>
 
                             <button
@@ -751,7 +754,7 @@ export default function ImageDetail() {
                                 Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
                             </button>
 
-                            {overlays.active && overlays.unsolvedCount > 0 && (
+                            {overlays.active && overlays.mode && overlays.unsolvedCount > 0 && (
                                 <button
                                     className="btn btn-secondary"
                                     onClick={handleSolveOverlays}

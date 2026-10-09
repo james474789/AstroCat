@@ -1,31 +1,43 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchFieldOverlaps } from '../api/client';
 import { overlayUnavailableReason } from '../utils/fieldOverlay';
 
-const STORAGE_KEY = 'astrocat.fieldOverlayMode';
-export const OVERLAY_MODES = ['off', 'masters', 'subs', 'all'];
-export const OVERLAY_MODE_LABELS = { off: 'Off', masters: 'Masters', subs: 'Subs', all: 'All' };
+const STORAGE_KEY = 'astrocat.fieldOverlay';
+const LEGACY_MODE_KEY = 'astrocat.fieldOverlayMode'; // the old Off/Masters/Subs/All cycle
+export const OVERLAY_MODE_LABELS = { masters: 'Masters', subs: 'Subs', all: 'All' };
+const DEFAULT_STATE = { on: false, masters: true, subs: true };
 
 function readStored() {
     try {
-        const v = localStorage.getItem(STORAGE_KEY);
-        return OVERLAY_MODES.includes(v) ? v : 'off';
+        const v = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+        if (v && typeof v === 'object') {
+            return { on: !!v.on, masters: v.masters !== false, subs: v.subs !== false };
+        }
+        const legacy = localStorage.getItem(LEGACY_MODE_KEY);
+        if (legacy === 'masters') return { on: true, masters: true, subs: false };
+        if (legacy === 'subs') return { on: true, masters: false, subs: true };
+        if (legacy === 'all') return { on: true, masters: true, subs: true };
     } catch {
-        return 'off';
+        // fall through to the default
     }
+    return DEFAULT_STATE;
 }
 
-/** Images-in-field overlay mode (cycled Off -> Masters -> Subs -> All, remembered per browser) and its data. */
+/**
+ * Images-in-field overlay: one on/off switch plus Masters / Subs visibility (both = All), remembered per
+ * browser, and its data. Counts per kind come from an unfiltered fetch so the legend can show them for rows
+ * that are currently hidden.
+ */
 export default function useFieldOverlays(image) {
-    const [mode, setMode] = useState(readStored);
+    const [state, setState] = useState(readStored);
     const unavailable = overlayUnavailableReason(image);
 
-    const cycle = useCallback(() => {
-        setMode((m) => {
-            const next = OVERLAY_MODES[(OVERLAY_MODES.indexOf(m) + 1) % OVERLAY_MODES.length];
+    const update = useCallback((patch) => {
+        setState((s) => {
+            const next = { ...s, ...(typeof patch === 'function' ? patch(s) : patch) };
             try {
-                localStorage.setItem(STORAGE_KEY, next);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
             } catch {
                 // per-browser convenience only
             }
@@ -33,27 +45,56 @@ export default function useFieldOverlays(image) {
         });
     }, []);
 
-    const active = mode !== 'off' && !unavailable;
-    const query = useQuery({
-        queryKey: ['field-overlaps', image?.id, mode],
-        queryFn: () => fetchFieldOverlaps(image.id, mode),
+    const toggle = useCallback(() => update((s) => ({ on: !s.on })), [update]);
+    const toggleKind = useCallback((kind) => update((s) => ({ [kind]: !s[kind] })), [update]);
+
+    const active = state.on && !unavailable;
+    // Server-side mode for what is displayed; null when both kinds are hidden
+    const mode = state.masters && state.subs ? 'all' : state.masters ? 'masters' : state.subs ? 'subs' : null;
+
+    const allQuery = useQuery({
+        queryKey: ['field-overlaps', image?.id, 'all'],
+        queryFn: () => fetchFieldOverlaps(image.id, 'all'),
         enabled: active && !!image,
         staleTime: 5 * 60 * 1000,
     });
+    const shownQuery = useQuery({
+        queryKey: ['field-overlaps', image?.id, mode],
+        queryFn: () => fetchFieldOverlaps(image.id, mode),
+        enabled: active && !!image && !!mode && mode !== 'all',
+        staleTime: 5 * 60 * 1000,
+    });
+    const shown = mode === 'all' ? allQuery : shownQuery;
 
-    const groups = active ? query.data?.groups || [] : [];
+    const groups = useMemo(() => (active && mode ? shown.data?.groups || [] : []), [active, mode, shown.data]);
     // Footprints drawn as circles have no rotation yet; count is uncapped (members is not)
     const unsolvedCount = groups.reduce((n, g) => (g.shape === 'circle' ? n + g.count : n), 0);
 
+    const counts = useMemo(() => {
+        const c = { masters: 0, subs: 0 };
+        for (const g of (active ? allQuery.data?.groups : null) || []) {
+            c.masters += g.master_count || 0;
+            c.subs += (g.count || 0) - (g.master_count || 0);
+        }
+        return c;
+    }, [active, allQuery.data]);
+
     return {
+        on: state.on,
+        masters: state.masters,
+        subs: state.subs,
         mode,
-        refetch: query.refetch,
+        refetch: shown.refetch,
         unsolvedCount,
         active,
-        cycle,
+        toggle,
+        toggleKind,
         unavailable,
         groups,
-        truncated: !!query.data?.truncated,
-        isLoading: active && query.isLoading,
+        counts,
+        truncated: !!shown.data?.truncated,
+        isLoading: active && !!mode && shown.isLoading,
+        isCountsLoading: active && allQuery.isLoading,
+        isError: active && (allQuery.isError || (!!mode && shown.isError)),
     };
 }

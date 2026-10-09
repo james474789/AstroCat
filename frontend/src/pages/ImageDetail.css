@@ -485,3 +485,11 @@
     vertical-align: -2px;
     color: var(--color-warning);
 }
+
+/* Images-in-field legend, opposite the annotations legend */
+.image-field-legend {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 20;
+}

@@ -231,6 +231,44 @@ def test_no_usable_wcs():
     assert so.describe(_img(_solver_header())) == (so.SOURCE_SOLVER, None)
 
 
+def _pointing_img(**kw):
+    img = _img(raw_header={"RA": 83.8, "DEC": -5.4}, pixel_scale=4.0)
+    img.__dict__.update(is_plate_solved=True, ra_center_degrees=83.8, dec_center_degrees=-5.4,
+                        rotation_degrees=30.0, **kw)
+    return img
+
+
+def test_pointing_fallback_is_opt_in_and_flagged():
+    img = _pointing_img()
+    assert so.resolve_frame(img) is None
+    frame = so.resolve_frame(img, allow_pointing=True)
+    assert frame.source == so.SOURCE_POINTING and so.WARN_POINTING in frame.accuracy_warning
+    assert so.describe(img) == (so.SOURCE_POINTING, so.WARN_POINTING)
+
+
+def test_pointing_fallback_matches_field_overlaps_tan():
+    from app.services import field_overlaps as fo
+    img = _pointing_img()
+    frame = so.resolve_frame(img, allow_pointing=True)
+    radec = np.array([[83.8, -5.4], [83.9, -5.3], [83.7, -5.5]])
+    expected = fo.sky_to_pixel(fo.tan_params(img), radec)
+    x, y = frame.project(radec[:, 0], radec[:, 1])
+    assert np.allclose(np.column_stack([x, y]), expected, atol=1e-6)
+
+
+def test_pointing_fallback_needs_solved_and_rotation():
+    assert so.resolve_frame(_pointing_img(), allow_pointing=True) is not None
+    unsolved = _pointing_img(); unsolved.is_plate_solved = False
+    norot = _pointing_img(); norot.rotation_degrees = None
+    assert so.resolve_frame(unsolved, allow_pointing=True) is None
+    assert so.resolve_frame(norot, allow_pointing=True) is None
+
+
+def test_real_wcs_beats_pointing_fallback():
+    img = _pointing_img(); img.wcs_header = _solver_header()
+    assert so.resolve_frame(img, allow_pointing=True).source == so.SOURCE_SOLVER
+
+
 # ---- objects -------------------------------------------------------------------------------
 
 def test_norm_and_pretty_designations():

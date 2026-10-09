@@ -16,7 +16,7 @@ function readHidden() {
 
 /** Why the dynamic catalog overlay can't be shown for this image, or null. */
 export function skyOverlayUnavailableReason(image) {
-    if (!image?.sky_overlay_source) return 'No plate solution with a full WCS';
+    if (!image?.sky_overlay_source) return 'Not plate-solved, or rotation unknown';
     return null;
 }
 

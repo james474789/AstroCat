@@ -160,6 +160,12 @@
     top: calc(3.75rem + var(--safe-top, 0px));
     z-index: 20;
 }
+.fullres-field-legend {
+    position: absolute;
+    right: 0.75rem;
+    top: calc(3.75rem + var(--safe-top, 0px));
+    z-index: 20;
+}
 .fr-warn-icon { margin-left: 4px; color: var(--color-warning, #eab308); }
 .fullres-osd.fo-hover,
 .fullres-osd.fo-hover * { cursor: pointer; }

@@ -15,6 +15,9 @@ says the sky is. Three sources, in order:
   against astrometry.net solves of the same frames). Flagged: no distortion model.
 - HEADER: the WCS embedded in the file itself (capture or processing
   software). Flagged as possibly less accurate.
+- POINTING (opt-in, `allow_pointing`): a plain TAN rebuilt from centre, scale and
+  rotation, the same model "In field" uses, for plate-solved images that carry no
+  WCS of their own. Flagged as approximate.
 
 Coordinate contract (single place: SkyFrame.to_native): astropy 0-based grid
 pixel (x0, y0) -> native continuous pixel ((x0 + 0.5) * W / gridW,
@@ -36,12 +39,14 @@ import numpy as np
 from astropy.utils.exceptions import AstropyWarning
 from astropy.wcs import WCS, FITSFixedWarning
 
+from app.services.field_overlaps import tan_params
 from app.utils.plate_scale import header_num, wcs_frame, wcs_matrix_scale, with_image_size
 from app.utils.sky_wcs import has_sip, wcs_cards
 
 SOURCE_SOLVER = "SOLVER"
 SOURCE_HEADER = "HEADER"
 SOURCE_SIDECAR = "SIDECAR"
+SOURCE_POINTING = "POINTING"
 
 # Merged markers take colour and label from the highest-priority catalog
 CATALOG_PRIORITY = ("MESSIER", "CALDWELL", "NGC", "IC", "SH2", "NAMED_STAR")
@@ -60,6 +65,10 @@ WARN_NO_SIP = "no distortion model"
 WARN_XISF = "XISF row order not yet verified"
 WARN_SIDECAR = "Using the plate-solve sidecar's linear WCS (no distortion model) — positions may be slightly off"
 WARN_SIDECAR_UNVERIFIED = "ASTAP .ini row order not yet verified"
+WARN_POINTING = (
+    "Approximate: no plate-solution WCS, so objects are placed from the image's centre, scale and rotation "
+    "(no distortion model) — positions may be well off, especially on wide fields"
+)
 WARN_GRID_INFERRED = "solve grid size not recorded, inferred from the plate scale"
 WARN_GRID_ASSUMED = "solve grid size unknown, assumed to be the full frame"
 
@@ -164,8 +173,29 @@ def _celestial_wcs(header: Any) -> Optional[WCS]:
     return w
 
 
-def resolve_frame(image: Any) -> Optional[SkyFrame]:
-    """The image's sky frame from its stored solution (SOLVER), sidecar solve (SIDECAR) or embedded WCS (HEADER)."""
+def _pointing_frame(image: Any) -> Optional[SkyFrame]:
+    """Approximate frame from the image's centre/scale/rotation columns, matching field_overlaps' rebuilt TAN."""
+    if not getattr(image, "is_plate_solved", False):
+        return None
+    params = tan_params(image)
+    if params is None:
+        return None
+    w = WCS(naxis=2)
+    w.wcs.ctype = ["RA---TAN", "DEC--TAN"]
+    w.wcs.cunit = ["deg", "deg"]
+    w.wcs.crval = [params["ra0"], params["dec0"]]
+    # field_overlaps puts the reference at the continuous centre (w/2, h/2); FITS pixel centres are 1-based
+    w.wcs.crpix = [params["w"] / 2.0 + 0.5, params["h"] / 2.0 + 0.5]
+    w.wcs.cd = params["cd"]
+    return SkyFrame(w, params["w"], params["h"], float(params["w"]), float(params["h"]),
+                    SOURCE_POINTING, [WARN_POINTING])
+
+
+def resolve_frame(image: Any, allow_pointing: bool = False) -> Optional[SkyFrame]:
+    """The image's sky frame from its stored solution (SOLVER), sidecar solve (SIDECAR) or embedded WCS (HEADER).
+
+    With `allow_pointing`, a plate-solved image that has none of those falls back to an approximate frame
+    rebuilt from its centre/scale/rotation (POINTING), so the overlay is available whenever "In field" is."""
     width = getattr(image, "width_pixels", None)
     height = getattr(image, "height_pixels", None)
     if not width or not height or width <= 0 or height <= 0:
@@ -211,7 +241,7 @@ def resolve_frame(image: Any) -> Optional[SkyFrame]:
         if _format_value(image) == "XISF":
             notes.append(WARN_XISF)
         return SkyFrame(w, width, height, float(gw), float(gh), SOURCE_HEADER, notes)
-    return None
+    return _pointing_frame(image) if allow_pointing else None
 
 
 def _format_value(image: Any) -> Optional[str]:
@@ -223,7 +253,7 @@ def _format_value(image: Any) -> Optional[str]:
 def describe(image: Any) -> Tuple[Optional[str], Optional[str]]:
     """(source, accuracy_warning) for the image detail page; (None, None) when unavailable."""
     try:
-        frame = resolve_frame(image)
+        frame = resolve_frame(image, allow_pointing=True)
     except Exception:
         return None, None
     if frame is None:
