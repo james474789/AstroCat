@@ -2,7 +2,10 @@
 export const API_BASE_URL = (() => {
     // 1. Check for Vite environment variable (highly recommended for production)
     const envUrl = import.meta.env.VITE_API_URL;
-    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
+    // Only accept absolute http(s) URLs or root-relative paths: Git Bash on Windows can
+    // rewrite "/api" into "C:/Program Files/Git/api" when it is passed as a build arg.
+    const envUrlValid = envUrl && /^(https?:\/\/|\/(?!\/))/.test(envUrl);
+    if (envUrlValid && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
         return envUrl.replace(/\/$/, "");
     }
 
