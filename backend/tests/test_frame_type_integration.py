@@ -167,6 +167,26 @@ class TestBulkSelectionExcludesNonLight:
         clause_strs = [str(a) for a in args]
         assert any("frame_type" in s for s in clause_strs), clause_strs
 
+    def test_bulk_astrometry_selects_columns_not_full_orm_rows(self):
+        """Loading full Image rows for a ~90k-image mount OOM-killed prod (1.4 GB)."""
+        from app.models.image import Image
+        fake_session = MagicMock()
+        fake_query = MagicMock()
+        fake_session.query.return_value = fake_query
+        fake_query.filter.return_value = fake_query
+        fake_query.all.return_value = []
+
+        with patch("app.tasks.bulk.SessionLocal") as mock_sl, \
+             patch("app.tasks.bulk.redis") as mock_redis:
+            mock_sl.return_value.__enter__.return_value = fake_session
+            mock_redis.from_url.return_value = _FakeRedis()
+            bulk_astrometry_task.run("/data/mount1", False)
+
+        selected = fake_session.query.call_args.args
+        # Identity check: `in` would invoke SQLAlchemy's column __eq__.
+        assert all(a is not Image for a in selected), "must not load whole Image entities"
+        assert len(selected) >= 4
+
     def test_bulk_astrometry_only_unsolved_queues_unsolved_and_failed(self):
         def img(id_, solved, status, subtype=None):
             return MagicMock(id=id_, is_plate_solved=solved, astrometry_status=status, subtype=subtype)

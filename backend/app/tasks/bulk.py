@@ -147,7 +147,11 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False, only_unsolv
             # Get all images in path (sync).
             # LIGHT frames only (F1): calibration frames always fail plate
             # solving and would waste the Astrometry.net submission quota.
-            images = session.query(Image).filter(
+            # Columns only: loading full ORM rows for a ~90k-image mount held >1.4 GB
+            # (raw_header/star_metrics JSON) and OOM-killed the whole backend container.
+            images = session.query(
+                Image.id, Image.subtype, Image.is_plate_solved, Image.astrometry_status
+            ).filter(
                 Image.file_path.like(f"{mount_path}%"),
                 Image.frame_type == FrameType.LIGHT
             ).all()
