@@ -2121,7 +2121,7 @@ async def solve_field_overlaps(
     (no rotation, drawn as circles). Uses the same queue as bulk rescan, so the
     submission throttle, hints and monitoring all apply.
     """
-    from app.tasks.astrometry import astrometry_task
+    from app.tasks.astrometry import enqueue_astrometry, feed_astrometry_queue
 
     groups, _, _ = await _load_field_overlap_groups(db, image_id, mode)
     ids = [mid for g in groups if g["shape"] == "circle" for mid in g["member_ids"]]
@@ -2129,17 +2129,16 @@ async def solve_field_overlaps(
         return FieldOverlapSolveResponse(queued=0, skipped=0, total_unsolved=0)
 
     rows = (await db.execute(select(Image).where(Image.id.in_(ids)))).scalars().all()
-    queued = 0
-    for img in rows:
-        if (
-            img.frame_type != FrameType.LIGHT
-            or img.subtype not in (ImageSubtype.SUB_FRAME, ImageSubtype.INTEGRATION_MASTER)
-            or img.rotation_degrees is not None
-            or img.astrometry_status in ("SUBMITTED", "PROCESSING", "SOLVED")
-        ):
-            continue
-        astrometry_task.delay(img.id)
-        queued += 1
+    to_queue = [
+        img.id for img in rows
+        if img.frame_type == FrameType.LIGHT
+        and img.subtype in (ImageSubtype.SUB_FRAME, ImageSubtype.INTEGRATION_MASTER)
+        and img.rotation_degrees is None
+        and img.astrometry_status not in ("SUBMITTED", "PROCESSING", "SOLVED")
+    ]
+    enqueue_astrometry(to_queue)
+    feed_astrometry_queue.delay()
+    queued = len(to_queue)
     return FieldOverlapSolveResponse(queued=queued, skipped=len(rows) - queued, total_unsolved=len(rows))
 
 
@@ -2362,7 +2361,7 @@ async def rescan_image(image_id: int, force: bool = Query(False), db: AsyncSessi
     from app.services.astrometry_service import AstrometryService
     from app.config import settings
     # Import tasks
-    from app.tasks.astrometry import monitor_astrometry_task
+    from app.tasks.astrometry import monitor_astrometry_task, build_solve_hints
     
     import redis
     import json
@@ -2404,25 +2403,7 @@ async def rescan_image(image_id: int, force: bool = Query(False), db: AsyncSessi
         image.plate_solve_provider = provider.upper()
         await db.commit()
         
-        # Prepare hints if available
-        hints = {}
-        
-        # Force blind solve if previous attempt failed
-        if previous_status == 'FAILED':
-            logger.info(f"[ASTROMETRY] Previous status was FAILED. Forcing blind solve (no hints).")
-        else:
-            if image.ra_center_degrees is not None and image.dec_center_degrees is not None:
-                hints["center_ra"] = image.ra_center_degrees
-                hints["center_dec"] = image.dec_center_degrees
-                # Default radius if not specified (5 degrees is generous but safe)
-                hints["radius"] = image.field_radius_degrees or 5.0
-                logger.info(f"[ASTROMETRY] Using position hints for image {image_id}: {hints}")
-            
-            if image.pixel_scale_arcsec is not None:
-                hints["scale_units"] = "arcsecperpix"
-                hints["scale_lower"] = image.pixel_scale_arcsec * 0.9
-                hints["scale_upper"] = image.pixel_scale_arcsec * 1.1
-                logger.info(f"[ASTROMETRY] Using scale hints for image {image_id}: {image.pixel_scale_arcsec} arcsec/pix")
+        hints = build_solve_hints(image, previous_status)
         
         logger.info(f"[ASTROMETRY] Rescan initiated for Image {image_id} via {provider} (URL: {base_url})")
         

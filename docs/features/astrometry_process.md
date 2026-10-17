@@ -52,15 +52,24 @@ The FastAPI endpoint executes the upload directly to ensure immediate feedback:
 - **Environment Check**: Verifies `ASTROMETRY_API_KEY`.
 - **Upload**: Calls the `AstrometryService` to upload the file to `nova.astrometry.net`.
 - **Response**: Upon successful upload, it receives a `submission_id` and immediately returns it to the frontend with a `SUBMITTED` status.
-- **Task Dispatch**: Simultaneously, it queues a **Celery Task** (`monitor_submission_task`) to handle the long-running polling.
+- **Task Dispatch**: Simultaneously, it queues a **Celery Task** (`monitor_astrometry_task`) to handle the long-running polling.
 
 ### 3. Polling (Frontend)
 The frontend receives the `submission_id` and enters a polling mode, refreshing the image details every 5 seconds to show progress (Status changes from `SUBMITTED` -> `PROCESSING` -> `SOLVED`).
 
 ### 4. Background Monitoring (Worker)
-The `monitor_submission_task` runs in the background:
+The `monitor_astrometry_task` runs in the background. Each run checks the submission once and re-schedules itself 15 seconds later, so no worker slot is held while the solver works:
 - **Submission Check**: Polls the API to see if the submission has been assigned a `job_id`.
 - **Job Check**: Once a job starts, it polls for the final status (`success` or `failure`).
+- **Timeout**: After 20 minutes without a result the image is marked `FAILED`. `cleanup_stuck_astrometry` only fails images stuck in `SUBMITTED`/`PROCESSING` for 30 minutes, so it never races the monitor.
+
+## Bulk Rescans
+
+Bulk rescans (and "solve the overlay footprints") don't queue one Celery task per image. They add image IDs to the Redis sorted set `astrometry:pending` (imported-WCS upgrades first; images already pending keep their place). The `feed_astrometry_queue` task runs every 30 seconds from beat and after every finished solve. It dispatches `astrometry_task` only into free slots under `astrometry_max_submissions`. The indexer status endpoint reports the backlog as `astrometry_pending`; `redis-cli del astrometry:pending` cancels it.
+
+## Hints
+
+`build_solve_hints` derives a position hint (current RA/Dec) and a scale hint (field width in degrees, ±10%, since the upload is downsampled). An image whose previous attempt `FAILED` gets no hints. A local solver receives all hints; Nova receives only the scale hint.
 
 ### 5. Results Retrieval & DB Update
 Once the job succeeds:
@@ -71,8 +80,8 @@ Once the job succeeds:
 
 ## Error Handling
 
-- **Automatic Retries**: The Celery task is configured to auto-retry up to 5 times for transient network errors.
-- **Status Updates**: If a terminal failure occurs (e.g., API login fail, image won't solve), the database status is set to `FAILED`.
+- **Automatic Retries**: `astrometry_task` retries an upload up to 5 times (backoff from 1 to 15 minutes) for transient errors only: network/timeouts, solver 5xx/429, and NAS read hiccups (`is_retryable_error`). The image keeps its previous status between attempts. If retries run out, it is left as it was, so the next bulk rescan picks it up.
+- **Status Updates**: Any other failure (missing or unreadable file, API login fail, 4xx, image won't solve) sets the status to `FAILED` immediately, with no retry.
 - **Cleanup**: Temporary JPG files are deleted regardless of success or failure.
 
 ## Configuration

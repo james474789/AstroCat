@@ -81,8 +81,10 @@ class AstrometryService:
                         "session": session_key,
                     }
 
-                    # If using the remote astrometry server, do not include hints to allow a fully blind solve.
-                    # Otherwise (local solver), apply default scale and any provided hints.
+                    # Local solver: default scale range plus any provided hints.
+                    # Nova: only the scale hint, which narrows an otherwise fully
+                    # blind search. Position hints are left out so a wrong header
+                    # can't send the search to the wrong part of the sky.
                     if "nova.astrometry.net" not in base_url:
                         req_data.update({
                             "scale_units": "degwidth", 
@@ -92,7 +94,10 @@ class AstrometryService:
                         if hints:
                             req_data.update(hints)
                     else:
-                         logger.info("[ASTROMETRY] Uploading to remote server. Skipping all hints for a fully blind solve.")
+                        scale_hints = {k: v for k, v in (hints or {}).items() if k.startswith("scale_")}
+                        req_data.update(scale_hints)
+                        if not scale_hints:
+                            logger.info("[ASTROMETRY] Uploading to remote server with no scale hint (fully blind solve).")
                     
                     # Log the full request data (excluding session for security)
                     log_data = req_data.copy()

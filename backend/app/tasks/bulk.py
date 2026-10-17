@@ -112,7 +112,7 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False, only_unsolv
     only_unsolved: submit just UNSOLVED and FAILED images (no imported-WCS
     upgrades, no force re-solves). Takes precedence over force.
     """
-    from app.tasks.astrometry import astrometry_task
+    from app.tasks.astrometry import enqueue_astrometry, feed_astrometry_queue
 
     if only_unsolved:
         force = False
@@ -214,9 +214,6 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False, only_unsolv
                 else:
                     skipped_count += 1
 
-            # Combine: Priority First
-            final_queue = priority_queue + standard_queue
-            
             logger.info(f"[BULK RESCAN] Queuing {len(priority_queue)} priority (Imported) and {len(standard_queue)} standard images. Skipped: {skipped_count}")
 
             # Update Redis with initial skip count
@@ -231,19 +228,14 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False, only_unsolv
                 "updated_at": int(time.time())
             })
 
-            # Process Queue
-            for img in final_queue:
-                astrometry_task.delay(img.id)
-                queued += 1
-                processed += 1
-                
-                if processed % 10 == 0:
-                    r.hset(key, mapping={
-                        "processed": processed,
-                        "queued": queued,
-                        "skipped": skipped,
-                        "updated_at": int(time.time())
-                    })
+            # Hand the images to the pending set (priority first); the feeder
+            # submits them as slots free up. Images already pending count as queued.
+            enqueue_astrometry([img.id for img in priority_queue], priority=True)
+            enqueue_astrometry([img.id for img in standard_queue])
+            queued = len(priority_queue) + len(standard_queue)
+            processed += queued
+            if queued:
+                feed_astrometry_queue.delay()
 
             # Final update
             logger.info(f"[BULK RESCAN] Completed for mount={mount_path}: {processed} processed, {queued} queued, {skipped} skipped")

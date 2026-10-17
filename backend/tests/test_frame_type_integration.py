@@ -207,14 +207,16 @@ class TestBulkSelectionExcludesNonLight:
 
         with patch("app.tasks.bulk.SessionLocal") as mock_sl, \
              patch("app.tasks.bulk.redis") as mock_redis, \
-             patch("app.tasks.astrometry.astrometry_task") as mock_task:
+             patch("app.tasks.astrometry.enqueue_astrometry") as mock_enqueue, \
+             patch("app.tasks.astrometry.feed_astrometry_queue") as mock_feed:
             mock_sl.return_value.__enter__.return_value = fake_session
             mock_redis.from_url.return_value = _FakeRedis()
 
             bulk_astrometry_task.run("/data/mount1", True, True)
 
-        queued = sorted(c.args[0] for c in mock_task.delay.call_args_list)
+        queued = sorted(i for c in mock_enqueue.call_args_list for i in c.args[0])
         assert queued == [1, 2]
+        mock_feed.delay.assert_called_once()
 
 
 class TestBackfillFrameTypes:

@@ -60,14 +60,23 @@ celery_app.conf.update(
 )
 
 # Beat schedule for periodic tasks
+# Frequent jobs carry "expires" so a busy worker drops stale runs instead of
+# letting them pile up on the queue (a week-long bulk rescan once left ~19k).
 celery_app.conf.beat_schedule = {
     "cleanup-stuck-astrometry": {
         "task": "app.tasks.astrometry.cleanup_stuck_astrometry",
         "schedule": 300.0,  # Run every 5 minutes
+        "options": {"expires": 300},
+    },
+    "feed-astrometry-queue": {  # tops up free plate-solve slots from astrometry:pending
+        "task": "app.tasks.astrometry.feed_astrometry_queue",
+        "schedule": 30.0,
+        "options": {"expires": 30},
     },
     "update-mount-stats": {
         "task": "app.tasks.indexer.update_mount_stats",
         "schedule": 60.0,  # Run every 60 seconds
+        "options": {"expires": 60},
     },
     "reconcile-thumbnail-stats": {  # full cache walk (minutes on a big cache): daily, off-peak, never more often
         "task": "app.tasks.indexer.update_thumbnail_stats",
@@ -80,6 +89,7 @@ celery_app.conf.beat_schedule = {
     "star-metrics-sweeper": {  # Q1: backfill/retry star quality measurements
         "task": "app.tasks.quality.sweep",
         "schedule": 60.0,  # checks the queue often so it stays topped off; cheap no-op when queue is long
+        "options": {"expires": 60},
     },
     "refresh-seeing-forecasts": {  # S1: planetary seeing forecast, every 3 h at minute 10
         "task": "app.tasks.seeing.refresh_forecasts",

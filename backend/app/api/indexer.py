@@ -296,6 +296,7 @@ async def get_indexer_status():
     from sqlalchemy.future import select
     from app.database import AsyncSessionLocal
     from app.models.image import Image
+    from app.tasks.astrometry import pending_astrometry_count
     import redis
     import time
     import hashlib
@@ -421,6 +422,7 @@ async def get_indexer_status():
         "failed_files": failed_files if failed_files else [],
         "current_path": current_path if current_path else None,
         "indexed_count": total_indexed,
+        "astrometry_pending": pending_astrometry_count(),
         "mount_points": mount_points
     }
 

@@ -40,7 +40,7 @@ def log(msg):
 def repair_empty_nova_solves(dry_run: bool = False) -> dict:
     from app.services.matching import SyncCatalogMatcher
     from app.services.targets import assign_target_sync
-    from app.tasks.astrometry import astrometry_task
+    from app.tasks.astrometry import enqueue_astrometry, feed_astrometry_queue
 
     summary = {"checked": 0, "restored": 0, "queued": 0, "unreadable": 0, "targets_changed": 0}
     to_queue = []
@@ -100,8 +100,9 @@ def repair_empty_nova_solves(dry_run: bool = False) -> dict:
             if not dry_run:
                 session.commit()
 
-    for image_id in to_queue:
-        astrometry_task.delay(image_id)
+    if to_queue:
+        enqueue_astrometry(to_queue)
+        feed_astrometry_queue.delay()
 
     log(f"Done. {summary}")
     return summary
