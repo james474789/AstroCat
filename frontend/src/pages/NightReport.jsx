@@ -47,6 +47,12 @@ export default function NightReport() {
     const navigate = useNavigate();
     const targetKey = searchParams.get('target') || '';
     const rigParam = searchParams.get('rig');
+    // Equipment "View nights": restrict the night list and timeline to one rig.
+    const rigFilter = /^\d+$/.test(searchParams.get('rig_id') || '') ? searchParams.get('rig_id') : '';
+    const filterParams = useMemo(() => ({
+        ...(targetKey ? { target_key: targetKey } : {}),
+        ...(rigFilter ? { rig_id: rigFilter } : {}),
+    }), [targetKey, rigFilter]);
 
     const [nights, setNights] = useState(null);
     // The last response, tagged with the request it answers; loading is derived
@@ -56,29 +62,29 @@ export default function NightReport() {
     const [suspectOnly, setSuspectOnly] = useState(false);
 
     useEffect(() => {
-        fetchQualityNights(targetKey ? { target_key: targetKey } : {})
+        fetchQualityNights(filterParams)
             .then((d) => setNights(d.nights))
             .catch(() => setNights([]));
-    }, [targetKey]);
+    }, [filterParams]);
 
     // No night in the URL: open the most recent one.
     const night = nightParam || nights?.[0]?.night || null;
     useEffect(() => {
         if (!nightParam && nights?.length) {
-            navigate(`/nights/${nights[0].night}${targetKey ? `?target=${encodeURIComponent(targetKey)}` : ''}`, { replace: true });
+            navigate(`/nights/${nights[0].night}${searchParams.toString() ? `?${searchParams}` : ''}`, { replace: true });
         }
-    }, [nightParam, nights, navigate, targetKey]);
+    }, [nightParam, nights, navigate, searchParams]);
 
-    const requestKey = night ? `${night}|${targetKey}` : null;
+    const requestKey = night ? `${night}|${targetKey}|${rigFilter}` : null;
     useEffect(() => {
         if (!night) return undefined;
         let cancelled = false;
-        const key = `${night}|${targetKey}`;
-        fetchNightTimeline(night, targetKey ? { target_key: targetKey } : {})
+        const key = `${night}|${targetKey}|${rigFilter}`;
+        fetchNightTimeline(night, filterParams)
             .then((data) => { if (!cancelled) setResult({ key, data, error: null }); })
             .catch((e) => { if (!cancelled) setResult({ key, data: null, error: e.message || 'No subs on this night' }); });
         return () => { cancelled = true; };
-    }, [night, targetKey]);
+    }, [night, targetKey, rigFilter, filterParams]);
     const loading = requestKey !== null && result.key !== requestKey;
     const timeline = result.data;
     const error = loading ? null : result.error;
@@ -100,6 +106,10 @@ export default function NightReport() {
         if (value == null || value === '') next.delete(key); else next.set(key, value);
         setSearchParams(next, { replace: true });
     }
+
+    const rigFilterName = rigs.find((r) => String(r.rig_id) === rigFilter)?.rig_name
+        || nights?.flatMap((n) => n.rigs || []).find((r) => String(r.rig_id) === rigFilter)?.rig_name
+        || `rig #${rigFilter}`;
 
     const index = nights ? nights.findIndex((n) => n.night === night) : -1;
     const older = index >= 0 ? nights[index + 1] : null;
@@ -164,6 +174,12 @@ export default function NightReport() {
             {targetKey && (
                 <div className="night-scope">
                     Showing only <strong>{targetKey}</strong>. <button type="button" className="btn-link" onClick={() => setParam('target', null)}>Show the whole night</button>
+                </div>
+            )}
+
+            {rigFilter && (
+                <div className="night-scope">
+                    Showing only nights captured with <strong>{rigFilterName}</strong>. <button type="button" className="btn-link" onClick={() => setParam('rig_id', null)}>Show all rigs</button>
                 </div>
             )}
 

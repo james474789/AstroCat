@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Camera as CameraIcon, Aperture, SlidersHorizontal, MapPin,
-    Plus, Pencil, Trash2, ChevronDown, ChevronRight, MoreVertical, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon,
+    Plus, Pencil, Trash2, ChevronDown, ChevronRight, MoreVertical, Sparkles, Upload, Download, RefreshCw, Search as SearchIcon, Moon,
 } from 'lucide-react';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -146,6 +146,7 @@ function FormFooter({ onClose, saving }) {
 // ============ Rig row ============
 
 const rigSearchLink = (rig) => `/search?rig_id=${rig.id}&frame_type=LIGHT`;
+const rigNightsLink = (rig) => `/nights?rig_id=${rig.id}`;
 
 function RigRow({ rig, isAdmin, mountLimit, expanded, onToggleExpand, onEdit, onDelete, onMountToggle, onActiveToggle }) {
     const [menuOpen, setMenuOpen] = useState(false);
@@ -199,6 +200,7 @@ function RigRow({ rig, isAdmin, mountLimit, expanded, onToggleExpand, onEdit, on
                         <div className="rig-row-menu-list" role="menu">
                             <button role="menuitem" onClick={() => onEdit(rig)} disabled={!isAdmin}><Pencil size={14} /> Edit</button>
                             <Link role="menuitem" to={rigSearchLink(rig)}><SearchIcon size={14} /> View images</Link>
+                            <Link role="menuitem" to={rigNightsLink(rig)}><Moon size={14} /> View nights</Link>
                             <button role="menuitem" className="danger" onClick={() => onDelete(rig)} disabled={!isAdmin}><Trash2 size={14} /> Delete</button>
                         </div>
                     )}
@@ -252,6 +254,8 @@ function RigRow({ rig, isAdmin, mountLimit, expanded, onToggleExpand, onEdit, on
                         Last used {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
                         {' · '}
                         <Link to={rigSearchLink(rig)}>View images</Link>
+                        {' · '}
+                        <Link to={rigNightsLink(rig)}>View nights</Link>
                     </div>
                 </div>
             )}
