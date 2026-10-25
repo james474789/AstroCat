@@ -196,9 +196,18 @@ class FITSExtractor(BaseExtractor):
         """Try multiple keywords for exposure time."""
         value = self._safe_get(header, "EXPTIME", "EXPOSURE")
         try:
-            return float(value) if value is not None else 0.0
+            seconds = float(value) if value is not None else 0.0
         except (ValueError, TypeError):
             return 0.0
+
+        # Some QHY5LII-C capture software never writes the standard EXPTIME
+        # keyword and writes the non-standard EXPOSURE in milliseconds, not
+        # seconds. It's uniquely identifiable by its "Presion Time" (sic)
+        # header card, seen nowhere else - see repair_qhy5lii_exposure.py.
+        if "EXPTIME" not in header and self._safe_get(header, "Presion Time") is not None:
+            seconds /= 1000.0
+
+        return seconds
 
     def _get_date(self, header) -> datetime:
         """Parse DATE-OBS or DATE."""
