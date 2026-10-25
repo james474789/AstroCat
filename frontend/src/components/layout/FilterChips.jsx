@@ -57,6 +57,7 @@ export default function FilterChips({ filters, onRemove, rigNames = {} }) {
         target_key: { label: 'Target', format: (v) => v === '__none__' ? 'Unassigned' : v },
         rig_id: { label: 'Rig', format: (v) => v === 'none' ? 'Unassigned' : (rigNames[v] || `#${v}`) },
         rig_bucket: { label: 'Bucket', format: formatRigBucket },
+        subs_of: { label: 'Subs of', format: (v) => `master #${v}` },
         // Q1d star quality
         fwhm_min: { label: 'Min FWHM', format: (v) => v },
         fwhm_max: { label: 'Max FWHM', format: (v) => v },

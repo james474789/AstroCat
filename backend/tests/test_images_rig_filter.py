@@ -110,12 +110,12 @@ class _Untouchable:
         raise AssertionError(f"db.{name} was accessed")
 
 
-def test_rig_bucket_ids_without_key_skips_db():
-    assert asyncio.run(api._rig_bucket_ids(_Untouchable(), None)) is None
-    assert asyncio.run(api._rig_bucket_ids(_Untouchable(), "")) is None
+def test_restrict_ids_without_key_skips_db():
+    assert asyncio.run(api._restrict_ids(_Untouchable(), None)) is None
+    assert asyncio.run(api._restrict_ids(_Untouchable(), "")) is None
 
 
-def test_rig_bucket_ids_forwards_key(monkeypatch):
+def test_restrict_ids_forwards_key(monkeypatch):
     from app.api import equipment
 
     seen = []
@@ -126,5 +126,5 @@ def test_rig_bucket_ids_forwards_key(monkeypatch):
 
     monkeypatch.setattr(equipment, "bucket_image_ids", fake)
     db = object()
-    assert asyncio.run(api._rig_bucket_ids(db, "ZWO ASI2600MM Pro|b1|-")) == [4, 2]
+    assert asyncio.run(api._restrict_ids(db, "ZWO ASI2600MM Pro|b1|-")) == [4, 2]
     assert seen == [(db, "ZWO ASI2600MM Pro|b1|-")]

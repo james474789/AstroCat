@@ -127,6 +127,12 @@
     letter-spacing: 0.1em;
 }
 
+.page-image-detail .image-actions-rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
 .page-image-detail .image-actions {
     display: flex;
     gap: var(--spacing-md);

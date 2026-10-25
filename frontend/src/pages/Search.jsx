@@ -38,7 +38,7 @@ const FILTER_KEYS = [
     'pixel_scale_max', 'start_date', 'end_date', 'path',
     // F1: '' means the default (Lights only, not written to the URL).
     // 'ALL' means no filter. Otherwise DARK/FLAT/BIAS/DARK_FLAT.
-    'frame_type', 'target_key', 'rig_id', 'rig_bucket',
+    'frame_type', 'target_key', 'rig_id', 'rig_bucket', 'subs_of',
     ...QUALITY_KEYS,
 ];
 
@@ -147,6 +147,7 @@ function describeScope(sp, rigNames) {
     add(g('target_key'), `Target: ${g('target_key') === '__none__' ? 'unassigned' : g('target_key')}`);
     add(g('rig_id'), `Rig: ${g('rig_id') === 'none' ? 'unassigned' : (rigNames[g('rig_id')] || `#${g('rig_id')}`)}`);
     add(g('rig_bucket'), 'One unassigned-rig bucket');
+    add(g('subs_of'), `Subs of master #${g('subs_of')}`);
     add(g('fwhm_min') || g('fwhm_max'), rangeText('FWHM', g('fwhm_min'), g('fwhm_max'), sizeUnit));
     add(g('hfr_max'), `HFR ≤ ${g('hfr_max')}${sizeUnit}`);
     add(g('eccentricity_max'), `Eccentricity ≤ ${g('eccentricity_max')}`);
