@@ -27,6 +27,7 @@ import {
 } from '../components/ui';
 import './Equipment.css';
 import QualityValue from '../components/quality/QualityValue';
+import { filterColor } from '../utils/filterColors';
 
 const FILTER_BANDS = ['L', 'R', 'G', 'B', 'Ha', 'OIII', 'SII', 'Hb', 'Duo', 'None', 'Other'];
 const OPTIC_KINDS = ['TELESCOPE', 'LENS'];
@@ -250,6 +251,22 @@ function RigRow({ rig, isAdmin, mountLimit, expanded, onToggleExpand, onEdit, on
                             <span className="muted"> · median over {rig.delivered_fwhm.n} subs</span>
                         </div>
                     )}
+                    {rig.delivered_fwhm_by_filter && rig.delivered_fwhm_by_filter.length > 0 && (
+                        <div className="rig-fwhm-by-filter">
+                            {rig.delivered_fwhm_by_filter.map((f) => (
+                                <div key={f.filter} className="rig-line small">
+                                    <span className="chip-dot" style={{ background: filterColor(f.filter) }} />
+                                    {f.filter}{' '}
+                                    <QualityValue px={f.median_px} arcsec={f.median_arcsec} />
+                                    <span className="muted">
+                                        {' · best '}
+                                        <QualityValue px={f.best_px} arcsec={f.best_arcsec} />
+                                        {` · ${f.n} subs`}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <div className="rig-line muted small">
                         Last used {rig.last_used ? formatDateTime(rig.last_used) : 'never'}
                         {' · '}
@@ -269,6 +286,63 @@ const RIG_FILTERS = [
     { key: 'active', label: 'Active', test: (r) => r.is_active },
     { key: 'inactive', label: 'Inactive', test: (r) => !r.is_active },
 ];
+
+const FILTER_ORDER = ['L', 'R', 'G', 'B', 'Ha', 'OIII', 'SII', 'Hb', 'Duo', 'None'];
+const filterOrderIndex = (name) => {
+    const i = FILTER_ORDER.indexOf(name);
+    return i === -1 ? FILTER_ORDER.length : i;
+};
+
+// Cross-rig comparison: median FWHM per rig x filter, so profiles and
+// filters can be compared side by side instead of expanding each rig card.
+function RigFwhmTable({ rigs }) {
+    const rows = rigs.filter((r) => r.delivered_fwhm_by_filter && r.delivered_fwhm_by_filter.length > 0);
+    const filters = useMemo(() => {
+        const set = new Set();
+        rows.forEach((r) => r.delivered_fwhm_by_filter.forEach((f) => set.add(f.filter)));
+        return Array.from(set).sort((a, b) => filterOrderIndex(a) - filterOrderIndex(b) || a.localeCompare(b));
+    }, [rows]);
+
+    if (rows.length === 0 || filters.length === 0) return null;
+
+    return (
+        <div className="rig-fwhm-table-wrap">
+            <table className="rig-fwhm-table">
+                <thead>
+                    <tr>
+                        <th>FWHM by filter</th>
+                        {filters.map((f) => (
+                            <th key={f}>
+                                <span className="chip-dot" style={{ background: filterColor(f) }} />
+                                {f}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((rig) => {
+                        const byFilter = new Map(rig.delivered_fwhm_by_filter.map((f) => [f.filter, f]));
+                        return (
+                            <tr key={rig.id}>
+                                <td className="rig-fwhm-table-name" title={rig.name}>{rig.name}</td>
+                                {filters.map((f) => {
+                                    const v = byFilter.get(f);
+                                    return (
+                                        <td key={f}>
+                                            {v
+                                                ? <QualityValue px={v.median_px} arcsec={v.median_arcsec} />
+                                                : <span className="muted">—</span>}
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+    );
+}
 
 function sortRigs(rigs) {
     return [...rigs].sort((a, b) =>
@@ -1597,6 +1671,7 @@ export default function Equipment() {
                     <p className="muted small mount-summary">
                         {mountedCount} of {maxMounted} rigs mounted. Tonight plans a separate target for each mounted rig.
                     </p>
+                    <RigFwhmTable rigs={rigs} />
                     <div className="rigs-toolbar">
                         <input
                             type="search"

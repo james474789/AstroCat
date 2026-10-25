@@ -335,6 +335,27 @@
 
 .page-equipment .mount-summary { margin: 0 0 0.75rem; }
 
+.page-equipment .chip-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 0.3rem; vertical-align: middle;
+}
+
+.page-equipment .rig-fwhm-by-filter { display: flex; flex-direction: column; gap: 0.15rem; margin: 0.15rem 0 0.35rem 1rem; }
+
+/* Cross-rig FWHM-by-filter comparison table */
+.page-equipment .rig-fwhm-table-wrap {
+    overflow-x: auto; margin-bottom: 0.75rem; border: 1px solid var(--color-border);
+    border-radius: 10px; background: var(--color-surface);
+}
+.page-equipment .rig-fwhm-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.page-equipment .rig-fwhm-table th,
+.page-equipment .rig-fwhm-table td { padding: 0.4rem 0.65rem; text-align: left; white-space: nowrap; }
+.page-equipment .rig-fwhm-table thead th {
+    color: var(--color-text-secondary); font-weight: 500; border-bottom: 1px solid var(--color-border);
+}
+.page-equipment .rig-fwhm-table tbody tr + tr td { border-top: 1px solid var(--color-border-light); }
+.page-equipment .rig-fwhm-table-name { font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+
 /* E1: compact rig list */
 .page-equipment .rigs-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
 .page-equipment .rigs-search {

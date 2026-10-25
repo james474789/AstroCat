@@ -35,7 +35,7 @@ RIG_KEYS = {"id", "name", "camera_id", "optic_id", "camera_name", "optic_name", 
             "modifier_factor", "binning", "is_active", "is_mounted", "mount_name", "filter_ids", "filters",
             "measured_scale_arcsec", "measured_count", "scale", "fov_deg", "focal_ratio", "effective_focal_mm",
             "sampling", "scale_check", "image_count", "last_used", "created_at", "updated_at",
-            "sampling_seeing_source", "delivered_fwhm",  # Q1d
+            "sampling_seeing_source", "delivered_fwhm", "delivered_fwhm_by_filter",  # Q1d
             "min_target_arcmin", "max_target_arcmin", "target_window_arcmin"}  # R1b
 SITE_KEYS = {"id", "name", "latitude", "longitude", "elevation_m", "timezone", "bortle", "sqm",
              "typical_seeing_arcsec", "is_default", "horizon", "horizon_source", "image_count", "created_at",
@@ -104,6 +104,27 @@ def test_rig_sampling_uses_measured_fwhm_with_enough_subs():
     many = api.rig_dict(rig, None, 2.5, {"n": 386, "median_arcsec": 2.63})
     assert many["sampling_seeing_source"] == "MEASURED" and many["sampling"]["seeing_arcsec"] == 2.63
     assert many["delivered_fwhm"]["n"] == 386
+
+
+class _FakeExecDB:
+    def __init__(self, rows):
+        self._rows = rows
+
+    async def execute(self, *_a, **_kw):
+        return SimpleNamespace(all=lambda: self._rows)
+
+
+def test_rig_delivered_by_filter_groups_and_drops_small_samples():
+    rows = (
+        [SimpleNamespace(rig_id=7, filter_name="Ha 7nm", fwhm_px=3.0 + i * 0.1, arc=2.0 + i * 0.1) for i in range(6)]
+        + [SimpleNamespace(rig_id=7, filter_name="L", fwhm_px=2.0, arc=1.5)]  # below MIN_BIN -> dropped
+        + [SimpleNamespace(rig_id=9, filter_name="OIII", fwhm_px=4.0 + i * 0.1, arc=3.0 + i * 0.1) for i in range(5)]
+    )
+    by_rig = asyncio.run(api._rig_delivered_by_filter(_FakeExecDB(rows)))
+    assert set(by_rig) == {7, 9}
+    assert len(by_rig[7]) == 1
+    assert by_rig[7][0]["filter"] == "Ha" and by_rig[7][0]["n"] == 6
+    assert by_rig[9][0]["filter"] == "OIII" and by_rig[9][0]["n"] == 5
 
 
 def test_site_shape():

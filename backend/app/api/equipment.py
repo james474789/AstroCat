@@ -20,9 +20,11 @@ import json
 import logging
 import re
 import time
+from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
+import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import delete, func, select, text, update
@@ -40,8 +42,9 @@ from app.schemas.equipment import (
     CameraCreate, CameraUpdate, DetectApply, FilterCreate, FilterUpdate, HorizonUpdate, OpticCreate,
     OpticUpdate, RigCreate, RigUpdate, SiteCreate, SiteUpdate, UnassignedAssign,
 )
+from app.services.quality_stats import MIN_BIN
 from app.services.site_horizon import HORIZON_CACHE_KEY, HORIZON_CACHE_TTL  # shared with the recommender
-from app.utils.filter_names import normalize_filter
+from app.utils.filter_names import filter_sort_key, normalize_filter
 from app.utils.optics import DEFAULT_SEEING_ARCSEC, pixel_scale, rig_optics_summary, target_size_window
 from app.utils.star_quality import SCALE_SQL
 
@@ -232,7 +235,8 @@ DELIVERED_WINDOW_DAYS = 90
 
 
 def rig_dict(rig: Rig, usage: Optional[tuple] = None, seeing: float = DEFAULT_SEEING_ARCSEC,
-             delivered: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+             delivered: Optional[Dict[str, Any]] = None,
+             delivered_by_filter: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     cam, opt = rig.camera, rig.optic
     seeing_source = "SITE"
     if delivered and delivered.get("n", 0) >= DELIVERED_MIN_SUBS and delivered.get("median_arcsec"):
@@ -263,6 +267,7 @@ def rig_dict(rig: Rig, usage: Optional[tuple] = None, seeing: float = DEFAULT_SE
         **computed,
         "sampling_seeing_source": seeing_source,
         "delivered_fwhm": delivered,
+        "delivered_fwhm_by_filter": delivered_by_filter or [],
         "image_count": int(count or 0), "last_used": _iso(last),
         "created_at": _iso(rig.created_at), "updated_at": _iso(rig.updated_at),
     }
@@ -330,6 +335,47 @@ async def _rig_delivered(db: AsyncSession, rig_ids: Optional[Iterable[int]] = No
     } for r in rows}
 
 
+async def _rig_delivered_by_filter(db: AsyncSession, rig_ids: Optional[Iterable[int]] = None) -> Dict[int, List[Dict[str, Any]]]:
+    """
+    Q1d, broken out per filter: each rig's delivered FWHM (median + best over
+    its measured Light subs), grouped by canonical filter bucket instead of
+    pooled across all of them. Filters with fewer than MIN_BIN subs for a rig
+    are left out (same noise cutoff as the Quality page's filter_offsets()).
+    """
+    rows = (await db.execute(text(f"""
+        SELECT images.rig_id, images.filter_name, images.fwhm_px, images.fwhm_px * {SCALE_SQL} AS arc
+        FROM images LEFT JOIN rigs r ON r.id = images.rig_id
+        WHERE images.frame_type = 'LIGHT' AND images.subtype = 'SUB_FRAME'
+          AND images.star_metrics_status = 'OK' AND images.rig_id IS NOT NULL
+          AND images.capture_date IS NOT NULL
+          {"AND images.rig_id = ANY(:ids)" if rig_ids is not None else ""}
+    """), {**({"ids": list(rig_ids)} if rig_ids is not None else {})})).all()
+
+    groups: Dict[tuple, Dict[str, List[float]]] = defaultdict(lambda: {"px": [], "arc": []})
+    for r in rows:
+        key = (r.rig_id, _band_for(r.filter_name))
+        groups[key]["px"].append(r.fwhm_px)
+        if r.arc is not None:
+            groups[key]["arc"].append(r.arc)
+
+    r3 = lambda v: round(float(v), 3) if v is not None else None  # noqa: E731
+    by_rig: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+    for (rig_id, bucket), vals in groups.items():
+        if len(vals["px"]) < MIN_BIN:
+            continue
+        px, arc = vals["px"], vals["arc"]
+        by_rig[rig_id].append({
+            "filter": bucket,
+            "n": len(px),
+            "median_px": r3(np.percentile(px, 50)), "best_px": r3(np.percentile(px, 10)),
+            "median_arcsec": r3(np.percentile(arc, 50)) if arc else None,
+            "best_arcsec": r3(np.percentile(arc, 10)) if arc else None,
+        })
+    for rig_id in by_rig:
+        by_rig[rig_id].sort(key=lambda f: filter_sort_key(f["filter"]))
+    return by_rig
+
+
 SEEING_MAX_SCALE = 3.0      # arcsec/px: coarser rigs can't resolve the seeing
 SEEING_SITE_WINDOW_DAYS = 365
 
@@ -394,7 +440,9 @@ async def _rig_response(db: AsyncSession, rig_id: int) -> Dict[str, Any]:
     rig = await _load_rig(db, rig_id)
     usage = await _rig_usage(db, [rig_id])
     delivered = await _rig_delivered(db, [rig_id])
-    return rig_dict(rig, usage.get(rig_id), await _default_seeing(db), delivered.get(rig_id))
+    delivered_by_filter = await _rig_delivered_by_filter(db, [rig_id])
+    return rig_dict(rig, usage.get(rig_id), await _default_seeing(db), delivered.get(rig_id),
+                     delivered_by_filter.get(rig_id))
 
 
 async def _set_rig_filters(db: AsyncSession, rig_id: int, filter_ids: List[int]) -> None:
@@ -427,6 +475,7 @@ async def get_equipment(db: AsyncSession = Depends(get_db)):
     opt_counts = await _rig_counts(db, Rig.optic_id)
     usage = await _rig_usage(db)
     delivered = await _rig_delivered(db)
+    delivered_by_filter = await _rig_delivered_by_filter(db)
     site_counts = await _site_counts(db)
     site_measured = await _site_measured(db)
     seeing = next((s.typical_seeing_arcsec for s in sites if s.is_default and s.typical_seeing_arcsec),
@@ -435,7 +484,8 @@ async def get_equipment(db: AsyncSession = Depends(get_db)):
         "cameras": [camera_dict(c, cam_counts.get(c.id, 0)) for c in cameras],
         "optics": [optic_dict(o, opt_counts.get(o.id, 0)) for o in optics],
         "filters": [filter_dict(f) for f in filters],
-        "rigs": [rig_dict(r, usage.get(r.id), seeing, delivered.get(r.id)) for r in rigs],
+        "rigs": [rig_dict(r, usage.get(r.id), seeing, delivered.get(r.id), delivered_by_filter.get(r.id))
+                 for r in rigs],
         "sites": [site_dict(s, site_counts.get(s.id, 0), site_measured.get(s.id)) for s in sites],
         "telescopius_available": bool(settings.telescopius_api_key),
         "max_mounted_rigs": MAX_MOUNTED_RIGS,
