@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchImage, updateImage, rescanImage, solveFieldOverlaps, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
+import { fetchImage, fetchImages, updateImage, rescanImage, solveFieldOverlaps, regenerateImageThumbnail, fetchEquipment, formatBytes, formatExposure, formatRA, formatDec, formatDateTime, API_BASE_URL, getDownloadUrl } from '../api/client';
 import { pixelToSky } from '../utils/wcs';
 import useImageNav from '../hooks/useImageNav';
 import useFieldOverlays, { OVERLAY_MODE_LABELS } from '../hooks/useFieldOverlays';
@@ -15,7 +15,7 @@ import SkyOverlayLayer from '../components/skyOverlay/SkyOverlayLayer';
 import SkyOverlayLegend from '../components/skyOverlay/SkyOverlayLegend';
 import useSeenIn from '../hooks/useSeenIn';
 import SeenInPanel from '../components/seenIn/SeenInPanel';
-import { Maximize2, Layers, Crosshair, AlertTriangle, Frame, Orbit, Download, Sparkles, RefreshCw, PanelRight, Hourglass, Rocket, Pencil, Check, Star, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Maximize2, Layers, GalleryHorizontal, Crosshair, AlertTriangle, Frame, Orbit, Download, Sparkles, RefreshCw, PanelRight, Hourglass, Rocket, Pencil, Check, Star, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityCard from '../components/quality/StarQualityCard';
 import Inspector from '../components/metadata/Inspector';
@@ -88,6 +88,15 @@ export default function ImageDetail({ inspector: forceInspector = false }) {
     // Images-in-field overlay: other images' footprints, hit-tested in native image pixels
     const overlays = useFieldOverlays(image);
     const seenIn = useSeenIn(image);
+    // Masters: how many light subs match its framing (the View subs button)
+    const isIntegration = image?.subtype === 'INTEGRATION_MASTER' || image?.subtype === 'INTEGRATION_DEPRECATED';
+    const subsQuery = useQuery({
+        queryKey: ['master-subs-count', image?.id],
+        queryFn: () => fetchImages({ subs_of: image.id, page_size: 1, frame_type: 'LIGHT' }),
+        enabled: isIntegration,
+        staleTime: 60 * 1000,
+    });
+    const subsCount = subsQuery.data?.total;
     const { toggle: toggleOverlays, unavailable: overlaysUnavailable } = overlays;
     const [hoveredOverlayId, setHoveredOverlayId] = useState(null);
     // Dynamic catalog overlay (AstroCat annotations), drawn from the image's own plate solution
@@ -739,87 +748,103 @@ export default function ImageDetail({ inspector: forceInspector = false }) {
                                     </Button>
                                 )}
 
-                                {/* Quick Actions */}
-                                <div className="image-actions">
-                                    <Button to={`/images/${id}/view`} title="Open at full resolution (F)" icon={<Maximize2 size={14} />}>
-                                        Full resolution
-                                    </Button>
-                                    <Button
-                                        as="a"
-                                        href={getDownloadUrl(id, 'jpg')}
-                                        download // Hint to browser
-                                        icon={<Download size={14} />}
-                                    >
-                                        Download JPG
-                                    </Button>
-
-                                    {/* AstroCat annotations on/off */}
-                                    <Button
-                                        variant={sky.active ? 'filled' : 'tinted'}
-                                        icon={<Sparkles size={14} />}
-                                        onClick={() => setAnnotationsOn((on) => !on)}
-                                        disabled={!!sky.unavailable}
-                                        title={sky.unavailable
-                                            || (sky.active && sky.warning
-                                                ? `Annotations — approximate: ${sky.warning}`
-                                                : 'Annotations: catalog objects from the plate solution')}
-                                    >
-                                        Annotations: {sky.active ? 'On' : 'Off'}
-                                        {sky.active && sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
-                                    </Button>
-
-                                    <Button
-                                        variant={overlays.active ? 'filled' : 'tinted'}
-                                        icon={<Layers size={14} />}
-                                        onClick={overlays.toggle}
-                                        disabled={!!overlays.unavailable}
-                                        title={overlays.unavailable || 'Images in this field: footprints of smaller images that overlap it (O)'}
-                                    >
-                                        In field: {overlays.active ? 'On' : 'Off'}
-                                        {overlays.active && !overlays.isLoading && overlays.mode && ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`}
-                                        {overlays.active && overlays.isLoading && ' …'}
-                                    </Button>
-
-                                    <Button
-                                        variant={seenIn.open ? 'filled' : 'tinted'}
-                                        icon={<Frame size={14} />}
-                                        onClick={() => seenIn.setOpen(true)}
-                                        disabled={!!seenIn.unavailable}
-                                        title={seenIn.unavailable || 'Larger images whose field covers this image'}
-                                    >
-                                        Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
-                                    </Button>
-
-                                    {overlays.active && overlays.mode && overlays.unsolvedCount > 0 && (
-                                        <Button
-                                            icon={<Crosshair size={14} />}
-                                            onClick={handleSolveOverlays}
-                                            disabled={saving}
-                                            title="Submit the dashed-circle footprints currently shown (no rotation yet) for astrometry"
-                                        >
-                                            Solve {overlays.unsolvedCount} unsolved
+                                {/* Quick Actions: file actions, then sky / related-image tools */}
+                                <div className="image-actions-rows">
+                                    <div className="image-actions">
+                                        <Button to={`/images/${id}/view`} title="Open at full resolution (F)" icon={<Maximize2 size={14} />}>
+                                            Full resolution
                                         </Button>
-                                    )}
+                                        <Button
+                                            as="a"
+                                            href={getDownloadUrl(id, 'jpg')}
+                                            download // Hint to browser
+                                            icon={<Download size={14} />}
+                                        >
+                                            Download JPG
+                                        </Button>
 
-                                    <Button
-                                        icon={<RefreshCw size={14} />}
-                                        onClick={handleRegenerateThumbnail}
-                                        disabled={saving}
-                                        title="Force backend to regenerate the linear thumbnail"
-                                    >
-                                        Regenerate
-                                    </Button>
-                                    <Button
-                                        variant={inspectorOpen ? 'filled' : 'tinted'}
-                                        icon={<PanelRight size={14} aria-hidden="true" />}
-                                        onClick={toggleInspector}
-                                        aria-label="Inspector"
-                                        aria-pressed={inspectorOpen}
-                                        aria-controls={inspectorOpen ? INSPECTOR_ID : undefined}
-                                        title="Inspector: metadata, raw headers and export (I)"
-                                    >
-                                        Inspector
-                                    </Button>
+                                        <Button
+                                            icon={<RefreshCw size={14} />}
+                                            onClick={handleRegenerateThumbnail}
+                                            disabled={saving}
+                                            title="Force backend to regenerate the linear thumbnail"
+                                        >
+                                            Regenerate
+                                        </Button>
+                                        <Button
+                                            variant={inspectorOpen ? 'filled' : 'tinted'}
+                                            icon={<PanelRight size={14} aria-hidden="true" />}
+                                            onClick={toggleInspector}
+                                            aria-label="Inspector"
+                                            aria-pressed={inspectorOpen}
+                                            aria-controls={inspectorOpen ? INSPECTOR_ID : undefined}
+                                            title="Inspector: metadata, raw headers and export (I)"
+                                        >
+                                            Inspector
+                                        </Button>
+                                    </div>
+                                    <div className="image-actions">
+                                        {/* AstroCat annotations on/off */}
+                                        <Button
+                                            variant={sky.active ? 'filled' : 'tinted'}
+                                            icon={<Sparkles size={14} />}
+                                            onClick={() => setAnnotationsOn((on) => !on)}
+                                            disabled={!!sky.unavailable}
+                                            title={sky.unavailable
+                                                || (sky.active && sky.warning
+                                                    ? `Annotations — approximate: ${sky.warning}`
+                                                    : 'Annotations: catalog objects from the plate solution')}
+                                        >
+                                            Annotations: {sky.active ? 'On' : 'Off'}
+                                            {sky.active && sky.warning && <AlertTriangle size={14} className="annotation-warning-icon" />}
+                                        </Button>
+
+                                        <Button
+                                            variant={overlays.active ? 'filled' : 'tinted'}
+                                            icon={<Layers size={14} />}
+                                            onClick={overlays.toggle}
+                                            disabled={!!overlays.unavailable}
+                                            title={overlays.unavailable || 'Images in this field: footprints of smaller images that overlap it (O)'}
+                                        >
+                                            In field: {overlays.active ? 'On' : 'Off'}
+                                            {overlays.active && !overlays.isLoading && overlays.mode && ` (${overlays.groups.length}${overlays.truncated ? '+' : ''})`}
+                                            {overlays.active && overlays.isLoading && ' …'}
+                                        </Button>
+
+                                        <Button
+                                            variant={seenIn.open ? 'filled' : 'tinted'}
+                                            icon={<Frame size={14} />}
+                                            onClick={() => seenIn.setOpen(true)}
+                                            disabled={!!seenIn.unavailable}
+                                            title={seenIn.unavailable || 'Larger images whose field covers this image'}
+                                        >
+                                            Seen in{seenIn.loaded ? ` (${seenIn.groups.length}${seenIn.truncated ? '+' : ''})` : ''}
+                                        </Button>
+
+                                        {isIntegration && (
+                                            <Button
+                                                to={`/search?subs_of=${image.id}`}
+                                                icon={<GalleryHorizontal size={14} />}
+                                                disabled={subsCount === 0}
+                                                title={subsCount === 0
+                                                    ? "No light subs match this master's framing"
+                                                    : 'Light subs with the same framing: centre, pixel scale (±3%), size (master may be cropped up to 15%) and rotation (incl. meridian flips); unsolved subs by target, rig and size'}
+                                            >
+                                                View subs{subsCount != null ? ` (${subsCount})` : ''}
+                                            </Button>
+                                        )}
+
+                                        {overlays.active && overlays.mode && overlays.unsolvedCount > 0 && (
+                                            <Button
+                                                icon={<Crosshair size={14} />}
+                                                onClick={handleSolveOverlays}
+                                                disabled={saving}
+                                                title="Submit the dashed-circle footprints currently shown (no rotation yet) for astrometry"
+                                            >
+                                                Solve {overlays.unsolvedCount} unsolved
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 

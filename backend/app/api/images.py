@@ -261,12 +261,24 @@ def _build_image_query(
     return stmt
 
 
-async def _rig_bucket_ids(db: AsyncSession, rig_bucket: Optional[str]) -> Optional[List[int]]:
-    """Member ids of the Unassigned bucket `rig_bucket` (R0c); None when no bucket filter is set."""
-    if not rig_bucket:
-        return None
-    from app.api.equipment import bucket_image_ids
-    return await bucket_image_ids(db, rig_bucket)
+async def _restrict_ids(db: AsyncSession, rig_bucket: Optional[str], subs_of: Optional[int] = None) -> Optional[List[int]]:
+    """
+    Exact id set for the id-based filters: the Unassigned bucket `rig_bucket` (R0c) and/or the
+    subs of integration master `subs_of` (intersected when both are set); None when neither is set.
+    """
+    ids = None
+    if rig_bucket:
+        from app.api.equipment import bucket_image_ids
+        ids = await bucket_image_ids(db, rig_bucket)
+    if subs_of is not None:
+        from app.services.master_subs import find_sub_ids
+        subs = await find_sub_ids(db, subs_of)
+        if ids is None:
+            ids = subs
+        else:
+            keep = set(subs)
+            ids = [i for i in ids if i in keep]
+    return ids
 
 
 async def _attach_equipment_names(db: AsyncSession, image: Image) -> Image:
@@ -372,6 +384,7 @@ async def list_images(
     rig_id: Optional[str] = Query(None, description="Assigned rig id, or 'none' for no rig (R0)"),
     rig_bucket: Optional[str] = Query(None, max_length=400,
         description="Unassigned bucket key from GET /api/equipment/unassigned (R0c)"),
+    subs_of: Optional[int] = Query(None, description="Light subs matching this integration master's framing"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
@@ -379,7 +392,7 @@ async def list_images(
     """
     List images with filtering and pagination.
     """
-    bucket_ids = await _rig_bucket_ids(db, rig_bucket)
+    bucket_ids = await _restrict_ids(db, rig_bucket, subs_of)
     # Build query using helper
     stmt = _build_image_query(
         subtype=subtype,
@@ -483,6 +496,7 @@ async def export_images_csv(
     rig_id: Optional[str] = Query(None, description="Assigned rig id, or 'none' for no rig (R0)"),
     rig_bucket: Optional[str] = Query(None, max_length=400,
         description="Unassigned bucket key from GET /api/equipment/unassigned (R0c)"),
+    subs_of: Optional[int] = Query(None, description="Light subs matching this integration master's framing"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
@@ -493,7 +507,7 @@ async def export_images_csv(
     import csv
     import io
     
-    bucket_ids = await _rig_bucket_ids(db, rig_bucket)
+    bucket_ids = await _restrict_ids(db, rig_bucket, subs_of)
     # 1. Build Query (same as list_images)
     stmt = _build_image_query(
         subtype=subtype,
@@ -1137,6 +1151,7 @@ async def bulk_update_image_type(
     rig_id: Optional[str] = Query(None, description="Assigned rig id, or 'none' for no rig (R0)"),
     rig_bucket: Optional[str] = Query(None, max_length=400,
         description="Unassigned bucket key from GET /api/equipment/unassigned (R0c)"),
+    subs_of: Optional[int] = Query(None, description="Light subs matching this integration master's framing"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
@@ -1147,7 +1162,7 @@ async def bulk_update_image_type(
     failed_count = 0
     errors = []
     
-    bucket_ids = await _rig_bucket_ids(db, rig_bucket)
+    bucket_ids = await _restrict_ids(db, rig_bucket, subs_of)
 
     try:
         # Build query using the same filter logic as export_csv
@@ -1282,6 +1297,7 @@ async def bulk_update_frame_type(
     rig_id: Optional[str] = Query(None, description="Assigned rig id, or 'none' for no rig (R0)"),
     rig_bucket: Optional[str] = Query(None, max_length=400,
         description="Unassigned bucket key from GET /api/equipment/unassigned (R0c)"),
+    subs_of: Optional[int] = Query(None, description="Light subs matching this integration master's framing"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
@@ -1292,7 +1308,7 @@ async def bulk_update_frame_type(
     failed_count = 0
     errors = []
 
-    bucket_ids = await _rig_bucket_ids(db, rig_bucket)
+    bucket_ids = await _restrict_ids(db, rig_bucket, subs_of)
 
     try:
         stmt = _build_image_query(
@@ -1414,6 +1430,7 @@ async def bulk_assign_target(
     rig_id: Optional[str] = Query(None, description="Assigned rig id, or 'none' for no rig (R0)"),
     rig_bucket: Optional[str] = Query(None, max_length=400,
         description="Unassigned bucket key from GET /api/equipment/unassigned (R0c)"),
+    subs_of: Optional[int] = Query(None, description="Light subs matching this integration master's framing"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
@@ -1429,7 +1446,7 @@ async def bulk_assign_target(
     updated_count = 0
     errors: List[str] = []
 
-    bucket_ids = await _rig_bucket_ids(db, rig_bucket)
+    bucket_ids = await _restrict_ids(db, rig_bucket, subs_of)
 
     try:
         stmt = _build_image_query(
@@ -1536,6 +1553,7 @@ async def bulk_assign_rig(
     rig_id: Optional[str] = Query(None, description="Assigned rig id, or 'none' for no rig (R0)"),
     rig_bucket: Optional[str] = Query(None, max_length=400,
         description="Unassigned bucket key from GET /api/equipment/unassigned (R0c)"),
+    subs_of: Optional[int] = Query(None, description="Light subs matching this integration master's framing"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
@@ -1563,7 +1581,7 @@ async def bulk_assign_rig(
     skipped_count = 0
     errors: List[str] = []
 
-    bucket_ids = await _rig_bucket_ids(db, rig_bucket)
+    bucket_ids = await _restrict_ids(db, rig_bucket, subs_of)
 
     try:
         stmt = _build_image_query(
@@ -1678,12 +1696,13 @@ async def bulk_sync_metadata(
     rig_id: Optional[str] = Query(None, description="Assigned rig id, or 'none' for no rig (R0)"),
     rig_bucket: Optional[str] = Query(None, max_length=400,
         description="Unassigned bucket key from GET /api/equipment/unassigned (R0c)"),
+    subs_of: Optional[int] = Query(None, description="Light subs matching this integration master's framing"),
     site_id: Optional[int] = Query(None, description="Filter by assigned site id (R0)"),
     quality: QualityFilters = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
     """Queue metadata re-extraction for all images matching the filters."""
-    bucket_ids = await _rig_bucket_ids(db, rig_bucket)
+    bucket_ids = await _restrict_ids(db, rig_bucket, subs_of)
 
     try:
         stmt = _build_image_query(
