@@ -198,7 +198,7 @@ frames and allocate them by hand, in bulk. Design: `R0b-rig-allocation.md`.
 - `fov_deg`
 - `focal_ratio`
 - `effective_focal_mm`
-- `sampling`: seeing ÷ scale. 1–3 px per FWHM is `ok`, below that is `under`, above is
+- `sampling`: seeing ÷ scale. 2–3 px per FWHM is `ok`, below that is `under`, above is
   `over`. It uses the default site's typical seeing, or 2.5″.
 - `scale_check`: declared vs measured scale. `delta_pct` is relative to the measured
   value, and the verdict is `ok` within 5%.

@@ -44,7 +44,7 @@ class TestScale:
 
 
 class TestSampling:
-    @pytest.mark.parametrize("fwhm,expected", [(0.8, "UNDER"), (1.0, "OK"), (2.5, "OK"), (3.0, "OK"), (4.2, "OVER"), (None, None)])
+    @pytest.mark.parametrize("fwhm,expected", [(0.8, "UNDER"), (1.0, "UNDER"), (1.9, "UNDER"), (2.0, "OK"), (2.5, "OK"), (3.0, "OK"), (4.2, "OVER"), (None, None)])
     def test_bands(self, fwhm, expected):
         assert sampling(fwhm) == expected
 

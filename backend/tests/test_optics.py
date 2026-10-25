@@ -45,6 +45,7 @@ def test_sampling():
     assert verdict == "over" and ratio == pytest.approx(7.35, abs=0.01)
     assert sampling(1.0, 2.5)[0] == "ok"
     assert sampling(6.5, 2.5)[0] == "under"
+    assert sampling(1.85, 2.5)[0] == "under"  # ratio ~1.35: below the 2px Nyquist floor
     assert sampling(None, 2.5) is None
 
 

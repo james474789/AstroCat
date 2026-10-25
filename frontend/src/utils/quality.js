@@ -51,7 +51,7 @@ export function deltaTone(pct) {
 }
 
 export const SAMPLING_LABELS = {
-    UNDER: { label: 'Undersampled', hint: 'Under 1 px per FWHM: stars are smaller than a pixel. Fine detail is lost; drizzle can help.' },
-    OK: { label: 'Well sampled', hint: '1–3 px per FWHM.' },
+    UNDER: { label: 'Undersampled', hint: 'Under 2 px per FWHM: stars are smaller than the Nyquist floor. Fine detail is lost; drizzle can help.' },
+    OK: { label: 'Well sampled', hint: '2–3 px per FWHM.' },
     OVER: { label: 'Oversampled', hint: 'Over 3 px per FWHM: binning 2x2 would lose little detail and improve signal-to-noise.' },
 };

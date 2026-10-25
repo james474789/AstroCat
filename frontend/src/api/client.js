@@ -1070,10 +1070,10 @@ export function computeFocalRatio(focalMm, apertureMm, modifierFactor = 1.0) {
 
 export function computeSampling(scaleArcsec, seeingArcsec = 2.5) {
     if (!scaleArcsec) return null;
-    // ratio = seeing / scale (pixels per FWHM, roughly). ok when 1.0 <= ratio <= 3.0.
+    // ratio = seeing / scale (pixels per FWHM, roughly). ok when 2.0 <= ratio <= 3.0.
     const ratio = seeingArcsec / scaleArcsec;
     let verdict = 'ok';
-    if (ratio < 1.0) verdict = 'under';
+    if (ratio < 2.0) verdict = 'under';
     else if (ratio > 3.0) verdict = 'over';
     return { verdict, ratio, seeing_arcsec: seeingArcsec };
 }

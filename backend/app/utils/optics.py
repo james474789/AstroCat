@@ -13,9 +13,9 @@ from typing import Any, Dict, Optional, Tuple
 
 ARCSEC_PER_RADIAN_OVER_1000 = 206.265
 
-# "ok" band for seeing / scale (pixels per seeing FWHM): 1-3 px is well
-# sampled (Nyquist-ish, 2-3 px per FWHM), below 1 undersampled, above 3 over.
-SAMPLING_MIN_RATIO = 1.0
+# "ok" band for seeing / scale (pixels per seeing FWHM): 2-3 px per FWHM is
+# well sampled (Nyquist-ish), below 2 undersampled, above 3 over.
+SAMPLING_MIN_RATIO = 2.0
 SAMPLING_MAX_RATIO = 3.0
 DEFAULT_SEEING_ARCSEC = 2.5
 SCALE_CHECK_TOLERANCE = 0.05
