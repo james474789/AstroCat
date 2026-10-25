@@ -295,8 +295,16 @@ const filterOrderIndex = (name) => {
 
 // Cross-rig comparison: median FWHM per rig x filter, so profiles and
 // filters can be compared side by side instead of expanding each rig card.
+// Collapsed by default; rows sorted sharpest (smallest overall FWHM) first.
 function RigFwhmTable({ rigs }) {
-    const rows = rigs.filter((r) => r.delivered_fwhm_by_filter && r.delivered_fwhm_by_filter.length > 0);
+    const [expanded, setExpanded] = useState(false);
+
+    const rows = useMemo(() => {
+        const withData = rigs.filter((r) => r.delivered_fwhm_by_filter && r.delivered_fwhm_by_filter.length > 0);
+        const fwhmRank = (r) => r.delivered_fwhm?.median_arcsec ?? r.delivered_fwhm?.median_px ?? Infinity;
+        return [...withData].sort((a, b) => fwhmRank(a) - fwhmRank(b));
+    }, [rigs]);
+
     const filters = useMemo(() => {
         const set = new Set();
         rows.forEach((r) => r.delivered_fwhm_by_filter.forEach((f) => set.add(f.filter)));
@@ -305,41 +313,52 @@ function RigFwhmTable({ rigs }) {
 
     if (rows.length === 0 || filters.length === 0) return null;
 
+    const ChevronIcon = expanded ? ChevronDown : ChevronRight;
+
     return (
-        <div className="rig-fwhm-table-wrap">
-            <table className="rig-fwhm-table">
-                <thead>
-                    <tr>
-                        <th>FWHM by filter</th>
-                        {filters.map((f) => (
-                            <th key={f}>
-                                <span className="chip-dot" style={{ background: filterColor(f) }} />
-                                {f}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((rig) => {
-                        const byFilter = new Map(rig.delivered_fwhm_by_filter.map((f) => [f.filter, f]));
-                        return (
-                            <tr key={rig.id}>
-                                <td className="rig-fwhm-table-name" title={rig.name}>{rig.name}</td>
-                                {filters.map((f) => {
-                                    const v = byFilter.get(f);
-                                    return (
-                                        <td key={f}>
-                                            {v
-                                                ? <QualityValue px={v.median_px} arcsec={v.median_arcsec} />
-                                                : <span className="muted">—</span>}
-                                        </td>
-                                    );
-                                })}
+        <div className="rig-fwhm-section">
+            <button className="rig-fwhm-section-toggle" onClick={() => setExpanded((e) => !e)}
+                aria-expanded={expanded}>
+                <ChevronIcon size={16} />
+                <span>FWHM by filter and Configuration</span>
+            </button>
+            {expanded && (
+                <div className="rig-fwhm-table-wrap">
+                    <table className="rig-fwhm-table">
+                        <thead>
+                            <tr>
+                                <th>Rig</th>
+                                {filters.map((f) => (
+                                    <th key={f}>
+                                        <span className="chip-dot" style={{ background: filterColor(f) }} />
+                                        {f}
+                                    </th>
+                                ))}
                             </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+                        </thead>
+                        <tbody>
+                            {rows.map((rig) => {
+                                const byFilter = new Map(rig.delivered_fwhm_by_filter.map((f) => [f.filter, f]));
+                                return (
+                                    <tr key={rig.id}>
+                                        <td className="rig-fwhm-table-name" title={rig.name}>{rig.name}</td>
+                                        {filters.map((f) => {
+                                            const v = byFilter.get(f);
+                                            return (
+                                                <td key={f}>
+                                                    {v
+                                                        ? <QualityValue px={v.median_px} arcsec={v.median_arcsec} />
+                                                        : <span className="muted">—</span>}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
         </div>
     );
 }

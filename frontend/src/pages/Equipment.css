@@ -343,8 +343,13 @@
 .page-equipment .rig-fwhm-by-filter { display: flex; flex-direction: column; gap: 0.15rem; margin: 0.15rem 0 0.35rem 1rem; }
 
 /* Cross-rig FWHM-by-filter comparison table */
+.page-equipment .rig-fwhm-section { margin-bottom: 0.75rem; }
+.page-equipment .rig-fwhm-section-toggle {
+    display: flex; align-items: center; gap: 0.3rem; background: none; border: none; padding: 0.2rem 0;
+    color: var(--color-text-primary); font-size: 0.85rem; font-weight: 500; cursor: pointer;
+}
 .page-equipment .rig-fwhm-table-wrap {
-    overflow-x: auto; margin-bottom: 0.75rem; border: 1px solid var(--color-border);
+    overflow-x: auto; margin-top: 0.4rem; border: 1px solid var(--color-border);
     border-radius: 10px; background: var(--color-surface);
 }
 .page-equipment .rig-fwhm-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
