@@ -58,11 +58,17 @@ def test_unknown_rotation_skips_the_check():
     assert ms.is_sub_of(MASTER, _img(2, rot=None))
 
 
-def test_cropped_master_matches_within_window():
-    master = _img(1, w=int(5184 * 0.9), h=int(3456 * 0.9))
-    assert ms.is_sub_of(master, _img(2, w=5184, h=3456))
-    heavy = _img(1, w=int(5184 * 0.8), h=int(3456 * 0.8))
-    assert not ms.is_sub_of(heavy, _img(2, w=5184, h=3456))
+def test_cropped_master_matches_down_to_half_the_area():
+    sub = _img(2, w=5184, h=3456)
+    assert ms.is_sub_of(_img(1, w=int(5184 * 0.9), h=int(3456 * 0.9)), sub)
+    assert ms.is_sub_of(_img(1, w=int(5184 * 0.75), h=int(3456 * 0.75)), sub)
+    assert not ms.is_sub_of(_img(1, w=int(5184 * 0.65), h=int(3456 * 0.65)), sub)
+
+
+def test_unsolved_path_keeps_the_per_side_crop_window():
+    sub = _img(2, w=5184, h=3456, solved=False)
+    assert ms.is_sub_of(_img(1, w=int(5184 * 0.9), h=int(3456 * 0.9), solved=False), sub)
+    assert not ms.is_sub_of(_img(1, w=int(5184 * 0.8), h=int(3456 * 0.8), solved=False), sub)
 
 
 def test_master_larger_than_sub_does_not_match():
@@ -73,10 +79,27 @@ def test_scale_off_by_five_percent_does_not_match():
     assert not ms.is_sub_of(MASTER, _img(2, scale=6.5 * 1.05))
 
 
-def test_centre_offset_beyond_tenth_of_radius_does_not_match():
-    # field radius ~7.6 deg -> limit ~0.76 deg
-    assert ms.is_sub_of(MASTER, _img(2, dec=45.17 + 0.5))
-    assert not ms.is_sub_of(MASTER, _img(2, dec=45.17 + 1.0))
+def test_sub_pointed_away_from_the_master_does_not_match():
+    # 12.6 x 8.4 deg field: a small offset keeps >90% of the master inside the sub, a large one doesn't
+    assert ms.is_sub_of(MASTER, _img(2, dec=45.17 + 0.3))
+    assert not ms.is_sub_of(MASTER, _img(2, dec=45.17 + 2.0))
+
+
+def test_multi_session_master_matches_subs_from_rotated_sessions():
+    # Prod #83592 (Cepheus/Cas HaRGB): stacked from sessions with the camera at 162-185 deg,
+    # then cropped to the shared area (height 84% of a sub's)
+    master = _img(1, ra=358.636, dec=63.504, scale=20.805, rot=351.10, w=7807, h=4755, rig=4)
+    for rot, ra, dec in [(162.26, 358.787, 63.254), (173, 358.8, 63.2), (180, 358.5, 63.3),
+                         (1, 358.9, 63.3), (5, 358.8, 63.3), (180, 2.0, 65.1)]:
+        assert ms.is_sub_of(master, _img(2, ra=ra, dec=dec, scale=20.7, rot=rot, w=8288, h=5644, rig=4)), rot
+    # Same session, but pointed ~7.7 deg south: only ~80% of the master is inside it
+    assert not ms.is_sub_of(master, _img(3, ra=0.0, dec=55.8, scale=20.76, rot=173, w=8288, h=5644, rig=4))
+
+
+def test_master_without_rotation_falls_back_to_centre():
+    master = _img(1, rot=None)
+    assert ms.is_sub_of(master, _img(2, dec=45.17 + 0.5, rot=10.0))
+    assert not ms.is_sub_of(master, _img(2, dec=45.17 + 1.0))
 
 
 def test_unsolved_sub_matches_on_target_rig_and_size():
