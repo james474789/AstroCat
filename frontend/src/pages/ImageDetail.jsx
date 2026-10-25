@@ -1034,7 +1034,17 @@ export default function ImageDetail({ inspector: forceInspector = false }) {
                                 <dl className="metadata-grid">
                                     <div className="metadata-item">
                                         <dt>Path</dt>
-                                        <dd className="font-mono text-sm">{image.file_path}</dd>
+                                        <dd className="font-mono text-sm">
+                                            <Link
+                                                to={`/search?${new URLSearchParams({
+                                                    path: image.file_path.substring(0, Math.max(image.file_path.lastIndexOf('/'), image.file_path.lastIndexOf('\\'))) || image.file_path,
+                                                    frame_type: 'ALL',
+                                                })}`}
+                                                title="Search for all files in this folder"
+                                            >
+                                                {image.file_path}
+                                            </Link>
+                                        </dd>
                                     </div>
                                     <div className="metadata-item">
                                         <dt>Format</dt>
