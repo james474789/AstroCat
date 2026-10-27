@@ -16,6 +16,7 @@ from pathlib import Path
 
 ERROR = re.compile(r"(^|\s)(error(\[E\d+\])?:|Error:|Traceback \(most recent call last\)|FAILED|failed to|\bpanicked\b)",
                    re.IGNORECASE)
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 CONTEXT_BEFORE, CONTEXT_AFTER, MAX_LINES = 3, 25, 120
 
 
@@ -46,7 +47,8 @@ def main():
     for f in files:
         if not f.is_file() or f.stat().st_size == 0:
             continue
-        lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        text = ANSI.sub("", f.read_text(encoding="utf-8", errors="replace"))  # cargo colours "error"
+        lines = text.splitlines()
         body = "\n".join(excerpt(lines))[-60000:]
         # property values additionally escape ":" and ","
         prop = encode(f"{title} - {f.name}").replace(":", "%3A").replace(",", "%2C")

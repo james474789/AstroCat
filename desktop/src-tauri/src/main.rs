@@ -120,10 +120,14 @@ fn send(app: &AppHandle, command: &str) {
 /// Ask the launcher to stop, give it SHUTDOWN_GRACE, then kill it.
 fn shutdown(app: &AppHandle) {
     let state = app.state::<Backend>();
-    if let Some(mut stdin) = state.stdin.lock().unwrap().take() {
+    // take() into locals so no MutexGuard temporary outlives `state` (edition 2021 keeps a
+    // tail expression's temporaries alive past the function's locals: E0597)
+    let stdin = state.stdin.lock().unwrap().take();
+    let child = state.child.lock().unwrap().take();
+    if let Some(mut stdin) = stdin {
         let _ = stdin.write_all(b"quit\n");
     } // stdin is dropped here: EOF also means quit
-    if let Some(mut child) = state.child.lock().unwrap().take() {
+    if let Some(mut child) = child {
         let deadline = Instant::now() + SHUTDOWN_GRACE;
         while Instant::now() < deadline {
             match child.try_wait() {

@@ -176,6 +176,7 @@ jobs:
       - name: Build app
         working-directory: desktop
         env:
+          CARGO_TERM_COLOR: never  # plain log for ci_annotate.py
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
