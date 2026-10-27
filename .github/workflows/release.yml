@@ -1,0 +1,211 @@
+# Release: Docker images + Windows installer + macOS (Apple Silicon) dmg from one commit.
+# D1, docs/design/20261027-D1-desktop-apps.md.
+#
+#   git tag v$(cat VERSION) && git push origin v$(cat VERSION)   -> builds, publishes a GitHub Release
+#   Actions > Release > Run workflow                             -> dry run: builds everything, publishes nothing
+#
+# Secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+# Variables (Settings > Variables): WINDOWS_REDIS_ZIP_URL, WINDOWS_REDIS_ZIP_SHA256 (the
+# Redis-compatible server chosen in the Phase 0 spike).
+# Optional signing (unsigned builds when absent): APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+# APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOCKERHUB_NAMESPACE: james474789
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      semver: ${{ steps.v.outputs.semver }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          if [ "$PUBLISH" = "true" ]; then check="--check-tag ${GITHUB_REF_NAME}"; fi
+          semver=$(python3 desktop/scripts/version.py $check)
+          echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+
+  docker:
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp VERSION ${{ matrix.image }}/VERSION
+      - uses: docker/setup-buildx-action@v3
+      - if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image }}
+          file: ${{ matrix.image }}/Dockerfile
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: |
+            ${{ env.DOCKERHUB_NAMESPACE }}/astrocat-${{ matrix.image }}:${{ needs.version.outputs.version }}
+            ${{ env.DOCKERHUB_NAMESPACE }}/astrocat-${{ matrix.image }}:latest
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  desktop:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: nsis
+            artifact: target/release/bundle/nsis/*.exe
+          - os: macos-14 # Apple Silicon
+            bundles: dmg
+            artifact: target/release/bundle/dmg/*.dmg
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          init-shell: none
+
+      - name: Fetch Redis-compatible server (Windows)
+        if: runner.os == 'Windows'
+        env:
+          URL: ${{ vars.WINDOWS_REDIS_ZIP_URL }}
+          SHA256: ${{ vars.WINDOWS_REDIS_ZIP_SHA256 }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SHA256" ]; then
+            echo "::error::Set WINDOWS_REDIS_ZIP_URL and WINDOWS_REDIS_ZIP_SHA256 (see docs/design/20261027-D1-desktop-apps.md)"; exit 1
+          fi
+          curl -fsSL "$URL" -o "$RUNNER_TEMP/redis.zip"
+          echo "$SHA256  $RUNNER_TEMP/redis.zip" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/redis-zip" && unzip -q "$RUNNER_TEMP/redis.zip" -d "$RUNNER_TEMP/redis-zip"
+          dir=$(dirname "$(find "$RUNNER_TEMP/redis-zip" -name redis-server.exe | head -1)")
+          echo "REDIS_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Fetch Postgres + PostGIS (Windows)
+        # conda-forge has no Windows PostGIS: EDB's server + OSGeo's bundle, pinned by SHA-256.
+        # OSGeo moves superseded bundles to archive/, so that is the fallback URL.
+        if: runner.os == 'Windows'
+        env:
+          EDB_URL: https://get.enterprisedb.com/postgresql/postgresql-18.6-5-windows-x64-binaries.zip
+          EDB_SHA256: e2246ba91d22345bc3d017586c09ede52d9df180b1eeb480f050445f1cad84e2
+          POSTGIS_FILE: postgis-bundle-pg18-3.6.2x64.zip
+          POSTGIS_BASE: https://download.osgeo.org/postgis/windows/pg18
+          POSTGIS_SHA256: 0f41241cc536f7404dda43fd2a3f20ffe1fa1d71a8d4f6341428cd25931bf419
+        run: |
+          curl -fsSL "$EDB_URL" -o "$RUNNER_TEMP/edb.zip"
+          echo "$EDB_SHA256  $RUNNER_TEMP/edb.zip" | sha256sum -c -
+          curl -fsSL "$POSTGIS_BASE/$POSTGIS_FILE" -o "$RUNNER_TEMP/postgis.zip" \
+            || curl -fsSL "$POSTGIS_BASE/archive/$POSTGIS_FILE" -o "$RUNNER_TEMP/postgis.zip"
+          echo "$POSTGIS_SHA256  $RUNNER_TEMP/postgis.zip" | sha256sum -c -
+          echo "EDB_ZIP=$RUNNER_TEMP/edb.zip" >> "$GITHUB_ENV"
+          echo "POSTGIS_ZIP=$RUNNER_TEMP/postgis.zip" >> "$GITHUB_ENV"
+
+      - name: Build bundled runtime
+        env:
+          # without this the solver picks postgresql builds needing macOS 13.3+ on a macos-14
+          # runner, quietly raising the "macOS 12+" floor (no effect on Windows)
+          CONDA_OVERRIDE_OSX: "12.0"
+        run: |
+          python -m pip install pefile  # Windows DLL-closure prune in build_runtime.py
+          args=()
+          if [ -n "${REDIS_DIR:-}" ]; then args+=(--redis-dir "$REDIS_DIR"); fi
+          if [ -n "${EDB_ZIP:-}" ]; then args+=(--edb-zip "$EDB_ZIP" --postgis-zip "$POSTGIS_ZIP"); fi
+          python desktop/runtime/build_runtime.py --micromamba "$MAMBA_EXE" "${args[@]}"
+
+      - name: Smoke-test the runtime (Postgres, Redis, API, workers)
+        working-directory: desktop/src-tauri/resources/runtime/backend
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then py=../python.exe; else py=../bin/python3; fi
+          "$py" -m app.desktop.launcher --smoke --data-dir "$RUNNER_TEMP/astrocat-smoke"
+
+      - name: Upload smoke-test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs-${{ matrix.os }}
+          path: ${{ runner.temp }}/astrocat-smoke/logs
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Build app
+        working-directory: desktop
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          npm ci
+          python scripts/version.py
+          npx tauri build --config src-tauri/tauri.version.json --bundles ${{ matrix.bundles }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: desktop/src-tauri/${{ matrix.artifact }}
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, docker, desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: AstroCat ${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## Downloads
+            - **Windows**: the `.exe` installer below (per-user, no admin rights needed).
+            - **macOS (Apple Silicon)**: the `.dmg` below.
+            - **Docker**: `docker pull ${{ env.DOCKERHUB_NAMESPACE }}/astrocat-backend:${{ needs.version.outputs.version }}` and `astrocat-frontend`, or use the attached `docker-compose-example.yml`.
+
+            The desktop builds are not code-signed yet. See `install-desktop.md` below for the one-time "open anyway" step.
+          files: |
+            dist/*
+            docker-compose-example.yml
+            docs/install-desktop.md

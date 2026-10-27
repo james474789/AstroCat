@@ -3,6 +3,9 @@ import asyncio
 
 def test_trigger_folder_scan_queues_selected_path(monkeypatch):
     from app.api.indexer import trigger_folder_scan
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "image_paths", "/data/images,/data/test")
 
     calls = {}
 
@@ -26,9 +29,12 @@ def test_trigger_folder_scan_queues_selected_path(monkeypatch):
     assert calls["path"] == "/data/test/folder"
 
 
-def test_trigger_folder_scan_rejects_invalid_path():
-    from app.api.indexer import trigger_folder_scan
+def test_trigger_folder_scan_rejects_invalid_path(monkeypatch):
+    from app.api.indexer import trigger_folder_scan, INVALID_PATH
+    from app.config import settings
 
-    result = asyncio.run(trigger_folder_scan({"path": "/tmp/not-allowed"}, None))
+    monkeypatch.setattr(settings, "image_paths", "/data/images")
 
-    assert result == {"error": "Invalid path format. Must start with /data/"}
+    for bad in ("/tmp/not-allowed", "/data/images/../secrets", "/data/images-backup/x", "", None, 42):
+        result = asyncio.run(trigger_folder_scan({"path": bad}, None))
+        assert result in ({"error": INVALID_PATH}, {"error": "Path required"}), bad

@@ -4,9 +4,17 @@ from fastapi.concurrency import run_in_threadpool
 from app.api.dependencies import require_admin
 from app.tasks.indexer import reindex_all
 from app.config import settings
+from app.utils.path_security import is_within_roots
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+INVALID_PATH = "Invalid path. Must be inside a configured image folder"
+
+
+def _is_library_path(path) -> bool:
+    """A scan/batch target must sit under one of the configured IMAGE_PATHS roots."""
+    return is_within_roots(path, settings.image_paths_list)
 
 
 @router.post("/scan")
@@ -24,13 +32,9 @@ async def trigger_folder_scan(payload: dict, background_tasks: BackgroundTasks =
         logger.warning("Folder scan triggered without path")
         return {"error": "Path required"}
 
-    if not isinstance(path, str) or not path.startswith("/data/"):
-        logger.warning(f"Invalid path format for folder scan: {path}")
-        return {"error": "Invalid path format. Must start with /data/"}
-
-    if ".." in path:
-        logger.warning(f"Path traversal attempt in folder scan: {path}")
-        return {"error": "Invalid path format. Must start with /data/"}
+    if not _is_library_path(path):
+        logger.warning(f"Invalid path for folder scan: {path}")
+        return {"error": INVALID_PATH}
 
     logger.info(f"Triggering folder scan for path: {path}")
     try:
@@ -53,15 +57,10 @@ async def trigger_bulk_matches(payload: dict, background_tasks: BackgroundTasks)
     if not path:
         return {"error": "Path required"}
     
-    # Input Validation: Ensure path is within /data/
-    if not path.startswith("/data/"):
+    # Input Validation: path must be inside a configured image folder (rejects traversal)
+    if not _is_library_path(path):
          logger.warning(f"Invalid path for bulk match: {path}")
-         return {"error": "Invalid path. Must start with /data/"}
-
-    # Prevent traversal
-    if ".." in path:
-         logger.warning(f"Path traversal attempt in bulk match: {path}")
-         return {"error": "Invalid path"}
+         return {"error": INVALID_PATH}
 
     logger.info(f"Triggering bulk match for mount path: {path}")
     from app.tasks.bulk import bulk_match_task
@@ -85,9 +84,9 @@ async def trigger_bulk_rescan(payload: dict, background_tasks: BackgroundTasks):
         logger.warning("Bulk rescan triggered without path")
         return {"error": "Path required"}
     
-    if not isinstance(path, str) or not path.startswith("/data/"):
-        logger.warning(f"Invalid path format for bulk rescan: {path}")
-        return {"error": "Invalid path format. Must start with /data/"}
+    if not _is_library_path(path):
+        logger.warning(f"Invalid path for bulk rescan: {path}")
+        return {"error": INVALID_PATH}
         
     logger.info(f"Triggering bulk rescan for mount path: {path} (force={force})")
     
@@ -111,8 +110,8 @@ async def trigger_bulk_thumbnails(payload: dict, background_tasks: BackgroundTas
     if not path:
         return {"error": "Path required"}
     
-    if not path.startswith("/data/"):
-        return {"error": "Invalid path. Must start with /data/"}
+    if not _is_library_path(path):
+        return {"error": INVALID_PATH}
 
     logger.info(f"Triggering bulk thumbnails for path: {path}")
     from app.tasks.bulk import bulk_thumbnail_task
@@ -131,8 +130,8 @@ async def trigger_bulk_metadata(payload: dict, background_tasks: BackgroundTasks
     if not path:
         return {"error": "Path required"}
     
-    if not path.startswith("/data/"):
-        return {"error": "Invalid path. Must start with /data/"}
+    if not _is_library_path(path):
+        return {"error": INVALID_PATH}
 
     logger.info(f"Triggering bulk metadata for path: {path}")
     from app.tasks.bulk import bulk_metadata_task

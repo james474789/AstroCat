@@ -4,6 +4,7 @@ Endpoints for login, logout, and user information.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
+from fastapi.responses import RedirectResponse
 import secrets
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -120,7 +121,57 @@ async def get_setup_status(db: AsyncSession = Depends(get_db)):
     """
     result = await db.execute(select(User).where(User.is_admin == True))
     admin_exists = result.scalars().first() is not None
-    return {"setup_complete": admin_exists}
+    return {"setup_complete": admin_exists, "desktop_mode": settings.desktop_mode}
+
+
+# D1: the desktop app has one local user and no login screen. The Tauri shell opens
+# /api/auth/desktop-login?nonce=<per-launch secret from the launcher>, which signs that user in.
+DESKTOP_USER_EMAIL = "astrocat@localhost"
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+@router.get("/desktop-login")
+async def desktop_login(request: Request, nonce: str = "", db: AsyncSession = Depends(get_db)):
+    """
+    Sign in the local desktop user and redirect to the app.
+    Only exists in desktop mode, only from loopback, and only with the launcher's nonce.
+    """
+    if not settings.desktop_mode or not settings.desktop_launch_nonce:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+    client_host = request.client.host if request.client else ""
+    if client_host not in _LOOPBACK_HOSTS or not secrets.compare_digest(
+        nonce.encode(), settings.desktop_launch_nonce.encode()
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    # The first active admin is the desktop user; create it on first launch.
+    result = await db.execute(select(User).where(User.is_admin == True, User.is_active == True).order_by(User.id))
+    user = result.scalars().first()
+    if not user:
+        user = User(
+            email=DESKTOP_USER_EMAIL,
+            # never typed: the desktop app signs in with the nonce, not a password
+            hashed_password=auth_service.get_password_hash(secrets.token_urlsafe(32)),
+            is_admin=True,
+            is_active=True,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+    response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    access_token = auth_service.create_access_token(data={"sub": user.email})
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        max_age=settings.cookie_max_age,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+    )
+    _set_csrf_cookie(response)
+    return response
 
 @router.post("/admin-sign-up", response_model=UserResponse)
 @limiter.limit("3/hour")
@@ -135,6 +186,13 @@ async def admin_sign_up(
     Only works if no users exist in the database.
     Rate limited to 3 attempts per hour to prevent abuse.
     """
+    if settings.desktop_mode:
+        # the desktop user is created by /desktop-login; no other account can be set up
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The desktop app signs in automatically."
+        )
+
     # Check if any user exists
     result = await db.execute(select(User))
     if result.scalars().first():

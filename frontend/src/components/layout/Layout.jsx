@@ -57,7 +57,7 @@ function groupNavItems(items) {
 const navSections = groupNavItems(navItems);
 
 export default function Layout({ children }) {
-    const { logout, user, systemVersion } = useAuth();
+    const { logout, user, systemVersion, desktopMode } = useAuth();
     const location = useLocation();
     const [moreOpen, setMoreOpen] = useState(false);
     const [accountOpen, setAccountOpen] = useState(false);
@@ -157,10 +157,12 @@ export default function Layout({ children }) {
                                 <span>Star sizes</span>
                                 <QualityUnitsToggle compact />
                             </div>
-                            <button className="account-logout" onClick={logout}>
-                                <LogOut size={18} />
-                                <span>Log out</span>
-                            </button>
+                            {!desktopMode && (
+                                <button className="account-logout" onClick={logout}>
+                                    <LogOut size={18} />
+                                    <span>Log out</span>
+                                </button>
+                            )}
                             <span className="account-version text-muted">{version}</span>
                         </div>
                     )}
@@ -233,9 +235,11 @@ export default function Layout({ children }) {
                         <span>Star sizes</span>
                         <QualityUnitsToggle compact />
                     </div>
-                    <button className="btn btn-secondary" onClick={logout}>
-                        <LogOut size={18} /> Log out ({user?.email || 'User'})
-                    </button>
+                    {!desktopMode && (
+                        <button className="btn btn-secondary" onClick={logout}>
+                            <LogOut size={18} /> Log out ({user?.email || 'User'})
+                        </button>
+                    )}
                     <span className="text-muted more-version">{version}</span>
                 </div>
             </BottomSheet>

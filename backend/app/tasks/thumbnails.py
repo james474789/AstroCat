@@ -42,10 +42,10 @@ def generate_thumbnail(self, image_id: int, force: bool = False):
             if not os.path.exists(image.file_path):
                  return {"status": "error", "message": "Source file not found"}
 
-            thumb_cache_dir = os.environ.get("THUMBNAIL_CACHE_PATH", "/data/thumbnails")
-            
-            # Use settings for max size
             from app.config import settings
+            thumb_cache_dir = settings.thumbnail_cache_path
+
+            # Use settings for max size
             max_size = (settings.thumbnail_max_size, settings.thumbnail_max_size)
             
             # Generate (this now includes the hash fix and force parameter)

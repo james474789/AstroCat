@@ -114,7 +114,9 @@ app.add_middleware(CSRFMiddleware)
 
 @app.get("/", tags=["Health"])
 async def root():
-    """Root endpoint - API information."""
+    """Root endpoint - API information (or the frontend, when FastAPI serves it)."""
+    if settings.frontend_dist_dir:
+        return _frontend_index()
     return {
         "name": "AstroCat API",
         "version": __version__,
@@ -281,8 +283,33 @@ app.include_router(sky_online.images_router, prefix="/api/images", tags=["Online
 
 
 # =============================================================================
-# Temporary placeholder endpoints (Removed as routers are active)
+# Frontend (D1 desktop app): no nginx, so FastAPI serves the built SPA itself.
+# Registered last so every /api route above wins.
 # =============================================================================
+
+def _frontend_index():
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    # index.html must not be cached: it names the hashed asset bundles of this build
+    return FileResponse(Path(settings.frontend_dist_dir) / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+if settings.frontend_dist_dir:
+    from pathlib import Path
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+
+    _frontend_root = Path(settings.frontend_dist_dir).resolve()
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def frontend(full_path: str):
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = (_frontend_root / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(_frontend_root):
+            return FileResponse(candidate)
+        return _frontend_index()  # client-side route
+
 
 
 if __name__ == "__main__":

@@ -345,6 +345,14 @@ async def get_system_stats():
         print(f"CRITICAL ERROR in get_system_stats: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+def _pg_tool(name: str) -> str:
+    """pg_dump/psql from settings.pg_bin_dir (desktop app), else whatever is on PATH (Docker)."""
+    if not settings.pg_bin_dir:
+        return name
+    exe = f"{name}.exe" if os.name == "nt" else name
+    return os.path.join(settings.pg_bin_dir, exe)
+
+
 @router.get("/backup/download")
 async def download_backup():
     """
@@ -372,7 +380,7 @@ async def download_backup():
 
         # Use pg_dump to create the backup
         cmd = [
-            "pg_dump",
+            _pg_tool("pg_dump"),
             "-h", host,
             "-p", str(port),
             "-U", user,
@@ -458,7 +466,7 @@ async def upload_backup(file: UploadFile = File(...)):
         try:
             # Use psql to restore the backup
             cmd = [
-                "psql",
+                _pg_tool("psql"),
                 "-h", host,
                 "-p", str(port),
                 "-U", user,

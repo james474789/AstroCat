@@ -1,0 +1,21 @@
+# Bundled runtime for the AstroCat desktop app (D1, docs/design/20261027-D1-desktop-apps.md).
+# Native pieces come from conda-forge so one recipe builds on Windows and macOS arm64;
+# the Python packages come from backend/requirements.txt (pip), same as the Docker image,
+# minus pyvips (build_runtime.py drops that pin so pip keeps conda's pyvips).
+#
+# Postgres is 18 because the only osx-arm64 PostGIS (3.6) is built against it. Desktop
+# clusters are always new, so differing from Docker's 16/3.4 is fine.
+# Windows: conda-forge has no PostGIS, so Postgres + PostGIS come from EDB + OSGeo instead
+# (build_runtime.py --edb-zip/--postgis-zip -> <runtime>/pgsql); see "Windows PostGIS spike".
+# sel() is evaluated against the host OS, so build natively on each platform.
+name: astrocat-runtime
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - libvips=8.18
+  - pyvips=3.2                  # pip's pyvips 2.2.3 looks for libvips-42.dll; conda names it vips-42.dll
+  - sel(osx): postgresql=18
+  - sel(osx): postgis=3.6
+  - sel(osx): redis-server=8.10

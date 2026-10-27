@@ -65,6 +65,30 @@ def validate_path_safety(
         return False
 
 
+def is_within_roots(target: str, allowed_roots: List[Union[str, Path]]) -> bool:
+    """
+    Lexical check that ``target`` sits at or under one of ``allowed_roots``.
+
+    Unlike validate_path_safety the path need not exist (a scan request can name a folder
+    that is not mounted yet), so nothing is resolved on disk. Any ``..`` component is
+    rejected outright. Works for POSIX container paths and Windows drive paths alike.
+    """
+    if not isinstance(target, str) or not target:
+        return False
+    if ".." in Path(target).parts or ".." in target.replace("\\", "/").split("/"):
+        return False
+    norm = os.path.normcase(os.path.normpath(target))
+    for root in allowed_roots:
+        root_norm = os.path.normcase(os.path.normpath(str(root)))
+        try:
+            if os.path.commonpath([norm, root_norm]) == root_norm:
+                return True
+        except ValueError:
+            # different drives (Windows) or mixed absolute/relative
+            continue
+    return False
+
+
 def sanitize_filename(filename: str, max_length: int = 255) -> str:
     """
     Sanitize a filename to prevent directory traversal and other attacks.
