@@ -5,8 +5,10 @@
 #   Actions > Release > Run workflow                             -> dry run: builds everything, publishes nothing
 #
 # Secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
-# Variables (Settings > Variables): WINDOWS_REDIS_ZIP_URL, WINDOWS_REDIS_ZIP_SHA256 (the
-# Redis-compatible server chosen in the Phase 0 spike).
+# Optional variables WINDOWS_REDIS_ZIP_URL / WINDOWS_REDIS_ZIP_SHA256 override the pinned Windows
+# Redis build (redis-windows MSYS2 8.10.2, chosen in the Phase 0 spike).
+# Failed steps publish their error lines as annotations (desktop/scripts/ci_annotate.py): job
+# logs need a signed-in user, annotations are readable through the public API.
 # Optional signing (unsigned builds when absent): APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
 # APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
 name: Release
@@ -104,12 +106,9 @@ jobs:
       - name: Fetch Redis-compatible server (Windows)
         if: runner.os == 'Windows'
         env:
-          URL: ${{ vars.WINDOWS_REDIS_ZIP_URL }}
-          SHA256: ${{ vars.WINDOWS_REDIS_ZIP_SHA256 }}
+          URL: ${{ vars.WINDOWS_REDIS_ZIP_URL || 'https://github.com/redis-windows/redis-windows/releases/download/8.10.2/Redis-8.10.2-Windows-x64-msys2.zip' }}
+          SHA256: ${{ vars.WINDOWS_REDIS_ZIP_SHA256 || '7c8cebd50347eaa1d9e784da842ed47a4f33394637835531d6614777b950ee85' }}
         run: |
-          if [ -z "$URL" ] || [ -z "$SHA256" ]; then
-            echo "::error::Set WINDOWS_REDIS_ZIP_URL and WINDOWS_REDIS_ZIP_SHA256 (see docs/design/20261027-D1-desktop-apps.md)"; exit 1
-          fi
           curl -fsSL "$URL" -o "$RUNNER_TEMP/redis.zip"
           echo "$SHA256  $RUNNER_TEMP/redis.zip" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/redis-zip" && unzip -q "$RUNNER_TEMP/redis.zip" -d "$RUNNER_TEMP/redis-zip"
@@ -145,13 +144,22 @@ jobs:
           args=()
           if [ -n "${REDIS_DIR:-}" ]; then args+=(--redis-dir "$REDIS_DIR"); fi
           if [ -n "${EDB_ZIP:-}" ]; then args+=(--edb-zip "$EDB_ZIP" --postgis-zip "$POSTGIS_ZIP"); fi
-          python desktop/runtime/build_runtime.py --micromamba "$MAMBA_EXE" "${args[@]}"
+          set -o pipefail
+          python desktop/runtime/build_runtime.py --micromamba "$MAMBA_EXE" "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/runtime-build.log"
+
+      - name: Report runtime build errors
+        if: failure()
+        run: python desktop/scripts/ci_annotate.py "runtime build (${{ matrix.os }})" "$RUNNER_TEMP/runtime-build.log"
 
       - name: Smoke-test the runtime (Postgres, Redis, API, workers)
         working-directory: desktop/src-tauri/resources/runtime/backend
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then py=../python.exe; else py=../bin/python3; fi
           "$py" -m app.desktop.launcher --smoke --data-dir "$RUNNER_TEMP/astrocat-smoke"
+
+      - name: Report smoke-test errors
+        if: failure()
+        run: python desktop/scripts/ci_annotate.py "smoke test (${{ matrix.os }})" "$RUNNER_TEMP/astrocat-smoke/logs"
 
       - name: Upload smoke-test logs
         if: failure()
@@ -175,9 +183,19 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          # an APPLE_* variable that is set but empty makes Tauri try (and fail) to import a
+          # certificate; unset the ones whose secrets don't exist so the build is just unsigned
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!v}" ]; then unset "$v"; fi
+          done
+          set -o pipefail
           npm ci
           python scripts/version.py
-          npx tauri build --config src-tauri/tauri.version.json --bundles ${{ matrix.bundles }}
+          npx tauri build --config src-tauri/tauri.version.json --bundles ${{ matrix.bundles }} 2>&1 | tee "$RUNNER_TEMP/tauri-build.log"
+
+      - name: Report app build errors
+        if: failure()
+        run: python desktop/scripts/ci_annotate.py "app build (${{ matrix.os }})" "$RUNNER_TEMP/tauri-build.log"
 
       - uses: actions/upload-artifact@v4
         with:
