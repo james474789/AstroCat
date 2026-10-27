@@ -14,6 +14,9 @@ name: Release
 on:
   push:
     tags: ["v*"]
+    # dry run on every push while the desktop work is on its branch: PUBLISH is false for
+    # anything but a v* tag, so nothing is pushed to Docker Hub or released. Remove after merge.
+    branches: [desktop-apps]
   workflow_dispatch:
 
 permissions:
