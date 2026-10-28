@@ -37,6 +37,10 @@ from app.desktop.supervisor import Child, Supervisor, kill_children_with_launche
 logger = logging.getLogger("astrocat.desktop")
 
 IS_WINDOWS = sys.platform == "win32"
+# Celery's prefork pool needs fork(). Windows has none, and macOS defaults to spawn: its pool
+# children never get the task table, so every task dies with "not enough values to unpack
+# (expected 3, got 0)" (found in the macOS regression run, ISSUE-003).
+NO_PREFORK = IS_WINDOWS or sys.platform == "darwin"
 BACKEND_ROOT = Path(__file__).resolve().parents[2]  # folder holding app/ and alembic.ini
 FRONTEND_PORT_DOCKER = 8090  # client.js treats a page on this port as the split nginx setup
 DESKTOP_SESSION_S = 30 * 24 * 3600
@@ -219,16 +223,16 @@ def build_env(paths: DesktopPaths, cfg: dict, *, pg_url: str, redis_port: int, n
 def app_commands(paths: DesktopPaths, cfg: dict, api_port: int) -> dict[str, tuple[list[str], dict]]:
     """
     supervisord.conf's programs, adapted for a desktop: one uvicorn worker, a smaller main pool.
-    Windows has no prefork pool, so the main worker uses threads and the heavy single-task
-    workers use solo (the Supervisor enforces their memory ceiling instead of
-    --max-memory-per-child, which only prefork supports).
+    Windows and macOS have no usable prefork pool (see NO_PREFORK), so the main worker uses
+    threads and the heavy single-task workers use solo (the Supervisor enforces their memory
+    ceiling instead of --max-memory-per-child, which only prefork supports).
     """
     py = sys.executable
     celery = [py, "-m", "celery", "-A", "app.worker"]
     concurrency = str(cfg.get("celery_workers", 4))
-    main_pool = ["-P", "threads"] if IS_WINDOWS else []
-    solo = ["-P", "solo"] if IS_WINDOWS else []
-    quality_mem = [] if IS_WINDOWS else ["--max-memory-per-child=900000"]
+    main_pool = ["-P", "threads"] if NO_PREFORK else []
+    solo = ["-P", "solo"] if NO_PREFORK else []
+    quality_mem = [] if NO_PREFORK else ["--max-memory-per-child=900000"]
     return {
         "uvicorn": ([py, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
                      "--port", str(api_port), "--workers", "1"], {}),

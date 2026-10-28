@@ -101,7 +101,7 @@ class Supervisor:
     def _check(self, child: Child):
         now = time.monotonic()
         if child.running():
-            if child.max_rss_mb and IS_WINDOWS:
+            if child.max_rss_mb:
                 rss = _rss_mb(child.proc.pid)
                 if rss and rss > child.max_rss_mb:
                     logger.warning("%s using %d MB (> %d), recycling", child.name, rss, child.max_rss_mb)
@@ -338,7 +338,13 @@ def kill_children_with_launcher():
 
 
 def _rss_mb(pid) -> int | None:
-    """Working set of a Windows process in MB, or None if it can't be read."""
+    """Resident memory of a Windows or macOS process in MB, or None if it can't be read."""
+    if sys.platform == "darwin":
+        try:
+            out = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=5)
+            return int(out.stdout.strip()) // 1024  # ps reports KB
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
     if not IS_WINDOWS:
         return None
     import ctypes
