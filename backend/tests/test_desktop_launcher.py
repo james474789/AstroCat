@@ -279,6 +279,8 @@ def _can_symlink(tmp_path):
         return False
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="macOS-only feature; Windows can't os.replace over a directory symlink")
 def test_build_prefix_link_follows_the_runtime_wherever_it_is(tmp_path):
     if not _can_symlink(tmp_path):
         pytest.skip("creating symlinks needs privileges on this machine")
