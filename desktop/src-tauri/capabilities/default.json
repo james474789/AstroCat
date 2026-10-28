@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "The bundled splash page only. The AstroCat UI itself is served by the local backend and gets no Tauri access.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "updater:default", "process:allow-restart"]
 }

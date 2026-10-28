@@ -307,6 +307,8 @@ Ask each one when you reach the phase that needs it, not all up front. Use the A
 
 ## 9. Phase E: closing the feature gaps (post-v1, each item gated by Q5)
 
+> **Superseded by [D3, desktop handover](20261028-D3-desktop-handover.md) §5**, which refines these designs after v1 shipped.
+
 Each item is its own change (and, after the merge, its own PR from `main`). Each one gets the full A-style treatment: tests, VERSION bump, rebuild, stop for review. The designs below are deliberately concrete. Where an item needs a fact checked first, it says so.
 
 ### E1. Auto-updater (desktop users can't currently update)

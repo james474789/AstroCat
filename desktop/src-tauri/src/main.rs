@@ -4,24 +4,46 @@
 // and the Celery workers), then points the window at the local API's desktop sign-in URL.
 // The launcher talks back with one JSON line per event on stdout, and takes "restart" / "quit"
 // on stdin; closing stdin also stops it.
+//
+// Updates (D3 5.2): a background check against the GitHub release's latest.json. A found update
+// only adds a tray item and a one-time dialog; installing stops the backend first (NSIS can't
+// replace a running python.exe, and Postgres must shut down cleanly), then runs the installer.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent, Wry};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 /// How long the launcher gets to stop Postgres and Redis cleanly before it is killed.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(45);
+
+/// Delay before the first update check, so it doesn't compete with the backend starting up.
+const FIRST_UPDATE_CHECK: Duration = Duration::from_secs(20);
+const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+const UPDATE_ITEM_IDLE: &str = "Check for updates…";
+
+#[derive(Default)]
+struct Updates {
+    /// The update found by the last check, installed when the tray item is clicked.
+    pending: Mutex<Option<Update>>,
+    /// The version the user was last told about, so the dialog appears once per version.
+    notified: Mutex<Option<String>>,
+    item: Mutex<Option<MenuItem<Wry>>>,
+    checker_started: AtomicBool,
+    installing: AtomicBool,
+}
 
 #[derive(Default)]
 struct Backend {
@@ -96,6 +118,7 @@ fn on_event(app: &AppHandle, event: &Value) {
             let _ = app.emit("backend-status", field("message"));
         }
         "ready" => {
+            start_update_checker(app);
             if let (Some(win), Ok(url)) = (
                 app.get_webview_window("main"),
                 field("login_url").parse::<tauri::Url>(),
@@ -138,6 +161,121 @@ fn shutdown(app: &AppHandle) {
         }
         let _ = child.kill();
     }
+}
+
+fn set_update_item(app: &AppHandle, text: &str, enabled: bool) {
+    if let Some(item) = app.state::<Updates>().item.lock().unwrap().as_ref() {
+        let _ = item.set_text(text);
+        let _ = item.set_enabled(enabled);
+    }
+}
+
+fn info_dialog(app: &AppHandle, message: String, kind: MessageDialogKind) {
+    app.dialog().message(message).kind(kind).show(|_| {});
+}
+
+/// First "ready" starts the periodic background check; later ones (service restarts) don't.
+fn start_update_checker(app: &AppHandle) {
+    if app.state::<Updates>().checker_started.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(FIRST_UPDATE_CHECK);
+        loop {
+            check_for_update(&app, false);
+            std::thread::sleep(UPDATE_CHECK_INTERVAL);
+        }
+    });
+}
+
+/// Ask GitHub whether a newer release exists. A manual check (tray click) also reports "up to
+/// date" and errors; the background check stays silent unless there is something to install.
+fn check_for_update(app: &AppHandle, manual: bool) {
+    let result = tauri::async_runtime::block_on(async {
+        let updater = app.updater().map_err(|e| e.to_string())?;
+        updater.check().await.map_err(|e| e.to_string())
+    });
+    match result {
+        Ok(Some(update)) => {
+            let version = update.version.clone();
+            let state = app.state::<Updates>();
+            *state.pending.lock().unwrap() = Some(update);
+            set_update_item(app, &format!("Install update {version} and restart"), true);
+            let first_time = {
+                let mut notified = state.notified.lock().unwrap();
+                let first = notified.as_deref() != Some(version.as_str());
+                *notified = Some(version.clone());
+                first
+            };
+            if first_time || manual {
+                let handle = app.clone();
+                app.dialog()
+                    .message(format!(
+                        "AstroCat {version} is available. Installing stops AstroCat's background services, \
+                         updates the app and restarts it. Your library and settings are kept."
+                    ))
+                    .title("Update available")
+                    .kind(MessageDialogKind::Info)
+                    .buttons(MessageDialogButtons::OkCancelCustom(
+                        "Install and restart".into(),
+                        "Later".into(),
+                    ))
+                    .show(move |install| {
+                        if install {
+                            install_update(&handle);
+                        }
+                    });
+            }
+        }
+        Ok(None) => {
+            if manual {
+                info_dialog(app, "AstroCat is up to date.".into(), MessageDialogKind::Info);
+            }
+        }
+        Err(e) => {
+            if manual {
+                info_dialog(app, format!("Could not check for updates: {e}"), MessageDialogKind::Error);
+            }
+        }
+    }
+}
+
+/// Download, stop the backend, run the installer, relaunch. Nothing is installed automatically.
+fn install_update(app: &AppHandle) {
+    let state = app.state::<Updates>();
+    if state.installing.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let Some(update) = state.pending.lock().unwrap().clone() else {
+        state.installing.store(false, Ordering::SeqCst);
+        return;
+    };
+    let app = app.clone();
+    std::thread::spawn(move || {
+        set_update_item(&app, "Downloading update…", false);
+        let bytes = match tauri::async_runtime::block_on(update.download(|_, _| {}, || {})) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                set_update_item(&app, &format!("Install update {} and restart", update.version), true);
+                app.state::<Updates>().installing.store(false, Ordering::SeqCst);
+                info_dialog(&app, format!("The update could not be downloaded: {e}"), MessageDialogKind::Error);
+                return;
+            }
+        };
+        set_update_item(&app, "Installing update…", false);
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.hide();
+        }
+        // required before install: the installer can't replace a running python.exe, and
+        // Postgres must be stopped cleanly rather than killed with the old install
+        shutdown(&app);
+        if let Err(e) = update.install(bytes) {
+            // the old version is still installed: start it again rather than leave a dead tray
+            info_dialog(&app, format!("The update could not be installed: {e}. AstroCat will restart."), MessageDialogKind::Error);
+        }
+        app.restart();
+    });
 }
 
 fn quit(app: &AppHandle) {
@@ -216,9 +354,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open AstroCat", true, None::<&str>)?;
     let folders = MenuItem::with_id(app, "folders", "Choose library folders…", true, None::<&str>)?;
     let logs = MenuItem::with_id(app, "logs", "Open logs folder", true, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", UPDATE_ITEM_IDLE, true, None::<&str>)?;
+    *app.state::<Updates>().item.lock().unwrap() = Some(update.clone());
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit AstroCat", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &folders, &logs, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[&open, &folders, &logs, &update, &separator, &quit_item])?;
 
     let mut tray = TrayIconBuilder::with_id("main").tooltip("AstroCat").menu(&menu);
     if let Some(icon) = app.default_window_icon() {
@@ -228,6 +368,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         "open" => show_main(app),
         "folders" => choose_library_folders(app),
         "logs" => open_logs(app.clone()),
+        "update" => {
+            let app = app.clone();
+            std::thread::spawn(move || {
+                if app.state::<Updates>().pending.lock().unwrap().is_some() {
+                    install_update(&app);
+                } else {
+                    check_for_update(&app, true);
+                }
+            });
+        }
         "quit" => quit(app),
         _ => {}
     })
@@ -241,7 +391,10 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(Backend::default())
+        .manage(Updates::default())
         .invoke_handler(tauri::generate_handler![open_logs])
         .setup(|app| {
             let handle = app.handle().clone();
