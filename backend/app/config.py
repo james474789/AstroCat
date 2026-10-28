@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     desktop_launch_nonce: str = ""        # per-launch secret the Tauri shell presents to sign in
     frontend_dist_dir: str = ""           # serve the built frontend from FastAPI (no nginx)
     pg_bin_dir: str = ""                  # folder of pg_dump/psql; empty = PATH (Docker)
+    desktop_config_path: str = ""         # the data folder's config.json (Admin > API keys writes it)
 
     @field_validator('secret_key')
     @classmethod

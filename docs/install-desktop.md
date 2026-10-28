@@ -57,7 +57,7 @@ The bundled database server is PostgreSQL 18, and its data can only be opened by
 
 ## Optional API keys
 
-Online plate solving (astrometry.net), a local astrometry server, and the Telescopius and meteoblue integrations need keys. Add them under `"api_keys"` in `config.json` in the data folder above, then restart AstroCat:
+Online plate solving (astrometry.net), a local astrometry server, and the Telescopius and meteoblue integrations need keys. Enter them in AstroCat under **Admin → API Keys**; saving restarts the background services for a few seconds, and stored keys are never shown again (only the last four characters). The keys are kept in `config.json` in the data folder, so you can also add them there by hand under `"api_keys"`:
 
 ```json
 "api_keys": {
@@ -69,4 +69,4 @@ Online plate solving (astrometry.net), a local astrometry server, and the Telesc
 }
 ```
 
-User environment variables with the same names also work.
+AstroCat notices a change to `config.json` while it runs and restarts its services itself. User environment variables with the same names also work.

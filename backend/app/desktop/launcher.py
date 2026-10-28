@@ -57,6 +57,36 @@ API_KEY_VARS = ("ASTROMETRY_API_KEY", "LOCAL_ASTROMETRY_URL", "LOCAL_ASTROMETRY_
                 "TELESCOPIUS_API_KEY", "METEOBLUE_API_KEY")
 
 
+# config.json keys whose change needs the app processes restarted (the rest are launcher state)
+WATCHED_CONFIG_KEYS = {"image_paths": [], "api_keys": {}, "celery_workers": None}
+CONFIG_DEBOUNCE_S = 1.0
+
+
+class ConfigWatcher:
+    """True from poll() once config.json changed and then stayed quiet for `debounce` seconds."""
+
+    def __init__(self, path: Path, *, debounce: float = CONFIG_DEBOUNCE_S, clock=time.monotonic):
+        self.path, self.debounce, self.clock = path, debounce, clock
+        self._seen = self._mtime()
+        self._changed_at = None
+
+    def _mtime(self):
+        try:
+            return self.path.stat().st_mtime_ns
+        except OSError:
+            return None
+
+    def poll(self) -> bool:
+        mtime, now = self._mtime(), self.clock()
+        if mtime != self._seen:
+            self._seen, self._changed_at = mtime, now
+            return False
+        if self._changed_at is not None and now - self._changed_at >= self.debounce:
+            self._changed_at = None
+            return True
+        return False
+
+
 def emit(event: str, **fields):
     """One JSON line on stdout for the Tauri shell."""
     sys.stdout.write(json.dumps({"event": event, **fields}) + "\n")
@@ -175,6 +205,7 @@ def build_env(paths: DesktopPaths, cfg: dict, *, pg_url: str, redis_port: int, n
         "LOG_DIR": str(paths.logs),
         "DESKTOP_MODE": "true",
         "DESKTOP_LAUNCH_NONCE": nonce,
+        "DESKTOP_CONFIG_PATH": str(paths.config_file),  # api/settings.py desktop-keys writes here
         "FRONTEND_DIST_DIR": frontend_dist(),
         "PYTHONUNBUFFERED": "1",
         "PYTHONIOENCODING": "utf-8",
@@ -263,6 +294,8 @@ class Launcher:
         self.nonce = secrets.token_urlsafe(32)
         self.pg_port, self.redis_port, self.api_port = free_port(), free_port(), free_port()
         self.supervisor = Supervisor(self.paths.children_file)
+        self.config_watcher = ConfigWatcher(self.paths.config_file)
+        self._reload_lock = threading.Lock()
         self.postgres = None
         self.env = None
         self._redis = None
@@ -363,22 +396,41 @@ class Launcher:
             return
         try:
             dest = self.postgres.backup()
+            # merge into what is on disk: the API may have saved new api_keys since we loaded
             self.cfg["last_backup"] = time.time()
-            save_config(self.paths, self.cfg)
+            save_config(self.paths, {**load_config(self.paths), "last_backup": self.cfg["last_backup"]})
             logger.info("database backup written to %s", dest)
         except Exception:
             logger.exception("database backup failed")
 
     def reload(self):
         """Re-read config.json (new library folders) and restart the app processes with it."""
-        self.cfg = load_config(self.paths)
-        self.env = self._make_env()
-        with self.supervisor._lock:
-            for child in self.supervisor.children:
-                if child.name in APP_CHILDREN:
-                    child.env = self.env
-        self.supervisor.restart(APP_CHILDREN)
+        with self._reload_lock:
+            self.cfg = load_config(self.paths)
+            self.env = self._make_env()
+            with self.supervisor._lock:
+                for child in self.supervisor.children:
+                    if child.name in APP_CHILDREN:
+                        child.env = self.env
+            self.supervisor.restart(APP_CHILDREN)
         emit("status", message="Restarted with new settings")
+
+    def _config_differs(self) -> bool:
+        """Does config.json on disk differ from the running config in a way that needs a restart?"""
+        try:
+            disk = json.loads(self.paths.config_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        return any((disk.get(k) or empty) != (self.cfg.get(k) or empty)
+                   for k, empty in WATCHED_CONFIG_KEYS.items())
+
+    def reload_if_config_changed(self) -> bool:
+        """Called from the main loop. Picks up edits made while running (the Admin API keys screen,
+        hand edits). The tray's own folder change already reloaded, so it no longer differs."""
+        if not self.config_watcher.poll() or not self._config_differs():
+            return False
+        self.reload()
+        return True
 
     def stop(self):
         emit("status", message="Stopping")
@@ -475,7 +527,11 @@ def main(argv=None) -> int:
         else:
             threading.Thread(target=_serve_stdin, args=(launcher, done), daemon=True).start()
         while not done.wait(0.5):
-            pass
+            if not args.smoke:
+                try:
+                    launcher.reload_if_config_changed()
+                except Exception as e:
+                    emit("error", message=f"restart failed: {e}")
         return 0
     except Exception as e:
         logger.exception("launcher failed")

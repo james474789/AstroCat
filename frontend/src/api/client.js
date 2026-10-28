@@ -632,6 +632,29 @@ export async function updateSettings(settings) {
     }));
 }
 
+// Desktop app only (D3 5.3): integration keys live in the data folder's config.json.
+export async function fetchDesktopKeys() {
+    return handleResponse(await fetch(`${API_BASE_URL}/settings/desktop-keys`, { credentials: 'include' }));
+}
+
+// changes: { NAME: 'value' | null }; the launcher then restarts the app's services
+export async function saveDesktopKeys(changes) {
+    return handleResponse(await fetch(`${API_BASE_URL}/settings/desktop-keys`, {
+        method: 'PUT',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(changes),
+        credentials: 'include'
+    }));
+}
+
+export async function isApiHealthy() {
+    try {
+        return (await fetch(`${API_BASE_URL}/health`, { cache: 'no-store' })).ok;
+    } catch {
+        return false;
+    }
+}
+
 // ============ Filesystem API ============
 export async function fetchDirectoryListing(path) {
     const params = path ? `?path=${encodeURIComponent(path)}` : '';
