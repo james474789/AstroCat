@@ -119,3 +119,59 @@ class TestMalformedRealFITSFile:
         path = _make_fits_with_cards(tmp_path, ["SOMEFLAG = "])
         metadata = FITSExtractor(str(path)).extract()
         json.dumps(metadata["raw_header"])
+
+
+class TestQHY5LIIExposureUnits:
+    """
+    One QHY5LII-C capture software never writes EXPTIME and writes the
+    non-standard EXPOSURE in milliseconds, not seconds - uniquely
+    identifiable by its "Presion Time" (sic) HIERARCH card. A real NGC6888
+    sub from this software inflated a 60s exposure to 60000 stored seconds,
+    which summed 27 subs to ~466h of integration time instead of ~0.45h.
+    See app/scripts/repair_qhy5lii_exposure.py for the matching data repair.
+    """
+
+    def _make_qhy5lii_fits(self, tmp_path, exposure_ms, filename="qhy.fits"):
+        path = tmp_path / filename
+        data = np.zeros((4, 4), dtype=np.float32)
+        hdu = fits.PrimaryHDU(data=data)
+        header = hdu.header
+        header["CAMERA"] = "QHY5LII-C-6177da10f33c7354"
+        header["EXPOSURE"] = exposure_ms
+        header["HIERARCH Presion Time"] = "21-10-5-751"
+        hdu.writeto(path)
+        return path
+
+    def test_exposure_is_converted_from_milliseconds(self, tmp_path):
+        path = self._make_qhy5lii_fits(tmp_path, 60000)
+        metadata = FITSExtractor(str(path)).extract()
+        assert metadata["exposure_time_seconds"] == 60.0
+
+    def test_other_cameras_exposure_in_seconds_is_untouched(self, tmp_path):
+        # No "Presion Time" fingerprint -> EXPOSURE is trusted as seconds,
+        # exactly as before this fix.
+        path = tmp_path / "other.fits"
+        data = np.zeros((4, 4), dtype=np.float32)
+        hdu = fits.PrimaryHDU(data=data)
+        header = hdu.header
+        header["CAMERA"] = "Canon EOS 80D"
+        header["EXPOSURE"] = 300.0
+        hdu.writeto(path)
+
+        metadata = FITSExtractor(str(path)).extract()
+        assert metadata["exposure_time_seconds"] == 300.0
+
+    def test_exptime_present_is_never_rescaled_even_with_fingerprint(self, tmp_path):
+        # Defensive: if this software ever does write a standard EXPTIME,
+        # trust it over EXPOSURE and never rescale it.
+        path = tmp_path / "qhy_with_exptime.fits"
+        data = np.zeros((4, 4), dtype=np.float32)
+        hdu = fits.PrimaryHDU(data=data)
+        header = hdu.header
+        header["EXPTIME"] = 60.0
+        header["EXPOSURE"] = 60000
+        header["HIERARCH Presion Time"] = "21-10-5-751"
+        hdu.writeto(path)
+
+        metadata = FITSExtractor(str(path)).extract()
+        assert metadata["exposure_time_seconds"] == 60.0

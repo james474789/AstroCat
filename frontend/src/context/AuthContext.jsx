@@ -16,6 +16,7 @@ export const AuthProvider = ({ children }) => {
     const [systemVersion, setSystemVersion] = useState(null);
     const [loading, setLoading] = useState(true);
     const [setupComplete, setSetupComplete] = useState(false); // Default to false for first boot safety
+    const [desktopMode, setDesktopMode] = useState(false); // D1: native app, one local user, no logout
     const [error, setError] = useState(null);
 
     const checkAuth = async () => {
@@ -31,6 +32,7 @@ export const AuthProvider = ({ children }) => {
                 // Check setup status first
                 const setupData = await fetchSetupStatus();
                 setSetupComplete(setupData.setup_complete);
+                setDesktopMode(!!setupData.desktop_mode);
 
 
                 // If setup is complete, try to fetch user
@@ -119,6 +121,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         setupComplete,
         setSetupComplete,
+        desktopMode,
         error,
         login,
         registerAdmin,

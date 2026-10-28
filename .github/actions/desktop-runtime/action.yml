@@ -1,0 +1,140 @@
+# Builds the desktop app's bundled runtime (frontend, conda env, Windows Redis/Postgres/PostGIS)
+# and optionally smoke-tests it. Shared by release.yml (before the Tauri build) and ci.yml
+# (desktop-smoke on PRs) so the two can't drift apart. D2, docs/design/20261028-D2-desktop-parity-and-release.md.
+#
+# The caller checks out the repo first. Output: desktop/src-tauri/resources/runtime.
+# Failed steps publish their error lines as annotations (desktop/scripts/ci_annotate.py).
+#
+# Caches: the micromamba package cache and the Windows downloads (not the built env: the macOS
+# env must be built at /Users/Shared/AstroCat/runtime and moved, so a cached env is fragile).
+# Editing the pinned URLs/hashes below changes this file's hash and so the download cache key.
+name: Desktop runtime
+description: Build the bundled desktop runtime and optionally run the launcher smoke test
+
+inputs:
+  os:
+    description: The runner label (matrix.os); names caches and annotations
+    required: true
+  smoke:
+    description: "'true' to run app.desktop.launcher --smoke against the built runtime"
+    default: "true"
+  redis-zip-url:
+    description: Windows only. The redis-windows MSYS2 release zip (vars.WINDOWS_REDIS_ZIP_URL)
+    default: ""
+  redis-zip-sha256:
+    description: Windows only. Its SHA-256 (vars.WINDOWS_REDIS_ZIP_SHA256)
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Build frontend
+      shell: bash
+      working-directory: frontend
+      run: npm ci && npm run build
+
+    - uses: mamba-org/setup-micromamba@v2
+      with:
+        init-shell: none
+
+    - name: Cache conda packages
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/conda-pkgs
+        key: conda-pkgs-${{ inputs.os }}-${{ hashFiles('desktop/runtime/environment.yml', 'backend/requirements.txt') }}
+        restore-keys: conda-pkgs-${{ inputs.os }}-
+
+    - name: Cache Windows downloads
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/desktop-downloads
+        key: desktop-downloads-${{ inputs.os }}-${{ inputs.redis-zip-sha256 }}-${{ hashFiles('.github/actions/desktop-runtime/action.yml') }}
+
+    - name: Fetch Redis-compatible server (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        URL: ${{ inputs.redis-zip-url || 'https://github.com/redis-windows/redis-windows/releases/download/8.10.2/Redis-8.10.2-Windows-x64-msys2.zip' }}
+        SHA256: ${{ inputs.redis-zip-sha256 || '7c8cebd50347eaa1d9e784da842ed47a4f33394637835531d6614777b950ee85' }}
+      run: |
+        dl="$RUNNER_TEMP/desktop-downloads" && mkdir -p "$dl"
+        if ! echo "$SHA256  $dl/redis.zip" | sha256sum -c - 2>/dev/null; then
+          curl -fsSL "$URL" -o "$dl/redis.zip"
+          echo "$SHA256  $dl/redis.zip" | sha256sum -c -
+        fi
+        rm -rf "$RUNNER_TEMP/redis-zip" && mkdir -p "$RUNNER_TEMP/redis-zip" && unzip -q "$dl/redis.zip" -d "$RUNNER_TEMP/redis-zip"
+        dir=$(dirname "$(find "$RUNNER_TEMP/redis-zip" -name redis-server.exe | head -1)")
+        echo "REDIS_DIR=$dir" >> "$GITHUB_ENV"
+
+    - name: Fetch Postgres + PostGIS (Windows)
+      # conda-forge has no Windows PostGIS: EDB's server + OSGeo's bundle, pinned by SHA-256.
+      # OSGeo moves superseded bundles to archive/, so that is the fallback URL.
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        EDB_URL: https://get.enterprisedb.com/postgresql/postgresql-18.6-5-windows-x64-binaries.zip
+        EDB_SHA256: e2246ba91d22345bc3d017586c09ede52d9df180b1eeb480f050445f1cad84e2
+        POSTGIS_FILE: postgis-bundle-pg18-3.6.2x64.zip
+        POSTGIS_BASE: https://download.osgeo.org/postgis/windows/pg18
+        POSTGIS_SHA256: 0f41241cc536f7404dda43fd2a3f20ffe1fa1d71a8d4f6341428cd25931bf419
+      run: |
+        dl="$RUNNER_TEMP/desktop-downloads" && mkdir -p "$dl"
+        if ! echo "$EDB_SHA256  $dl/edb.zip" | sha256sum -c - 2>/dev/null; then
+          curl -fsSL "$EDB_URL" -o "$dl/edb.zip"
+          echo "$EDB_SHA256  $dl/edb.zip" | sha256sum -c -
+        fi
+        if ! echo "$POSTGIS_SHA256  $dl/postgis.zip" | sha256sum -c - 2>/dev/null; then
+          curl -fsSL "$POSTGIS_BASE/$POSTGIS_FILE" -o "$dl/postgis.zip" \
+            || curl -fsSL "$POSTGIS_BASE/archive/$POSTGIS_FILE" -o "$dl/postgis.zip"
+          echo "$POSTGIS_SHA256  $dl/postgis.zip" | sha256sum -c -
+        fi
+        echo "EDB_ZIP=$dl/edb.zip" >> "$GITHUB_ENV"
+        echo "POSTGIS_ZIP=$dl/postgis.zip" >> "$GITHUB_ENV"
+
+    - name: Build bundled runtime
+      shell: bash
+      env:
+        # without this the solver picks postgresql builds needing macOS 13.3+ on a macos-14
+        # runner, quietly raising the "macOS 12+" floor (no effect on Windows)
+        CONDA_OVERRIDE_OSX: "12.0"
+        CONDA_PKGS_DIRS: ${{ runner.temp }}/conda-pkgs
+      run: |
+        python -m pip install pefile  # Windows DLL-closure prune in build_runtime.py
+        args=()
+        if [ -n "${REDIS_DIR:-}" ]; then args+=(--redis-dir "$REDIS_DIR"); fi
+        if [ -n "${EDB_ZIP:-}" ]; then args+=(--edb-zip "$EDB_ZIP" --postgis-zip "$POSTGIS_ZIP"); fi
+        set -o pipefail
+        python desktop/runtime/build_runtime.py --micromamba "$MAMBA_EXE" "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/runtime-build.log"
+
+    - name: Report runtime build errors
+      if: failure()
+      shell: bash
+      run: python desktop/scripts/ci_annotate.py "runtime build (${{ inputs.os }})" "$RUNNER_TEMP/runtime-build.log"
+
+    - name: Smoke-test the runtime (Postgres, Redis, API, workers)
+      if: inputs.smoke == 'true'
+      shell: bash
+      working-directory: desktop/src-tauri/resources/runtime/backend
+      run: |
+        if [ "$RUNNER_OS" = "Windows" ]; then py=../python.exe; else py=../bin/python3; fi
+        "$py" -m app.desktop.launcher --smoke --data-dir "$RUNNER_TEMP/astrocat-smoke"
+
+    - name: Report smoke-test errors
+      if: failure() && inputs.smoke == 'true'
+      shell: bash
+      run: python desktop/scripts/ci_annotate.py "smoke test (${{ inputs.os }})" "$RUNNER_TEMP/astrocat-smoke/logs"
+
+    - name: Upload smoke-test logs
+      if: failure() && inputs.smoke == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: smoke-logs-${{ inputs.os }}
+        path: ${{ runner.temp }}/astrocat-smoke/logs

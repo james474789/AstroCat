@@ -39,7 +39,20 @@
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Desktop app (Windows and macOS)
+
+Every [GitHub Release](https://github.com/james474789/AstroCat/releases/latest) has a native app. It needs no Docker; the database and background workers come bundled.
+
+| Platform | Download |
+|---|---|
+| Windows 10/11 (64-bit) | `AstroCat_<version>_x64-setup.exe` |
+| macOS 12+ on Apple Silicon | `AstroCat_<version>_aarch64.dmg` |
+
+The builds are not code-signed yet, so the first launch needs one extra click. See [docs/install-desktop.md](docs/install-desktop.md). After it starts, use the tray/menu-bar icon → **Choose library folders…** to point it at your images.
+
+To run AstroCat on a server or NAS, use Docker as described below.
+
+### Prerequisites (Docker)
 
 - [Docker](https://docs.docker.com/get-docker/) and Docker Compose (v2.0+)
   - **Windows**: [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL 2 backend is recommended.
@@ -276,6 +289,7 @@ Detailed documentation is available in the `docs/` directory:
 - [**Star Quality**](docs/design/20260927-Q1-star-quality.md): HFR/FWHM/eccentricity measurement and the Star Quality UI.
 - [**Compact Rig List**](docs/design/20260930-E1-equipment-rig-list.md): Design for the Equipment rig rows, search, and filters.
 - [**Per-Rig Star Size**](docs/design/20260930-Q2-per-rig-star-size.md): Design for the cross-rig median FWHM/HFR chart on the FITS page.
+- [**Desktop Parity**](docs/desktop-parity.md): Checklist for keeping the Docker and desktop builds in step.
 
 ## 🗄️ Database Schema
 
@@ -349,6 +363,7 @@ Detailed documentation is available in the `docs/` directory:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+   - Backend changes must also work in the desktop apps: see [docs/desktop-parity.md](docs/desktop-parity.md).
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request

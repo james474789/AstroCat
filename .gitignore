@@ -132,3 +132,12 @@ backend/scripts/backfill_wcs_headers.py
 docker-compose.dev.yml
 docker-compose.hub.yml
 CLAUDE.md
+
+# -------------------------------------------
+# Desktop app (D1): build outputs
+# -------------------------------------------
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+desktop/src-tauri/resources/
+desktop/src-tauri/tauri.version.json

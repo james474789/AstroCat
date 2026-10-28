@@ -11,6 +11,7 @@ from app.worker import celery_app
 from app.database import SessionLocal
 from app.models.image import Image, FrameType
 from app.config import settings
+from app.utils.path_security import path_under_root
 import redis
 import json
 import hashlib
@@ -51,7 +52,7 @@ def bulk_match_task(self, mount_path: str):
             # from a solved light captured alongside them, which would
             # otherwise produce bogus catalog matches.
             images = session.query(Image.id, Image.is_plate_solved).filter(
-                Image.file_path.like(f"{mount_path}%"),
+                path_under_root(Image.file_path, mount_path),
                 Image.frame_type == FrameType.LIGHT
             ).all()
             
@@ -152,7 +153,7 @@ def bulk_astrometry_task(self, mount_path: str, force: bool = False, only_unsolv
             images = session.query(
                 Image.id, Image.subtype, Image.is_plate_solved, Image.astrometry_status
             ).filter(
-                Image.file_path.like(f"{mount_path}%"),
+                path_under_root(Image.file_path, mount_path),
                 Image.frame_type == FrameType.LIGHT
             ).all()
 
@@ -278,7 +279,7 @@ def bulk_thumbnail_task(self, mount_path: str):
         r.set("indexer:is_running", "1")
         with SessionLocal() as session:
             images = session.query(Image.id).filter(
-                Image.file_path.like(f"{mount_path}%")
+                path_under_root(Image.file_path, mount_path)
             ).all()
             
             total = len(images)
@@ -340,7 +341,7 @@ def bulk_metadata_task(self, mount_path: str):
         r.set("indexer:is_running", "1")
         with SessionLocal() as session:
             images = session.query(Image.file_path).filter(
-                Image.file_path.like(f"{mount_path}%")
+                path_under_root(Image.file_path, mount_path)
             ).all()
             
             total = len(images)

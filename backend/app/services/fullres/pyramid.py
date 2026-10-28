@@ -5,6 +5,7 @@ The pyramid is written to a temp dir inside the cache root and renamed into plac
 half-written pyramid is never served.
 """
 
+import errno
 import json
 import os
 import shutil
@@ -83,7 +84,14 @@ def build(array: np.ndarray, key: str, manifest: dict,
             # lost a race with a concurrent build of the same key; theirs is equivalent
             shutil.rmtree(tmp, ignore_errors=True)
         else:
-            os.rename(tmp, final)
+            try:
+                os.rename(tmp, final)
+            except OSError as e:
+                # Lost the same race between the check and the rename: Windows raises
+                # FileExistsError, POSIX ENOTEMPTY/EEXIST.
+                if not (isinstance(e, FileExistsError) or e.errno in (errno.ENOTEMPTY, errno.EEXIST)):
+                    raise
+                shutil.rmtree(tmp, ignore_errors=True)
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise

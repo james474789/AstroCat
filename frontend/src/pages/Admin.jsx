@@ -51,10 +51,12 @@ const ADMIN_SECTIONS = [
 ];
 
 function Admin() {
-    const { user } = useAuth();
+    const { user, desktopMode } = useAuth();
+    // D1: the desktop app has a single local user, so there is nothing to manage
+    const sections = desktopMode ? ADMIN_SECTIONS.filter(s => s.value !== 'users') : ADMIN_SECTIONS;
     const [searchParams, setSearchParams] = useSearchParams();
     const requestedSection = searchParams.get('section');
-    const activeSection = ADMIN_SECTIONS.some(s => s.value === requestedSection) ? requestedSection : ADMIN_SECTIONS[0].value;
+    const activeSection = sections.some(s => s.value === requestedSection) ? requestedSection : sections[0].value;
 
     const confirm = useConfirm();
     const toast = useToast();
@@ -678,7 +680,7 @@ function Admin() {
 
             <div className="admin-layout">
                 <nav className="admin-sidenav" aria-label="Admin sections">
-                    {ADMIN_SECTIONS.map(({ value, label, icon }) => (
+                    {sections.map(({ value, label, icon }) => (
                         <button
                             key={value}
                             type="button"
@@ -694,7 +696,7 @@ function Admin() {
                 <Tabs
                     className="admin-tabs"
                     aria-label="Admin sections"
-                    items={ADMIN_SECTIONS}
+                    items={sections}
                     value={activeSection}
                     onChange={selectSection}
                 />

@@ -86,7 +86,14 @@ class Settings(BaseSettings):
 
     # API Settings
     api_prefix: str = "/api"
-    
+
+    # Native desktop app (D1, docs/design/20261027-D1-desktop-apps.md). Set by the desktop
+    # launcher only; Docker leaves these at their defaults.
+    desktop_mode: bool = False            # single local user, auto-login via desktop_launch_nonce
+    desktop_launch_nonce: str = ""        # per-launch secret the Tauri shell presents to sign in
+    frontend_dist_dir: str = ""           # serve the built frontend from FastAPI (no nginx)
+    pg_bin_dir: str = ""                  # folder of pg_dump/psql; empty = PATH (Docker)
+
     @field_validator('secret_key')
     @classmethod
     def validate_secret_key(cls, v: str) -> str:

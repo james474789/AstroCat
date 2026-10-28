@@ -4,8 +4,48 @@ Provides secure path validation to prevent path traversal attacks.
 """
 
 import os
+import re
 from pathlib import Path
 from typing import List, Union
+
+from sqlalchemy import or_
+
+# Escape char for LIKE patterns built from paths. Postgres' default is a backslash, which
+# Windows paths are full of, so every path LIKE names '!' explicitly.
+LIKE_ESCAPE = "!"
+
+
+def escape_like(value: str) -> str:
+    """`value` with LIKE wildcards escaped, to match itself literally under ESCAPE '!'."""
+    return value.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+
+
+def root_prefix_pattern(root: str) -> tuple[str, str]:
+    """
+    (exact, like_pattern) matching a folder and everything under it, for LIKE ... ESCAPE '!'.
+
+    Stored file_path values are str(Path(root) / ...), so a Windows root (drive letter or
+    backslashes) is matched with backslashes throughout.
+    """
+    r = root.rstrip("/\\")
+    sep = "\\" if ("\\" in r or re.match(r"^[A-Za-z]:", r)) else "/"
+    if sep == "\\":
+        r = r.replace("/", "\\")
+    return r, escape_like(r) + sep + "%"
+
+
+def path_under_root(column, root: str):
+    """SQLAlchemy predicate: `column` is the folder `root` or a path inside it."""
+    exact, pattern = root_prefix_pattern(root)
+    return or_(column == exact, column.like(pattern, escape=LIKE_ESCAPE))
+
+
+def path_startswith(column, prefix: str):
+    """
+    `column` starts with `prefix`, taken literally. Use instead of SQLAlchemy's startswith(),
+    which leaves backslashes (Windows paths) and _/% in the prefix acting as LIKE syntax.
+    """
+    return column.like(escape_like(prefix) + "%", escape=LIKE_ESCAPE)
 
 
 def validate_path_safety(
@@ -63,6 +103,30 @@ def validate_path_safety(
     except (OSError, RuntimeError, ValueError):
         # Path doesn't exist, permission denied, or other filesystem error
         return False
+
+
+def is_within_roots(target: str, allowed_roots: List[Union[str, Path]]) -> bool:
+    """
+    Lexical check that ``target`` sits at or under one of ``allowed_roots``.
+
+    Unlike validate_path_safety the path need not exist (a scan request can name a folder
+    that is not mounted yet), so nothing is resolved on disk. Any ``..`` component is
+    rejected outright. Works for POSIX container paths and Windows drive paths alike.
+    """
+    if not isinstance(target, str) or not target:
+        return False
+    if ".." in Path(target).parts or ".." in target.replace("\\", "/").split("/"):
+        return False
+    norm = os.path.normcase(os.path.normpath(target))
+    for root in allowed_roots:
+        root_norm = os.path.normcase(os.path.normpath(str(root)))
+        try:
+            if os.path.commonpath([norm, root_norm]) == root_norm:
+                return True
+        except ValueError:
+            # different drives (Windows) or mixed absolute/relative
+            continue
+    return False
 
 
 def sanitize_filename(filename: str, max_length: int = 255) -> str:

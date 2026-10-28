@@ -152,6 +152,11 @@ def _repair_empty_nova_solves():
     return repair_empty_nova_solves(dry_run=False)
 
 
+def _repair_qhy5lii_exposure():
+    from app.scripts.repair_qhy5lii_exposure import repair_qhy5lii_exposure
+    return repair_qhy5lii_exposure()
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -243,6 +248,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0018_repair_empty_nova_solves",
         "Fix images a Nova job marked SOLVED with an empty calibration (solved but no RA/Dec): restore the position from the file's own WCS where it has one, otherwise mark unsolved and queue a fresh solve.",
         _repair_empty_nova_solves,
+    ),
+    DataMigrationSpec(
+        "0019_repair_qhy5lii_exposure",
+        "Fix exposure_time_seconds for the QHY5LII-C capture software (identified by its 'Presion Time' header card) that writes EXPOSURE in milliseconds instead of seconds, inflating per-target integration totals 1000x (e.g. NGC6888).",
+        _repair_qhy5lii_exposure,
     ),
 ]
 
