@@ -63,9 +63,11 @@ def test_env_points_the_app_at_local_services(paths):
     assert s.image_paths_list == ["D:/Astro/Lights", "E:/Masters"]
 
 
-@pytest.mark.parametrize("windows", [True, False])
+@pytest.mark.parametrize("windows", [True, False], ids=["no-prefork", "prefork"])
 def test_worker_commands_match_supervisord_with_platform_pools(paths, monkeypatch, windows):
+    # windows=True stands for "no prefork pool": Windows and macOS both use it
     monkeypatch.setattr(launcher, "IS_WINDOWS", windows)
+    monkeypatch.setattr(launcher, "NO_PREFORK", windows)
     cmds = launcher.app_commands(paths, {"celery_workers": 4}, api_port=5123)
     assert list(cmds) == list(launcher.APP_CHILDREN)
 
@@ -349,3 +351,24 @@ def test_postgres_starts_a_cluster_of_its_own_major(paths, monkeypatch):
 
     pg.start()
     assert started == [True]
+
+
+def test_macos_uses_the_non_prefork_pools():
+    # ISSUE-003: prefork children on macOS (spawn) never get the task table and every task fails
+    assert launcher.NO_PREFORK == (sys.platform in ("win32", "darwin"))
+
+
+def test_rss_is_read_with_ps_on_macos(monkeypatch):
+    monkeypatch.setattr(supervisor.sys, "platform", "darwin")
+
+    class Done:
+        stdout = " 921600\n"
+
+    monkeypatch.setattr(supervisor.subprocess, "run", lambda *a, **k: Done())
+    assert supervisor._rss_mb(123) == 900
+
+    def boom(*a, **k):
+        raise OSError("no ps")
+
+    monkeypatch.setattr(supervisor.subprocess, "run", boom)
+    assert supervisor._rss_mb(123) is None

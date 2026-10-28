@@ -76,6 +76,7 @@ def paths(tmp_path):
 @pytest.fixture(params=[True, False], ids=["windows", "posix"])
 def desktop_commands(request, paths, monkeypatch):
     monkeypatch.setattr(launcher, "IS_WINDOWS", request.param)
+    monkeypatch.setattr(launcher, "NO_PREFORK", request.param)
     return {name: argv for name, (argv, _opts) in
             launcher.app_commands(paths, {"celery_workers": 4}, api_port=5123).items()}
 
