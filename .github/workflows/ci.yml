@@ -45,7 +45,7 @@ jobs:
       - run: python -m pytest tests -q -p no:warnings --tb=short -rf
       - name: Desktop runtime build helpers
         working-directory: desktop/runtime
-        run: python -m pytest test_build_runtime.py -q -p no:warnings
+        run: python -m pytest test_build_runtime.py test_updater_manifest.py -q -p no:warnings
 
   frontend:
     runs-on: ubuntu-latest
@@ -82,6 +82,27 @@ jobs:
               - 'desktop/**'
               - '.github/workflows/**'
               - '.github/actions/**'
+
+  # Compile check of the Tauri shell (main.rs, plugins, capabilities): the installer build only
+  # runs in release.yml, so without this a Rust error would first show up on release day.
+  desktop-shell:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - name: cargo check
+        working-directory: desktop/src-tauri
+        run: |
+          mkdir -p resources/runtime  # tauri-build wants the bundled resources folder to exist
+          cargo check --release
 
   # The same runtime build + smoke test as release.yml (shared composite action), without the
   # Tauri installer build.

@@ -41,6 +41,14 @@ On macOS the app also keeps a symlink at `/Users/Shared/AstroCat/runtime` pointi
 
 Uninstalling the app keeps this folder. Delete it yourself if you want to remove your library database too. Your image files are never modified.
 
+## Updating
+
+AstroCat checks for a new version a little after it starts, and once a day while it runs. When one is available you'll see a message, and the tray (or menu bar) menu gets an **Install update … and restart** item. Choose it when it suits you: AstroCat downloads the update, stops its background services, installs and starts again. Nothing is installed without your say-so. **Check for updates…** in the same menu checks right away.
+
+Updates keep your data folder. On macOS the unsigned app is replaced in place; if macOS blocks the updated app, repeat the one-time "open anyway" step under macOS above.
+
+You can always install a newer download over the old one instead.
+
 ## Upgrading
 
 Install a newer version over the old one; your data folder is kept and the database is updated on the next start.

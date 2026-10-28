@@ -108,10 +108,13 @@ Session cookies and the JWT last 30 days, and every launch signs in again with a
 
 One-time repository setup:
 - secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
+- secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (the updater's minisign key; the public key is in `tauri.conf.json`). Without them the desktop build fails, dry runs included.
 - variables `WINDOWS_REDIS_ZIP_URL` and `WINDOWS_REDIS_ZIP_SHA256`
 
+## Auto-update (D3 5.2)
+`tauri-plugin-updater` reads `https://github.com/james474789/AstroCat/releases/latest/download/latest.json`, which `release.yml` builds with `desktop/scripts/updater_manifest.py` from the signed update artifacts (the NSIS setup exe, and `AstroCat.app.tar.gz` built by the `app` bundle target on macOS). The app checks 20 s after the backend is ready and every 24 h. A found update adds a tray item and a one-time dialog; nothing installs automatically. Installing downloads the update, runs the launcher's normal shutdown (the installer can't replace a running `python.exe`, and Postgres must stop cleanly), runs the installer and relaunches. `releases/latest` must stay a non-prerelease. Verified end to end only across two real releases (see D3 5.2 for the plan).
+
 ## Not in v1
-- **Auto-update.** `tauri-plugin-updater` needs a minisign key pair: generate it with `npx tauri signer generate`, store it as the `TAURI_SIGNING_PRIVATE_KEY` secret, and put the public key in `tauri.conf.json`. Then add the plugin and `createUpdaterArtifacts`.
 - **Code signing:**
   - macOS: an Apple Developer ID plus notarization; the `APPLE_*` secrets are already wired in.
   - Windows: Azure Trusted Signing through `bundle.windows.signCommand`.
