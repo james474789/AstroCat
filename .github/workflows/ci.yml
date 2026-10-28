@@ -5,8 +5,7 @@ name: CI
 
 on:
   push:
-    # desktop-apps: run on the branch until it is merged, like release.yml's dry run. Remove after merge.
-    branches: [main, desktop-apps]
+    branches: [main]
   pull_request:
 
 permissions:
