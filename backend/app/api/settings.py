@@ -1,3 +1,7 @@
+import os
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
@@ -5,6 +9,8 @@ import redis
 import json
 from app.config import settings
 from typing import Optional, Dict, Literal
+
+from app.api.dependencies import require_admin
 
 router = APIRouter()
 
@@ -137,3 +143,88 @@ def update_settings(new_settings: SystemSettings):
     from app.services.quality_settings import clear_cache
     clear_cache()
     return new_settings
+
+
+# --- Desktop app: integration keys (D3 5.3) ---------------------------------------------------
+# The desktop app has no .env: its keys live under "api_keys" in config.json. The launcher
+# watches that file and restarts the app processes when it changes. Docker keeps using .env, so
+# these routes don't exist there.
+
+DESKTOP_URL_VARS = ("LOCAL_ASTROMETRY_URL",)  # not secrets: returned in full
+DESKTOP_KEY_MAX_LEN = 500
+
+
+def _desktop_config_path() -> Path:
+    if not settings.desktop_mode:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not settings.desktop_config_path:
+        raise HTTPException(status_code=500, detail="The desktop config path is not set")
+    return Path(settings.desktop_config_path)
+
+
+def _read_desktop_config(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise HTTPException(status_code=500, detail=f"Could not read config.json: {e}")
+
+
+def _desktop_keys_view(cfg: dict) -> dict:
+    from app.desktop.launcher import API_KEY_VARS
+    stored = cfg.get("api_keys") or {}
+    out = {}
+    for name in API_KEY_VARS:
+        value = str(stored.get(name) or "")
+        entry = {"set": bool(value), "hint": ("..." + value[-4:]) if value and name not in DESKTOP_URL_VARS else ""}
+        if name in DESKTOP_URL_VARS:
+            entry["value"] = value
+        out[name] = entry
+    return out
+
+
+def _write_json_atomic(path: Path, data: dict) -> None:
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+@router.get("/desktop-keys")
+def get_desktop_keys(_admin=Depends(require_admin)):
+    """Which integration keys are set (never their values, except the server URL)."""
+    path = _desktop_config_path()
+    return _desktop_keys_view(_read_desktop_config(path))
+
+
+@router.put("/desktop-keys")
+def put_desktop_keys(changes: Dict[str, Optional[str]], _admin=Depends(require_admin)):
+    """Set (a string) or remove (null or empty) keys. Other names and other config.json keys are kept."""
+    from app.desktop.launcher import API_KEY_VARS
+    path = _desktop_config_path()
+    unknown = sorted(set(changes) - set(API_KEY_VARS))
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown key(s): {', '.join(unknown)}")
+    too_long = [n for n, v in changes.items() if v and len(v) > DESKTOP_KEY_MAX_LEN]
+    if too_long:
+        raise HTTPException(status_code=400, detail=f"Value too long for: {', '.join(sorted(too_long))}")
+    cfg = _read_desktop_config(path)
+    keys = dict(cfg.get("api_keys") or {})
+    for name, value in changes.items():
+        value = (value or "").strip()
+        if value:
+            keys[name] = value
+        else:
+            keys.pop(name, None)
+    cfg["api_keys"] = keys
+    try:
+        _write_json_atomic(path, cfg)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Could not save config.json: {e}")
+    return _desktop_keys_view(cfg)

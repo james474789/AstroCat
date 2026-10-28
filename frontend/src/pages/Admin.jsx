@@ -28,10 +28,11 @@ import {
     updateUserRole,
     fetchSystemVersion
 } from '../api/client';
-import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info, Activity, HeartPulse, Star, Globe } from 'lucide-react';
+import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info, Activity, HeartPulse, Star, Globe, KeyRound } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
 import StarQualityAdmin from '../components/quality/StarQualityAdmin';
 import OnlineCatalogsAdmin from '../components/admin/OnlineCatalogsAdmin';
+import DesktopApiKeys from '../components/admin/DesktopApiKeys';
 import { Button, Dialog, PageHeader, SegmentedControl, Spinner, Tabs, useConfirm, useToast } from '../components/ui';
 import './Admin.css';
 import './Settings.css';
@@ -41,6 +42,7 @@ const ADMIN_SECTIONS = [
     { value: 'health', label: 'Health', icon: <HeartPulse size={16} /> },
     { value: 'indexer', label: 'Indexer', icon: <Search size={16} /> },
     { value: 'plate-solving', label: 'Plate Solving', icon: <TelescopeIcon size={16} /> },
+    { value: 'api-keys', label: 'API Keys', icon: <KeyRound size={16} />, desktopOnly: true },
     { value: 'mounts', label: 'Mounts', icon: <Folder size={16} /> },
     { value: 'thumbnails', label: 'Thumbnails', icon: <ImageIcon size={16} /> },
     { value: 'star-quality', label: 'Star Quality', icon: <Star size={16} /> },
@@ -53,7 +55,8 @@ const ADMIN_SECTIONS = [
 function Admin() {
     const { user, desktopMode } = useAuth();
     // D1: the desktop app has a single local user, so there is nothing to manage
-    const sections = desktopMode ? ADMIN_SECTIONS.filter(s => s.value !== 'users') : ADMIN_SECTIONS;
+    // and the API keys screen replaces .env, which only Docker has
+    const sections = ADMIN_SECTIONS.filter(s => desktopMode ? s.value !== 'users' : !s.desktopOnly);
     const [searchParams, setSearchParams] = useSearchParams();
     const requestedSection = searchParams.get('section');
     const activeSection = sections.some(s => s.value === requestedSection) ? requestedSection : sections[0].value;
@@ -970,6 +973,8 @@ function Admin() {
                             </div>
                         </section>
                     )}
+
+                    {activeSection === 'api-keys' && <DesktopApiKeys />}
 
                     {activeSection === 'mounts' && (
                         <section className="settings-section">
