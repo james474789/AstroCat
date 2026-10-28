@@ -41,7 +41,9 @@ jobs:
         # pyvips-binary ships libvips itself; requirements.txt's pyvips loads it
         if: runner.os != 'Linux'
         run: pip install pyvips-binary
-      - run: python -m pytest tests -q -p no:warnings
+      # Turns each failing test into an annotation, readable without signing in to see the logs
+      - run: pip install pytest-github-actions-annotate-failures
+      - run: python -m pytest tests -q -p no:warnings --tb=short -rf
       - name: Desktop runtime build helpers
         working-directory: desktop/runtime
         run: python -m pytest test_build_runtime.py -q -p no:warnings
