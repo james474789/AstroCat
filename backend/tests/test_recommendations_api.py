@@ -443,7 +443,12 @@ def test_snooze_without_context_uses_tonight(r2a):
     assert _post(r2a, "M45", "SNOOZE", nights=1).json()["snoozed_until"] == "2026-09-27"
 
 
-def test_feedback_list_and_explain(r2a):
+def test_feedback_list_and_explain(r2a, monkeypatch):
+    # Pin "today" to the snooze night: the 30-night snooze ends 2026-10-26 and would
+    # otherwise expire against the wall clock.
+    list_feedback = loader.list_feedback
+    monkeypatch.setattr(loader, "list_feedback",
+                        lambda user_id, session=None: list_feedback(user_id, session, today=date(2026, 9, 26)))
     _post(r2a, "M81", "PIN")
     _post(r2a, "IC1805", "SNOOZE", nights=30, context={"night": "2026-09-26"})
     _post(r2a, "M45", "DISMISS", reason="DONE")

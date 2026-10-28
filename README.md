@@ -289,6 +289,7 @@ Detailed documentation is available in the `docs/` directory:
 - [**Star Quality**](docs/design/20260927-Q1-star-quality.md): HFR/FWHM/eccentricity measurement and the Star Quality UI.
 - [**Compact Rig List**](docs/design/20260930-E1-equipment-rig-list.md): Design for the Equipment rig rows, search, and filters.
 - [**Per-Rig Star Size**](docs/design/20260930-Q2-per-rig-star-size.md): Design for the cross-rig median FWHM/HFR chart on the FITS page.
+- [**Desktop Parity**](docs/desktop-parity.md): Checklist for keeping the Docker and desktop builds in step.
 
 ## 🗄️ Database Schema
 
@@ -362,6 +363,7 @@ Detailed documentation is available in the `docs/` directory:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+   - Backend changes must also work in the desktop apps: see [docs/desktop-parity.md](docs/desktop-parity.md).
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request

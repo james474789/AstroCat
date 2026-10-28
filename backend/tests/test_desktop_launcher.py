@@ -316,3 +316,34 @@ def test_build_prefix_link_refuses_to_replace_a_real_folder(tmp_path):
 
 def test_no_build_prefix_file_means_nothing_to_link(tmp_path):
     assert launcher.ensure_build_prefix_link(tmp_path) is None
+
+
+def test_postgres_refuses_a_cluster_from_another_major(paths, monkeypatch):
+    from app.desktop import postgres
+    from app.desktop.paths import PG_MAJOR
+
+    paths.pgdata.mkdir()
+    (paths.pgdata / "PG_VERSION").write_text(f"{PG_MAJOR - 2}\n")
+    ran = []
+    pg = postgres.Postgres(paths, 5999, "pw", {})
+    monkeypatch.setattr(pg, "_run", lambda *a, **k: ran.append(a))
+
+    with pytest.raises(postgres.PostgresError, match=f"PostgreSQL {PG_MAJOR - 2}; this AstroCat ships "
+                                                     f"PostgreSQL {PG_MAJOR}"):
+        pg.start()
+    assert ran == []  # never got as far as pg_ctl
+
+
+def test_postgres_starts_a_cluster_of_its_own_major(paths, monkeypatch):
+    from app.desktop import postgres
+    from app.desktop.paths import PG_MAJOR
+
+    paths.pgdata.mkdir()
+    (paths.pgdata / "PG_VERSION").write_text(f"{PG_MAJOR}\n")
+    pg = postgres.Postgres(paths, 5999, "pw", {})
+    started = []
+    monkeypatch.setattr(pg, "_pg_ctl_start", lambda: started.append(True))
+    monkeypatch.setattr(pg, "_ensure_database", lambda: None)
+
+    pg.start()
+    assert started == [True]

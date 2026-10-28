@@ -28,7 +28,7 @@ from app.services.targets import normalize_designation, linked_target_keys, get_
 from app.utils.field_geometry import effective_field_radius
 from app.utils.filter_names import normalize_filter, filter_sort_key
 from app.utils.observing_night import NIGHT_JOIN_SQL, NIGHT_SQL
-from app.utils.path_security import validate_path_safety
+from app.utils.path_security import path_startswith, validate_path_safety
 from app.utils.rig_optics import (
     build_filter_rig_rows, valid_pixel_scale, parse_pixel_size, known_pixel_size, binning_factor,
     build_filter_rig_rows_with_rigs, weighted_median, QUALITY_SAMPLES_KEY,
@@ -71,8 +71,8 @@ def _path_clause(path: Optional[str]):
     prefix = _normalize_path_prefix(path)
     alt_prefix = prefix.replace("/", "\\") if "/" in prefix else prefix.replace("\\", "/")
     if alt_prefix == prefix:
-        return Image.file_path.startswith(prefix)
-    return Image.file_path.startswith(prefix) | Image.file_path.startswith(alt_prefix)
+        return path_startswith(Image.file_path, prefix)
+    return path_startswith(Image.file_path, prefix) | path_startswith(Image.file_path, alt_prefix)
 
 
 def _escape_like(value: str) -> str:

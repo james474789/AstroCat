@@ -20,7 +20,7 @@ from app.schemas.image import ImageDetail, ImageList, UpdateImageRequest, FieldO
 from app.schemas.image import ImageDetail, ImageList
 from app.schemas.common import PaginatedResponse
 from app.services.thumbnails import ThumbnailGenerator
-from app.utils.path_security import validate_path_safety, sanitize_filename
+from app.utils.path_security import path_startswith, validate_path_safety, sanitize_filename
 from app.services.quality_filters import QualityFilters, fwhm_arcsec_expr
 from app.services.field_overlaps import compute_field_overlaps, compute_seen_in, refine_corners, refine_seen_in, SIZE_RATIO_MAX
 from app.services import sky_overlay
@@ -186,7 +186,7 @@ def _build_image_query(
         
     if path:
         # Filter by path prefix
-        stmt = stmt.where(Image.file_path.startswith(path))
+        stmt = stmt.where(path_startswith(Image.file_path, path))
         
     # Spatial Search
     if ra is not None and dec is not None:

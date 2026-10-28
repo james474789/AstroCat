@@ -4,8 +4,48 @@ Provides secure path validation to prevent path traversal attacks.
 """
 
 import os
+import re
 from pathlib import Path
 from typing import List, Union
+
+from sqlalchemy import or_
+
+# Escape char for LIKE patterns built from paths. Postgres' default is a backslash, which
+# Windows paths are full of, so every path LIKE names '!' explicitly.
+LIKE_ESCAPE = "!"
+
+
+def escape_like(value: str) -> str:
+    """`value` with LIKE wildcards escaped, to match itself literally under ESCAPE '!'."""
+    return value.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+
+
+def root_prefix_pattern(root: str) -> tuple[str, str]:
+    """
+    (exact, like_pattern) matching a folder and everything under it, for LIKE ... ESCAPE '!'.
+
+    Stored file_path values are str(Path(root) / ...), so a Windows root (drive letter or
+    backslashes) is matched with backslashes throughout.
+    """
+    r = root.rstrip("/\\")
+    sep = "\\" if ("\\" in r or re.match(r"^[A-Za-z]:", r)) else "/"
+    if sep == "\\":
+        r = r.replace("/", "\\")
+    return r, escape_like(r) + sep + "%"
+
+
+def path_under_root(column, root: str):
+    """SQLAlchemy predicate: `column` is the folder `root` or a path inside it."""
+    exact, pattern = root_prefix_pattern(root)
+    return or_(column == exact, column.like(pattern, escape=LIKE_ESCAPE))
+
+
+def path_startswith(column, prefix: str):
+    """
+    `column` starts with `prefix`, taken literally. Use instead of SQLAlchemy's startswith(),
+    which leaves backslashes (Windows paths) and _/% in the prefix acting as LIKE syntax.
+    """
+    return column.like(escape_like(prefix) + "%", escape=LIKE_ESCAPE)
 
 
 def validate_path_safety(

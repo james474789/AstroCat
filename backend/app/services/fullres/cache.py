@@ -191,18 +191,42 @@ def reconcile(r=None):
 # Deletion, eviction, stats
 # ----------------------------------------------------------------------------
 
-def _rmtree_atomic(path: Path):
-    """Rename out of the way first so a reader never sees a half-deleted pyramid."""
+RENAME_RETRY_DELAYS_S = (0.05, 0.15, 0.4)
+
+
+def _rmtree_atomic(path: Path) -> bool:
+    """Delete a pyramid dir, returning True if it is gone.
+
+    Rename out of the way first so a reader never sees a half-deleted pyramid. Windows refuses
+    the rename while any file inside is open (uvicorn serving a tile), so retry briefly, then
+    delete in place: the manifest goes first, which makes what's left a cache miss to readers.
+    """
+    if not path.exists():
+        return True
     doomed = path.with_name(f".del-{path.name}-{uuid.uuid4().hex[:8]}")
+    for delay in (*RENAME_RETRY_DELAYS_S, None):
+        try:
+            os.rename(path, doomed)
+        except OSError:
+            if delay is None:
+                break
+            time.sleep(delay)
+            continue
+        shutil.rmtree(doomed, ignore_errors=True)
+        return True
     try:
-        os.rename(path, doomed)
+        os.remove(path / MANIFEST_NAME)
     except OSError:
-        return
-    shutil.rmtree(doomed, ignore_errors=True)
+        pass
+    shutil.rmtree(path, ignore_errors=True)
+    return not path.exists()
 
 
-def delete_key(key, r=None):
-    _rmtree_atomic(key_dir(key))
+def delete_key(key, r=None) -> bool:
+    """Delete a pyramid and its Redis bookkeeping. False if the files could not be removed."""
+    if not _rmtree_atomic(key_dir(key)):
+        logger.warning("fullres: could not delete pyramid %s; will retry on the next eviction", key)
+        return False
     try:
         r = r or redis_client()
         r.zrem(LRU_KEY, key)
@@ -210,6 +234,7 @@ def delete_key(key, r=None):
         r.delete(STATUS_PREFIX + key)
     except Exception:
         logger.debug("fullres Redis cleanup failed", exc_info=True)
+    return True
 
 
 def sweep_stale_tmp(now=None):
@@ -248,7 +273,8 @@ def evict(cap_bytes=None, now=None, min_age=MIN_EVICT_AGE_S, r=None) -> dict:
             break
         if now - e["built_at"] < min_age:
             continue
-        delete_key(e["key"], r)
+        if not delete_key(e["key"], r):
+            continue
         total -= e["bytes"]
         freed += e["bytes"]
         evicted += 1
@@ -265,7 +291,5 @@ def stats(r=None) -> dict:
 
 
 def clear(r=None) -> dict:
-    entries = scan_disk()
-    for e in entries:
-        delete_key(e["key"], r)
-    return {"deleted": len(entries), "freed_bytes": sum(e["bytes"] for e in entries)}
+    deleted = [e for e in scan_disk() if delete_key(e["key"], r)]
+    return {"deleted": len(deleted), "freed_bytes": sum(e["bytes"] for e in deleted)}

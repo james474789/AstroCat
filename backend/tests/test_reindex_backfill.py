@@ -28,13 +28,16 @@ def test_reindex_all_runs_incremental_backfills_after_scan(monkeypatch):
          patch("app.tasks.indexer._scan_directory", return_value=fake_scan_result), \
          patch("app.tasks.indexer.update_mount_stats"), \
          patch("app.scripts.backfill_frame_types.backfill_frame_types") as mock_ft_backfill, \
+         patch("app.scripts.backfill_field_radius.backfill_field_radius") as mock_fr_backfill, \
          patch("app.scripts.backfill_targets.backfill_targets") as mock_target_backfill:
         mock_redis.from_url.return_value = MagicMock()
         mock_ft_backfill.return_value = {"total": 0, "updated": 0}
+        mock_fr_backfill.return_value = {"fixed": 0, "targets_changed": 0}
 
         reindex_all.run()
 
     mock_ft_backfill.assert_called_once_with(dry_run=False, reclassify_all=False)
+    mock_fr_backfill.assert_called_once_with(dry_run=False)
     mock_target_backfill.assert_called_once_with(process_all=False)
 
 
@@ -54,6 +57,7 @@ def test_reindex_all_skips_backfill_when_scan_times_out(monkeypatch):
          patch("app.tasks.indexer._scan_directory", side_effect=SoftTimeLimitExceeded()), \
          patch("app.tasks.indexer.update_mount_stats"), \
          patch("app.scripts.backfill_frame_types.backfill_frame_types") as mock_ft_backfill, \
+         patch("app.scripts.backfill_field_radius.backfill_field_radius") as mock_fr_backfill, \
          patch("app.scripts.backfill_targets.backfill_targets") as mock_target_backfill:
         mock_redis.from_url.return_value = MagicMock()
 
@@ -63,4 +67,5 @@ def test_reindex_all_skips_backfill_when_scan_times_out(monkeypatch):
             pass
 
     mock_ft_backfill.assert_not_called()
+    mock_fr_backfill.assert_not_called()
     mock_target_backfill.assert_not_called()

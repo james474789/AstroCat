@@ -41,6 +41,12 @@ On macOS the app also keeps a symlink at `/Users/Shared/AstroCat/runtime` pointi
 
 Uninstalling the app keeps this folder. Delete it yourself if you want to remove your library database too. Your image files are never modified.
 
+## Upgrading
+
+Install a newer version over the old one; your data folder is kept and the database is updated on the next start.
+
+The bundled database server is PostgreSQL 18, and its data can only be opened by the same major version. If a future AstroCat ships a different major version before an automatic upgrade exists, it refuses to start with "Your library database was created by PostgreSQL …" instead of touching your data. Reinstall the previous AstroCat version in that case; the daily backups in `backups/` are also safe to keep.
+
 ## Optional API keys
 
 Online plate solving (astrometry.net), a local astrometry server, and the Telescopius and meteoblue integrations need keys. Add them under `"api_keys"` in `config.json` in the data folder above, then restart AstroCat:

@@ -23,6 +23,7 @@ from app.services.matching import SyncCatalogMatcher
 from app.services.frame_type import classify_frame_type
 from app.utils.field_geometry import effective_field_radius
 from app.config import settings
+from app.utils.path_security import path_under_root, root_prefix_pattern
 from sqlalchemy import select, func, delete, update
 from sqlalchemy.exc import OperationalError
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
@@ -48,7 +49,7 @@ def _scan_directory(directory_path: str):
     try:
         with SessionLocal() as session:
             # 1. Get all existing file paths in this directory from DB for bulk lookup
-            stmt = select(Image.file_path, Image.pixinsight_annotation_path).where(Image.file_path.like(f"{directory_path}%"))
+            stmt = select(Image.file_path, Image.pixinsight_annotation_path).where(path_under_root(Image.file_path, directory_path))
             result = session.execute(stmt)
             # Map file_path -> pixinsight_annotation_path
             existing_paths = {row[0]: row[1] for row in result.all()}
@@ -751,34 +752,36 @@ def update_thumbnail_stats():
         return {"status": "error", "message": str(e)}
 
 
+# Postgres' default LIKE escape is a backslash, which Windows paths are full
+# of, so the escape char is set explicitly.
+MOUNT_STATS_SQL = """
+    SELECT COUNT(*), COALESCE(SUM(file_size_bytes), 0) FROM images
+    WHERE file_path = :exact OR file_path LIKE :pattern ESCAPE '!'
+"""
+
+
 @celery_app.task(name="app.tasks.indexer.update_mount_stats")
 def update_mount_stats():
     """Update mount point statistics in the database by querying the images table."""
     logger.info("Updating mount point statistics in database...")
-    
+
     try:
         with SessionLocal() as session:
-            # Get stats for each mount point using aggregation query
-            # Extract mount path as first two levels: /data/mount3
+            # One prefix-match query per configured root, so roots of any
+            # depth (and Windows drive paths) count correctly. A root nested
+            # inside another is counted in both, which is what users expect.
             from sqlalchemy import text
-            result = session.execute(text("""
-                SELECT 
-                    SUBSTRING(file_path FROM '^/[^/]+/[^/]+') as mount,
-                    COUNT(*) as file_count,
-                    COALESCE(SUM(file_size_bytes), 0) as total_size
-                FROM images
-                WHERE file_path IS NOT NULL
-                GROUP BY mount
-            """))
-            
             mount_stats = {}
-            for row in result:
-                mount = row[0]
-                mount_stats[mount] = {
-                    "file_count": int(row[1]),
-                    "size_bytes": float(row[2])
+            for mount_path in settings.image_paths_list:
+                exact, pattern = root_prefix_pattern(mount_path)
+                row = session.execute(
+                    text(MOUNT_STATS_SQL), {"exact": exact, "pattern": pattern}
+                ).one()
+                mount_stats[mount_path] = {
+                    "file_count": int(row[0]),
+                    "size_bytes": float(row[1])
                 }
-            
+
             # Update or create stats for each mount point
             for mount_path in settings.image_paths_list:
                 stats_data = mount_stats.get(mount_path, {"file_count": 0, "size_bytes": 0})

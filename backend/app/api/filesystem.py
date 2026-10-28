@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models.image import Image
-from app.utils.path_security import validate_path_safety
+from app.utils.path_security import path_startswith, validate_path_safety
 
 router = APIRouter()
 
@@ -69,8 +69,8 @@ async def list_directory(
                 alt_prefix = prefix.replace('/', '\\') if '/' in prefix else prefix.replace('\\', '/')
                 
                 count_stmt = select(func.count()).where(
-                    Image.file_path.startswith(prefix) | 
-                    Image.file_path.startswith(alt_prefix)
+                    path_startswith(Image.file_path, prefix) |
+                    path_startswith(Image.file_path, alt_prefix)
                 )
                 count = await db.scalar(count_stmt) or 0
                 
@@ -118,8 +118,8 @@ async def list_directory(
                  
             if entry.is_dir():
                 # Count images in this subdirectory (recursive)
-                prefix = entry.path if entry.path.endswith('/') else entry.path + '/'
-                count_stmt = select(func.count()).where(Image.file_path.startswith(prefix))
+                prefix = entry.path if entry.path.endswith(('/', '\\')) else entry.path + os.sep
+                count_stmt = select(func.count()).where(path_startswith(Image.file_path, prefix))
                 count = await db.scalar(count_stmt) or 0
                 
                 entries.append(FileEntry(

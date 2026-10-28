@@ -9,6 +9,8 @@
 - **Not yet run:** the Tauri shell (no Rust toolchain here) and anything on macOS. The first CI dry run covers both.
 **Date:** 2026-10-27
 
+**Keeping Docker and desktop in step:** follow [docs/desktop-parity.md](../desktop-parity.md) for any backend change (D2 added the CI checks behind it).
+
 ## Goal
 Each GitHub Release offers three downloads built from the same commit and `VERSION`:
 

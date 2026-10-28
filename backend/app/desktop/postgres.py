@@ -1,5 +1,5 @@
 """
-The desktop app's private Postgres 16 + PostGIS server (replaces the compose ``db`` service).
+The desktop app's private Postgres 18 + PostGIS server (replaces the compose ``db`` service).
 
 Listens on 127.0.0.1 only, on a port picked per launch, with scram auth for one role.
 Binaries come from the bundled runtime: <runtime>/pgsql/bin on Windows (EDB + PostGIS, run by
@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-from app.desktop.paths import DesktopPaths
+from app.desktop.paths import PG_MAJOR, DesktopPaths
 
 logger = logging.getLogger("astrocat.desktop")
 
@@ -92,9 +92,22 @@ class Postgres:
             )
         logger.info("initialized Postgres cluster in %s", self.paths.pgdata)
 
+    def check_major(self):
+        """
+        Refuse to start a cluster made by another Postgres major: this server can't read it, and
+        letting it try risks the data. Upgrading needs a dump/restore (not built yet).
+        """
+        found = (self.paths.pgdata / "PG_VERSION").read_text(encoding="utf-8").strip()
+        if found != str(PG_MAJOR):
+            raise PostgresError(
+                f"Your library database was created by PostgreSQL {found}; this AstroCat ships "
+                f"PostgreSQL {PG_MAJOR}. Install the previous version of AstroCat or see "
+                "docs/install-desktop.md#upgrading.")
+
     def start(self):
         if not self.initialized:
             self.init()
+        self.check_major()
         try:
             self._pg_ctl_start()
         except PostgresError:

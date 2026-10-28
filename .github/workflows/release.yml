@@ -9,6 +9,7 @@
 # Redis build (redis-windows MSYS2 8.10.2, chosen in the Phase 0 spike).
 # Failed steps publish their error lines as annotations (desktop/scripts/ci_annotate.py): job
 # logs need a signed-in user, annotations are readable through the public API.
+# The runtime build and smoke test live in .github/actions/desktop-runtime (shared with ci.yml).
 # Optional signing (unsigned builds when absent): APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
 # APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID.
 name: Release
@@ -88,85 +89,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # runtime build + launcher smoke test, shared with ci.yml's desktop-smoke job
+      - uses: ./.github/actions/desktop-runtime
         with:
-          node-version: 20
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm ci && npm run build
-
-      - uses: mamba-org/setup-micromamba@v2
-        with:
-          init-shell: none
-
-      - name: Fetch Redis-compatible server (Windows)
-        if: runner.os == 'Windows'
-        env:
-          URL: ${{ vars.WINDOWS_REDIS_ZIP_URL || 'https://github.com/redis-windows/redis-windows/releases/download/8.10.2/Redis-8.10.2-Windows-x64-msys2.zip' }}
-          SHA256: ${{ vars.WINDOWS_REDIS_ZIP_SHA256 || '7c8cebd50347eaa1d9e784da842ed47a4f33394637835531d6614777b950ee85' }}
-        run: |
-          curl -fsSL "$URL" -o "$RUNNER_TEMP/redis.zip"
-          echo "$SHA256  $RUNNER_TEMP/redis.zip" | sha256sum -c -
-          mkdir -p "$RUNNER_TEMP/redis-zip" && unzip -q "$RUNNER_TEMP/redis.zip" -d "$RUNNER_TEMP/redis-zip"
-          dir=$(dirname "$(find "$RUNNER_TEMP/redis-zip" -name redis-server.exe | head -1)")
-          echo "REDIS_DIR=$dir" >> "$GITHUB_ENV"
-
-      - name: Fetch Postgres + PostGIS (Windows)
-        # conda-forge has no Windows PostGIS: EDB's server + OSGeo's bundle, pinned by SHA-256.
-        # OSGeo moves superseded bundles to archive/, so that is the fallback URL.
-        if: runner.os == 'Windows'
-        env:
-          EDB_URL: https://get.enterprisedb.com/postgresql/postgresql-18.6-5-windows-x64-binaries.zip
-          EDB_SHA256: e2246ba91d22345bc3d017586c09ede52d9df180b1eeb480f050445f1cad84e2
-          POSTGIS_FILE: postgis-bundle-pg18-3.6.2x64.zip
-          POSTGIS_BASE: https://download.osgeo.org/postgis/windows/pg18
-          POSTGIS_SHA256: 0f41241cc536f7404dda43fd2a3f20ffe1fa1d71a8d4f6341428cd25931bf419
-        run: |
-          curl -fsSL "$EDB_URL" -o "$RUNNER_TEMP/edb.zip"
-          echo "$EDB_SHA256  $RUNNER_TEMP/edb.zip" | sha256sum -c -
-          curl -fsSL "$POSTGIS_BASE/$POSTGIS_FILE" -o "$RUNNER_TEMP/postgis.zip" \
-            || curl -fsSL "$POSTGIS_BASE/archive/$POSTGIS_FILE" -o "$RUNNER_TEMP/postgis.zip"
-          echo "$POSTGIS_SHA256  $RUNNER_TEMP/postgis.zip" | sha256sum -c -
-          echo "EDB_ZIP=$RUNNER_TEMP/edb.zip" >> "$GITHUB_ENV"
-          echo "POSTGIS_ZIP=$RUNNER_TEMP/postgis.zip" >> "$GITHUB_ENV"
-
-      - name: Build bundled runtime
-        env:
-          # without this the solver picks postgresql builds needing macOS 13.3+ on a macos-14
-          # runner, quietly raising the "macOS 12+" floor (no effect on Windows)
-          CONDA_OVERRIDE_OSX: "12.0"
-        run: |
-          python -m pip install pefile  # Windows DLL-closure prune in build_runtime.py
-          args=()
-          if [ -n "${REDIS_DIR:-}" ]; then args+=(--redis-dir "$REDIS_DIR"); fi
-          if [ -n "${EDB_ZIP:-}" ]; then args+=(--edb-zip "$EDB_ZIP" --postgis-zip "$POSTGIS_ZIP"); fi
-          set -o pipefail
-          python desktop/runtime/build_runtime.py --micromamba "$MAMBA_EXE" "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/runtime-build.log"
-
-      - name: Report runtime build errors
-        if: failure()
-        run: python desktop/scripts/ci_annotate.py "runtime build (${{ matrix.os }})" "$RUNNER_TEMP/runtime-build.log"
-
-      - name: Smoke-test the runtime (Postgres, Redis, API, workers)
-        working-directory: desktop/src-tauri/resources/runtime/backend
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then py=../python.exe; else py=../bin/python3; fi
-          "$py" -m app.desktop.launcher --smoke --data-dir "$RUNNER_TEMP/astrocat-smoke"
-
-      - name: Report smoke-test errors
-        if: failure()
-        run: python desktop/scripts/ci_annotate.py "smoke test (${{ matrix.os }})" "$RUNNER_TEMP/astrocat-smoke/logs"
-
-      - name: Upload smoke-test logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-logs-${{ matrix.os }}
-          path: ${{ runner.temp }}/astrocat-smoke/logs
+          os: ${{ matrix.os }}
+          smoke: "true"
+          redis-zip-url: ${{ vars.WINDOWS_REDIS_ZIP_URL }}
+          redis-zip-sha256: ${{ vars.WINDOWS_REDIS_ZIP_SHA256 }}
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2

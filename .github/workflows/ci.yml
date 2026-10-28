@@ -1,10 +1,12 @@
-# Checks on every push and pull request: backend tests (no database needed; they stub
-# Postgres/Redis) and a frontend production build.
+# Checks on every push and pull request: backend tests on Linux, Windows and macOS (no database
+# needed; they stub Postgres/Redis), a frontend production build, and, when backend or desktop
+# code changes, a desktop runtime build + launcher smoke test (D2, docs/desktop-parity.md).
 name: CI
 
 on:
   push:
-    branches: [main]
+    # desktop-apps: run on the branch until it is merged, like release.yml's dry run. Remove after merge.
+    branches: [main, desktop-apps]
   pull_request:
 
 permissions:
@@ -12,9 +14,14 @@ permissions:
 
 jobs:
   backend:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
+        shell: bash
         working-directory: backend
     env:
       SECRET_KEY: ci0only0k9x2Zq7LmP4vB8nR1sT6wY3uH5jC
@@ -26,8 +33,14 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvips42
+      - name: libvips (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libvips42
       - run: pip install -r requirements.txt
+      - name: libvips (Windows, macOS)
+        # pyvips-binary ships libvips itself; requirements.txt's pyvips loads it
+        if: runner.os != 'Linux'
+        run: pip install pyvips-binary
       - run: python -m pytest tests -q -p no:warnings
       - name: Desktop runtime build helpers
         working-directory: desktop/runtime
@@ -47,3 +60,43 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read  # paths-filter lists a PR's files through the API
+    outputs:
+      desktop: ${{ steps.filter.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            desktop:
+              - 'backend/app/**'
+              - 'backend/requirements.txt'
+              - 'backend/alembic/**'
+              - 'desktop/**'
+              - '.github/workflows/**'
+              - '.github/actions/**'
+
+  # The same runtime build + smoke test as release.yml (shared composite action), without the
+  # Tauri installer build.
+  desktop-smoke:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/desktop-runtime
+        with:
+          os: ${{ matrix.os }}
+          smoke: "true"
+          redis-zip-url: ${{ vars.WINDOWS_REDIS_ZIP_URL }}
+          redis-zip-sha256: ${{ vars.WINDOWS_REDIS_ZIP_SHA256 }}
