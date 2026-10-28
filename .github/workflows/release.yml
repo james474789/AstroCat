@@ -140,6 +140,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
+          # only the installers: the docker jobs also leave *.dockerbuild records, which
+          # download-artifact fails to fetch and the release doesn't need
+          pattern: desktop-*
           path: dist
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
