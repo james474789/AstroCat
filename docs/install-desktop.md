@@ -37,6 +37,8 @@ The app includes its own database, cache and background workers. It doesn't need
 | Logs | `…\AstroCat\logs` (tray → **Open logs folder**) | `…/AstroCat/logs` |
 | Daily database backups (last 7) | `…\AstroCat\backups` | `…/AstroCat/backups` |
 
+On macOS the app also keeps a symlink at `/Users/Shared/AstroCat/runtime` pointing into the app, because its bundled database server must run from that path. It's recreated at every start, and you can delete it after uninstalling.
+
 Uninstalling the app keeps this folder. Delete it yourself if you want to remove your library database too. Your image files are never modified.
 
 ## Optional API keys

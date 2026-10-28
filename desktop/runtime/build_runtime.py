@@ -35,6 +35,14 @@ REPO = Path(__file__).resolve().parents[2]
 IS_WINDOWS = sys.platform == "win32"
 DEFAULT_OUT = REPO / "desktop" / "src-tauri" / "resources" / "runtime"
 
+# conda-forge's Postgres can't be moved: its share/lib/zoneinfo paths are compiled in, and a
+# copy run from anywhere else fails (initdb: "postgres.bki does not exist"). So on macOS the env
+# is built at a fixed path that exists on every Mac, then moved into the app bundle; the
+# launcher points a symlink from this path to wherever the app's runtime is at each start.
+# BUILD_PREFIX_FILE records it for the launcher (app.desktop.launcher.ensure_build_prefix_link).
+MACOS_BUILD_PREFIX = Path("/Users/Shared/AstroCat/runtime")
+BUILD_PREFIX_FILE = ".build-prefix"
+
 # conda's pyvips is the one that finds conda's libvips (vips-42.dll); pip's pin would replace it
 CONDA_PROVIDED = {"pyvips"}
 
@@ -348,7 +356,19 @@ def main():
     if not args.app_only:
         if out.exists():
             shutil.rmtree(out)
-        create_env(out, args.micromamba)
+        if sys.platform == "darwin":
+            build_at = MACOS_BUILD_PREFIX
+            if build_at.is_symlink() or build_at.is_file():
+                build_at.unlink()
+            elif build_at.exists():
+                shutil.rmtree(build_at)
+            build_at.parent.mkdir(parents=True, exist_ok=True)
+            create_env(build_at, args.micromamba)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(build_at), str(out))
+            (out / BUILD_PREFIX_FILE).write_text(str(build_at), encoding="utf-8")
+        else:
+            create_env(out, args.micromamba)
         copy_redis(out, args.redis_dir)
         prune(out)
         build_pgsql(out, args.edb_zip, args.postgis_zip)

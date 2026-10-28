@@ -81,6 +81,37 @@ def runtime_path_dirs(prefix: Path) -> list[str]:
     return [str(prefix / s) for s in subdirs]
 
 
+BUILD_PREFIX_FILE = ".build-prefix"  # written by desktop/runtime/build_runtime.py (macOS)
+
+
+def ensure_build_prefix_link(prefix: Path) -> Path | None:
+    """
+    macOS: conda-forge's Postgres (and some other conda binaries) only work from the path the
+    runtime was built at, so point a symlink from there to this runtime. Returns the link, or
+    None when the runtime records no build prefix (Windows, or a dev env used in place).
+    """
+    marker = prefix / BUILD_PREFIX_FILE
+    if not marker.is_file():
+        return None
+    link = Path(marker.read_text(encoding="utf-8").strip())
+    target = prefix.resolve()
+    if link.is_symlink():
+        if Path(os.readlink(link)) == target or link.resolve() == target:
+            return link
+    elif link.exists():
+        if link.resolve() == target:
+            return link  # the runtime really lives at its build path
+        raise RuntimeError(f"{link} exists and is not AstroCat's runtime link; move it aside and restart")
+    link.parent.mkdir(parents=True, exist_ok=True)
+    tmp = link.with_name(f".{link.name}.{os.getpid()}")
+    if tmp.is_symlink():
+        tmp.unlink()
+    os.symlink(target, tmp, target_is_directory=True)
+    os.replace(tmp, link)  # atomic swap if an old link points at a previous install
+    logger.info("linked %s -> %s", link, target)
+    return link
+
+
 def pgsql_bin(prefix: Path) -> Path | None:
     """Windows: EDB's Postgres + PostGIS live in <runtime>/pgsql, apart from the conda env."""
     bin_dir = prefix / "pgsql" / "bin"
@@ -250,6 +281,7 @@ class Launcher:
 
     def start(self):
         kill_children_with_launcher()
+        ensure_build_prefix_link(Path(sys.prefix))  # before anything runs a conda binary
         reap_orphans(self.paths.children_file, sys.prefix)
         self.env = self._make_env()
 

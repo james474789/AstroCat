@@ -269,3 +269,50 @@ def test_admin_backup_tools_follow_pg_bin_dir(monkeypatch):
     monkeypatch.setattr(settings, "pg_bin_dir", "/rt/pgsql/bin")
     expected = "pg_dump.exe" if launcher.os.name == "nt" else "pg_dump"
     assert admin._pg_tool("pg_dump") == launcher.os.path.join("/rt/pgsql/bin", expected)
+
+
+def _can_symlink(tmp_path):
+    try:
+        (tmp_path / "probe-link").symlink_to(tmp_path, target_is_directory=True)
+        return True
+    except (OSError, NotImplementedError):
+        return False
+
+
+def test_build_prefix_link_follows_the_runtime_wherever_it_is(tmp_path):
+    if not _can_symlink(tmp_path):
+        pytest.skip("creating symlinks needs privileges on this machine")
+    link = tmp_path / "Shared" / "AstroCat" / "runtime"
+    first = tmp_path / "Applications" / "AstroCat.app" / "runtime"
+    first.mkdir(parents=True)
+    (first / launcher.BUILD_PREFIX_FILE).write_text(str(link))
+
+    assert launcher.ensure_build_prefix_link(first) == link
+    assert link.resolve() == first.resolve()
+    assert launcher.ensure_build_prefix_link(first) == link  # idempotent
+
+    moved = tmp_path / "Translocated" / "AstroCat.app" / "runtime"  # app moved / updated
+    moved.mkdir(parents=True)
+    (moved / launcher.BUILD_PREFIX_FILE).write_text(str(link))
+    launcher.ensure_build_prefix_link(moved)
+    assert link.resolve() == moved.resolve()
+
+    import shutil
+    shutil.rmtree(moved)  # stale link to a deleted install gets replaced too
+    launcher.ensure_build_prefix_link(first)
+    assert link.resolve() == first.resolve()
+
+
+def test_build_prefix_link_refuses_to_replace_a_real_folder(tmp_path):
+    link = tmp_path / "Shared" / "AstroCat" / "runtime"
+    link.mkdir(parents=True)  # someone else's folder, not our link
+    rt = tmp_path / "app" / "runtime"
+    rt.mkdir(parents=True)
+    (rt / launcher.BUILD_PREFIX_FILE).write_text(str(link))
+    with pytest.raises(RuntimeError):
+        launcher.ensure_build_prefix_link(rt)
+    assert link.is_dir() and not link.is_symlink()
+
+
+def test_no_build_prefix_file_means_nothing_to_link(tmp_path):
+    assert launcher.ensure_build_prefix_link(tmp_path) is None
