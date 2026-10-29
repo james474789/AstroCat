@@ -898,8 +898,14 @@ def regenerate_thumbnails(self):
             for img_id in image_ids:
                 generate_thumbnail.delay(img_id, force=True)
                 
-        # Stats are not recounted here: each generate_thumbnail applies its own
-        # delta as it finishes (a full recount walks the whole cache, minutes).
+        # Each generate_thumbnail applies its own delta, but that was seen not to land on
+        # some installs (QA-27), so also recount once behind the queued work and again
+        # shortly after, which absorbs tasks that were still running at the first recount.
+        try:
+            update_thumbnail_stats.apply_async()
+            update_thumbnail_stats.apply_async(countdown=60)
+        except Exception as e:
+            logger.warning(f"Could not queue thumbnail recount after regeneration: {e}")
         return {"status": "completed", "images_queued": len(image_ids)}
     except Exception as e:
         logger.error(f"Error during regenerate_thumbnails task: {e}", exc_info=True)
