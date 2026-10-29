@@ -26,6 +26,7 @@ def test_reindex_all_runs_incremental_backfills_after_scan(monkeypatch):
     with patch("app.tasks.indexer.redis") as mock_redis, \
          patch("app.tasks.indexer.os.path.exists", return_value=True), \
          patch("app.tasks.indexer._scan_directory", return_value=fake_scan_result), \
+         patch("app.tasks.indexer._remove_orphaned_images", return_value=0), \
          patch("app.tasks.indexer.update_mount_stats"), \
          patch("app.scripts.backfill_frame_types.backfill_frame_types") as mock_ft_backfill, \
          patch("app.scripts.backfill_field_radius.backfill_field_radius") as mock_fr_backfill, \

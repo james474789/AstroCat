@@ -24,7 +24,7 @@ from app.services.frame_type import classify_frame_type
 from app.utils.field_geometry import effective_field_radius
 from app.config import settings
 from app.utils.path_security import path_under_root, root_prefix_pattern
-from sqlalchemy import select, func, delete, update
+from sqlalchemy import select, func, delete, update, or_, not_
 from sqlalchemy.exc import OperationalError
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
 from app.models.system_stats import SystemStats
@@ -131,6 +131,43 @@ def _scan_directory(directory_path: str):
         "files_queued": files_queued,
         "files_removed": files_removed
     }
+
+
+def _remove_orphaned_images(roots: list) -> int:
+    """
+    Delete Image rows whose file_path lies under none of `roots`.
+
+    _scan_directory only ever looks at rows inside the root it walks, so rows left behind by a
+    folder that was removed from the configuration are never examined. Callers must only call
+    this after every configured root was scanned successfully; with no roots it does nothing.
+    Deletes in batches of 500, like the missing-file removal in _scan_directory.
+    """
+    if not roots:
+        return 0
+
+    in_any_root = or_(*[path_under_root(Image.file_path, root) for root in roots])
+    batch_size = 500
+    removed = 0
+    samples = []
+
+    with SessionLocal() as session:
+        total_rows = session.execute(select(func.count()).select_from(Image)).scalar() or 0
+        orphans = [row[0] for row in session.execute(select(Image.file_path).where(not_(in_any_root))).all()]
+        if not orphans:
+            return 0
+
+        samples = orphans[:3]
+        for i in range(0, len(orphans), batch_size):
+            batch = orphans[i:i + batch_size]
+            session.execute(delete(Image).where(Image.file_path.in_(batch)))
+            removed += len(batch)
+        session.commit()
+
+    logger.warning(
+        f"Removed {removed} of {total_rows} indexed images that are outside the configured "
+        f"library folders {roots}; e.g. {samples}"
+    )
+    return removed
 
 
 def calculate_file_hash(file_path: str) -> str:
@@ -627,26 +664,49 @@ def reindex_all(self):
     total_files_removed = 0
     
     results = []
-    
-    try:
-        for path in settings.image_paths_list:
-            if os.path.exists(path):
-                r.set("indexer:current_path", path)
-                _touch_indexer_heartbeat()
-                # Run synchronously inside the worker to track progress without spawning extra tasks
-                result = _scan_directory(path)
-                results.append({"path": path, **result})
-                total_files_scanned += result.get("files_found", 0)
-                total_files_added += result.get("files_queued", 0)
-                total_files_removed += result.get("files_removed", 0)
+    # Orphan cleanup needs a complete view of every configured root: any skipped
+    # (unmounted drive, NAS offline) or failed root turns it off for this scan.
+    all_roots_scanned = True
 
-                # Publish live progress after each mount so the Admin UI never
-                # shows stale counters (and looks frozen) mid-scan.
-                r.set("indexer:files_scanned", str(total_files_scanned))
-                r.set("indexer:files_added", str(total_files_added))
-                r.set("indexer:files_updated", "0")
-                r.set("indexer:files_removed", str(total_files_removed))
-                logger.info(f"Scan progress: {path} done; scanned={total_files_scanned} added={total_files_added} removed={total_files_removed}")
+    try:
+        configured_roots = list(settings.image_paths_list)
+        for path in configured_roots:
+            if not os.path.exists(path):
+                all_roots_scanned = False
+                logger.warning(f"Configured folder {path} does not exist; skipping it and the orphan cleanup")
+                continue
+            r.set("indexer:current_path", path)
+            _touch_indexer_heartbeat()
+            # Run synchronously inside the worker to track progress without spawning extra tasks
+            try:
+                result = _scan_directory(path)
+            except SoftTimeLimitExceeded:
+                raise
+            except Exception:
+                all_roots_scanned = False
+                raise
+            results.append({"path": path, **result})
+            total_files_scanned += result.get("files_found", 0)
+            total_files_added += result.get("files_queued", 0)
+            total_files_removed += result.get("files_removed", 0)
+
+            # Publish live progress after each mount so the Admin UI never
+            # shows stale counters (and looks frozen) mid-scan.
+            r.set("indexer:files_scanned", str(total_files_scanned))
+            r.set("indexer:files_added", str(total_files_added))
+            r.set("indexer:files_updated", "0")
+            r.set("indexer:files_removed", str(total_files_removed))
+            logger.info(f"Scan progress: {path} done; scanned={total_files_scanned} added={total_files_added} removed={total_files_removed}")
+
+        # Rows under no configured root (e.g. a folder removed from the library) are
+        # invisible to the per-root scans above. Only safe with a complete view of
+        # every root: an unmounted drive or a failed scan must never wipe the index.
+        if configured_roots and all_roots_scanned:
+            orphans_removed = _remove_orphaned_images(configured_roots)
+            total_files_removed += orphans_removed
+            r.set("indexer:files_removed", str(total_files_removed))
+        else:
+            logger.info("Skipping orphaned-image cleanup (no configured folders, or a folder was skipped/failed)")
 
         # Self-healing catch-up (F1/F2): fill in frame_type/target data for
         # rows that predate those columns (e.g. after upgrading to a build
