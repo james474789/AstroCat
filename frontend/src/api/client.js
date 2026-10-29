@@ -49,6 +49,21 @@ function withCsrfHeaders(headers = {}) {
 }
 
 // Helper to handle responses
+// "body.latitude: Input should be less than or equal to 90" -> "Latitude must be at most 90"
+function formatValidationError(err) {
+    const field = (err.loc || []).filter(p => p !== 'body' && p !== 'query' && typeof p === 'string').pop();
+    const label = field ? field.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()) : null;
+    const msg = String(err.msg || 'is invalid')
+        .replace(/^Input should be less than or equal to /, 'must be at most ')
+        .replace(/^Input should be greater than or equal to /, 'must be at least ')
+        .replace(/^Input should be less than /, 'must be less than ')
+        .replace(/^Input should be greater than /, 'must be greater than ')
+        .replace(/^Field required$/, 'is required')
+        .replace(/^String should have at least (\d+) characters?/, 'must be at least $1 characters')
+        .replace(/^Input should be a valid /, 'must be a valid ');
+    return label ? `${label} ${msg}` : msg;
+}
+
 async function handleResponse(response) {
     if (response.status === 401) {
         // Authentication required or session expired
@@ -73,7 +88,7 @@ async function handleResponse(response) {
 
         // Handle FastAPI validation error lists
         if (Array.isArray(message)) {
-            message = message.map(err => `${err.loc.join('.')}: ${err.msg}`).join(', ');
+            message = message.map(formatValidationError).join('; ');
         } else if (typeof message === 'object') {
             message = JSON.stringify(message);
         }
@@ -752,7 +767,10 @@ export function formatExposure(seconds) {
     if (!seconds && seconds !== 0) return 'N/A';
     if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`;
     if (seconds < 60) return `${seconds.toFixed(1)}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    if (seconds < 3600) {
+        const rounded = Math.round(seconds * 10) / 10;
+        return `${Math.floor(rounded / 60)}m ${Math.round((rounded % 60) * 10) / 10}s`;
+    }
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     return `${hours}h ${mins}m`;

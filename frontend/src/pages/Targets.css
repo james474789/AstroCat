@@ -240,12 +240,19 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 0 1 auto;
+    min-width: 6ch;
 }
 
+/* The type line gives way first so the name is never squeezed out */
 .page-targets .target-meta {
     font-size: 0.75rem;
     color: var(--color-text-muted);
     white-space: nowrap;
+    flex: 0 100 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .page-targets .target-filter-bar {

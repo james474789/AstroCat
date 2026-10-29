@@ -105,6 +105,7 @@
     max-width: 560px;
     max-height: 85vh;
     max-height: 85dvh;
+    margin: auto;
     padding: 0;
     overflow: hidden;
     font-family: var(--font-family);

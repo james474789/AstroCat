@@ -49,7 +49,11 @@ class ExifExtractor(BaseExtractor):
                 # --- Camera Info ---
                 make = str(tags.get('Image Make', '')).strip()
                 model = str(tags.get('Image Model', '')).strip()
-                metadata['camera_name'] = f"{make} {model}".strip()
+                # EXIF models usually already start with the make ("Canon EOS 6D")
+                if make and model.lower().startswith(make.lower()):
+                    metadata['camera_name'] = model
+                else:
+                    metadata['camera_name'] = f"{make} {model}".strip()
                 
                 # --- Lens Model ---
                 lens_tag = tags.get('EXIF LensModel')
