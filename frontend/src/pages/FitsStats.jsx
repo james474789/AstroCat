@@ -672,13 +672,18 @@ export default function FitsStats() {
                                 }}
                                 itemStyle={{ color: CHART_TEXT }}
                             />
-                            {/* Explicit entries: the auto-built legend added a stray "value" item */}
-                            <Legend payload={cameraData.map((entry, index) => ({
-                                value: entry.name,
-                                type: 'circle',
-                                color: COLORS[index % COLORS.length],
-                                id: `camera-${index}`,
-                            }))} />
+                            {/* Rendered from cameraData: recharts 3 ignores Legend's payload prop and its
+                                auto-built legend added a stray "value" item */}
+                            <Legend content={() => (
+                                <ul style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4px 14px', margin: 0, padding: 0, listStyle: 'none', fontSize: 'var(--font-size-sm)', color: CHART_TEXT }}>
+                                    {cameraData.map((entry, index) => (
+                                        <li key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                            <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[index % COLORS.length] }} />
+                                            {entry.name}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )} />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>

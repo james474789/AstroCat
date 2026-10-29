@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './SpatialSearchInput.css';
 import { Star, Diamond, Circle, Lightbulb } from 'lucide-react';
 
@@ -6,7 +6,7 @@ import { Star, Diamond, Circle, Lightbulb } from 'lucide-react';
 export function parseDec(text) {
     const t = String(text ?? '').trim();
     if (!t) return '';
-    const m = t.match(/^([+-]?)(\d+(?:\.\d*)?)(?:[:\s]+(\d+(?:\.\d*)?))?(?:[:\s]+(\d+(?:\.\d*)?))?$/);
+    const m = t.match(/^([+-]?)(\d+(?:\.\d*)?)(?:[:\s]+(\d+(?:\.\d*)?))?(?:[:\s]+(\d+(?:\.\d*)?))?[:\s]*$/);
     if (!m) return null;
     const [, sign, d, min = '0', sec = '0'] = m;
     const value = Number(d) + Number(min) / 60 + Number(sec) / 3600;
@@ -28,9 +28,13 @@ export default function SpatialSearchInput({
 }) {
     // Keep what the user typed (e.g. "+47:12"); report the decimal value upward.
     const [decText, setDecText] = useState(dec);
+    const lastEmitted = useRef(String(dec ?? ''));
+    // Only follow changes that did not come from this field (Clear All, a URL, a saved filter)
     useEffect(() => {
-        if (parseDec(decText) !== String(dec ?? '')) setDecText(dec ?? '');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (String(dec ?? '') !== lastEmitted.current) {
+            lastEmitted.current = String(dec ?? '');
+            setDecText(dec ?? '');
+        }
     }, [dec]);
     const decInvalid = decText !== '' && parseDec(decText) === null;
 
@@ -69,7 +73,8 @@ export default function SpatialSearchInput({
                             onChange={(e) => {
                                 setDecText(e.target.value);
                                 const parsed = parseDec(e.target.value);
-                                onDecChange(parsed === null ? '' : parsed);
+                                lastEmitted.current = parsed === null ? '' : parsed;
+                                onDecChange(lastEmitted.current);
                             }}
                         />
                         {decInvalid && <span className="spatial-hint text-caption">Use 45.5 or 45:30 (-90 to 90)</span>}
