@@ -71,3 +71,40 @@ def test_remove_tracked_deletes_files_and_subtracts_them(tmp_path, monkeypatch):
     assert ts.remove_tracked([str(a), str(b), str(tmp_path / "gone.jpg")]) == 2
     assert not a.exists() and not b.exists()
     assert deltas == [(-2, -15)]
+
+
+def test_update_thumbnail_stats_counts_the_directory(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.tasks import indexer
+
+    (tmp_path / "a_thumb.jpg").write_bytes(b"x" * 10)
+    (tmp_path / "b_thumb.jpg").write_bytes(b"x" * 20)
+    saved = {}
+
+    class _Stats:
+        pass
+
+    class _S:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *e):
+            return False
+
+        def execute(self, stmt):
+            class _R:
+                def scalar_one_or_none(self_):
+                    return saved.setdefault("row", _Stats())
+            return _R()
+
+        def add(self, o):
+            pass
+
+        def commit(self):
+            pass
+
+    monkeypatch.setattr(type(settings), "thumbnail_cache_path", property(lambda self: str(tmp_path)), raising=False)
+    monkeypatch.setattr(indexer, "SessionLocal", lambda: _S())
+    result = indexer.update_thumbnail_stats()
+    assert result["count"] == 2 and result["size_bytes"] == 30
+    assert saved["row"].count == 2

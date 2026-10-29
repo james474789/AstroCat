@@ -538,11 +538,14 @@ async def upload_backup(file: UploadFile = File(...)):
             await engine.dispose()
 
             # The restored system_stats row describes the backup's cache, not this disk.
+            # Recount now (not on a worker queue that may be busy or down) so the page is right on return.
             try:
+                from app.database import sync_engine
                 from app.tasks.indexer import update_thumbnail_stats
-                update_thumbnail_stats.delay()
+                sync_engine.dispose()  # sync pool connections were terminated by the restore
+                await asyncio.to_thread(update_thumbnail_stats)
             except Exception as exc:
-                logger.warning(f"Could not queue thumbnail recount after restore: {exc}")
+                logger.warning(f"Could not recount thumbnails after restore: {exc}")
 
             logger.info(f"Database restore completed successfully from file: {file.filename}")
             return JSONResponse(content={
