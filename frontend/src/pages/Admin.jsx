@@ -487,8 +487,14 @@ function Admin() {
     function handleAddMountPoint() {
         return confirm({
             title: 'Add a mount point',
-            description: 'To add a new mount point:',
-            children: (
+            description: desktopMode ? 'To add a library folder:' : 'To add a new mount point:',
+            children: desktopMode ? (
+                <ol>
+                    <li>Choose "Choose library folders…" from the menu bar</li>
+                    <li>Add the folder and confirm</li>
+                    <li>Run a scan from Admin &gt; Indexer</li>
+                </ol>
+            ) : (
                 <ol>
                     <li>Add the path to your .env file (IMAGE_PATH_X)</li>
                     <li>Add the volume mapping in docker-compose.yml</li>
@@ -1054,7 +1060,7 @@ function Admin() {
                                     </div>
                                 ))}
                             </div>
-                            <div className="mount-actions"><Button onClick={handleAddMountPoint}>+ Add Mount Point</Button><p className="text-sm text-muted mt-sm">Note: Mount points are configured in docker-compose.yml</p></div>
+                            <div className="mount-actions"><Button onClick={handleAddMountPoint}>+ Add Mount Point</Button><p className="text-sm text-muted mt-sm">{desktopMode ? 'Note: Library folders are chosen from the menu bar item "Choose library folders…".' : 'Note: Mount points are configured in docker-compose.yml'}</p></div>
                         </section>
                     )}
 
@@ -1132,7 +1138,7 @@ function Admin() {
                                                         <code>{m.id}</code>
                                                         {m.applied_at && <> · {new Date(m.applied_at).toLocaleString()}</>}
                                                         {m.duration_seconds != null && <> · {m.duration_seconds.toFixed(1)}s</>}
-                                                        {m.result && <> · {m.result}</>}
+                                                        {m.result && <> · {String(m.result).length > 160 ? `${String(m.result).slice(0, 160)}…` : m.result}</>}
                                                     </div>
                                                 </div>
                                                 <span style={{ color: statusColor, fontSize: '0.8rem', textTransform: 'capitalize' }}>{m.status}</span>

@@ -958,8 +958,14 @@ export default function Search() {
                                     <option value="">All Formats</option>
                                     <option value="FITS">FITS</option>
                                     <option value="CR2">CR2</option>
+                                    <option value="CR3">CR3</option>
+                                    <option value="ARW">ARW</option>
+                                    <option value="NEF">NEF</option>
+                                    <option value="DNG">DNG</option>
                                     <option value="JPG">JPG</option>
+                                    <option value="PNG">PNG</option>
                                     <option value="TIFF">TIFF</option>
+                                    <option value="XISF">XISF</option>
                                 </select>
                             </div>
 

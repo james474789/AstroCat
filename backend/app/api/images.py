@@ -112,12 +112,18 @@ def _build_image_query(
     # Quick search - searches both file names and object names
     if search:
         from sqlalchemy import or_
-        stmt = stmt.where(
-            or_(
-                Image.file_name.ilike(f"%{search}%"),
-                Image.object_name.ilike(f"%{search}%")
+        # autoescape so a typed % or _ matches literally; the space-stripped
+        # comparison lets "M 31" find "M31" like the Object Name filter does
+        compact = search.replace(" ", "")
+        clauses = [
+            Image.file_name.icontains(search, autoescape=True),
+            Image.object_name.icontains(search, autoescape=True),
+        ]
+        if compact:
+            clauses.append(
+                func.replace(Image.object_name, ' ', '').icontains(compact, autoescape=True)
             )
-        )
+        stmt = stmt.where(or_(*clauses))
     
     if object_name:
         from app.models.matches import ImageCatalogMatch
