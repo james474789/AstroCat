@@ -108,3 +108,28 @@ def test_update_thumbnail_stats_counts_the_directory(tmp_path, monkeypatch):
     result = indexer.update_thumbnail_stats()
     assert result["count"] == 2 and result["size_bytes"] == 30
     assert saved["row"].count == 2
+
+
+def test_regenerate_queues_a_recount(monkeypatch):
+    from app.tasks import indexer, thumbnails
+
+    class _S:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *e):
+            return False
+
+        def execute(self, stmt):
+            class _R:
+                def all(self_):
+                    return [(1,), (2,)]
+            return _R()
+
+    queued = []
+    monkeypatch.setattr(indexer, "SessionLocal", lambda: _S())
+    monkeypatch.setattr(thumbnails.generate_thumbnail, "delay", lambda *a, **k: queued.append(("gen", a)))
+    monkeypatch.setattr(indexer.update_thumbnail_stats, "apply_async", lambda *a, **k: queued.append(("recount", k)))
+    result = indexer.regenerate_thumbnails.run()
+    assert result["images_queued"] == 2
+    assert [q[0] for q in queued] == ["gen", "gen", "recount", "recount"]
