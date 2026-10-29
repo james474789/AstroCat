@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from app.config import settings
 from app.worker import celery_app
+import asyncio
 import redis
 import os
 import shutil
@@ -353,6 +354,33 @@ def _pg_tool(name: str) -> str:
     return os.path.join(settings.pg_bin_dir, exe)
 
 
+_RESTORE_PREAMBLE = (
+    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+    "WHERE datname = current_database() AND pid <> pg_backend_pid();\n"
+)
+_RESET_SCHEMA = "DROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n"
+
+
+def prepare_restore_sql(contents: bytes) -> bytes:
+    """
+    Check an uploaded backup and wrap it so the restore replaces the data.
+
+    Raises ValueError for anything that is not a plain pg_dump. Dumps made
+    without --clean are preceded by a schema reset, otherwise every CREATE
+    fails with "already exists" and nothing is replaced. Other sessions are
+    terminated first because their locks would block the restore forever.
+    """
+    text = contents.decode("utf-8", errors="replace")
+    if not text.strip():
+        raise ValueError("The backup file is empty.")
+    if "PostgreSQL database dump" not in text and "CREATE TABLE" not in text:
+        raise ValueError("The file does not look like an AstroCat database backup.")
+    pre = _RESTORE_PREAMBLE
+    if "DROP TABLE" not in text:
+        pre += _RESET_SCHEMA
+    return pre.encode() + contents
+
+
 @router.get("/backup/download")
 async def download_backup():
     """
@@ -386,6 +414,7 @@ async def download_backup():
             "-U", user,
             "-d", db,
             "-F", "p",  # plain text format
+            "--clean", "--if-exists",  # so a restore replaces existing tables
             "--no-privileges"
         ]
 
@@ -401,7 +430,7 @@ async def download_backup():
             env=env
         )
 
-        stdout, stderr = proc.communicate()
+        stdout, stderr = await asyncio.to_thread(proc.communicate)
 
         if proc.returncode != 0:
             raise Exception(f"pg_dump failed: {stderr.decode()}")
@@ -456,7 +485,14 @@ async def upload_backup(file: UploadFile = File(...)):
         # Handle gzipped files
         if file.filename.endswith('.gz'):
             import gzip
-            contents = gzip.decompress(contents)
+            try:
+                contents = gzip.decompress(contents)
+            except (OSError, EOFError):
+                raise HTTPException(status_code=400, detail="The backup file is not a valid gzip archive.")
+        try:
+            contents = prepare_restore_sql(contents)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
         # Write to temporary file
         with tempfile.NamedTemporaryFile(suffix='.sql', delete=False) as tmp_file:
@@ -472,7 +508,9 @@ async def upload_backup(file: UploadFile = File(...)):
                 "-U", user,
                 "-d", db,
                 "-f", tmp_filename,
-                "--quiet"
+                "--quiet",
+                "--single-transaction",
+                "-v", "ON_ERROR_STOP=1",
             ]
 
             # Set environment for password
@@ -487,7 +525,8 @@ async def upload_backup(file: UploadFile = File(...)):
                 env=env
             )
 
-            stdout, stderr = proc.communicate()
+            # Off the event loop: the restore can run for minutes and the API must stay up
+            stdout, stderr = await asyncio.to_thread(proc.communicate)
 
             if proc.returncode != 0:
                 raise Exception(f"psql restore failed: {stderr.decode()}")
@@ -502,6 +541,8 @@ async def upload_backup(file: UploadFile = File(...)):
             # Clean up temporary file
             os.unlink(tmp_filename)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error restoring backup from {file.filename}: {e}")
         print(f"Error restoring backup: {e}")

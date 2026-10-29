@@ -115,6 +115,10 @@ async def get_fullres(
 
     manifest = await run_in_threadpool(cache.read_manifest, key)
     if manifest:
+        if manifest.get("image_id") != image.id:
+            await run_in_threadpool(cache.adopt, key, image.id)
+            manifest = {**manifest, "image_id": image.id}
+            _OWNERS[key] = image.id
         await run_in_threadpool(cache.touch, key)
         return _envelope(image, preset, presets, state="ready", manifest=manifest, key=key,
                          dzi_url=f"{_base_url(image.id)}/{key}/image.dzi")

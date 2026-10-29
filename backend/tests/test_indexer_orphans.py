@@ -23,6 +23,7 @@ class FakeImage(Base):
     __tablename__ = "images"
     id = Column(Integer, primary_key=True)
     file_path = Column(String, unique=True, nullable=False)
+    thumbnail_path = Column(String, nullable=True)
 
 
 @pytest.fixture
