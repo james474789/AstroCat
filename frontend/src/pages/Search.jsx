@@ -15,7 +15,7 @@ import ImageCard from '../components/images/ImageCard';
 import FilterSection from '../components/layout/FilterSection';
 import FilterChips from '../components/layout/FilterChips';
 import RangeInput from '../components/layout/RangeInput';
-import SpatialSearchInput from '../components/layout/SpatialSearchInput';
+import SpatialSearchInput, { parseRa } from '../components/layout/SpatialSearchInput';
 import FolderTree from '../components/layout/FolderTree';
 import ActionMenu from '../components/layout/ActionMenu';
 import { useQualityUnits } from '../context/QualityUnitsContext';
@@ -164,16 +164,6 @@ function degreesToHMS(degrees) {
     const h = Math.floor(totalHours);
     const m = Math.round((totalHours - h) * 60);
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-}
-
-// Helper: Convert HH:MM to degrees
-function hmsToDegrees(hms) {
-    if (!hms) return '';
-    const parts = hms.split(':');
-    let h = 0, m = 0;
-    if (parts.length >= 1) h = parseFloat(parts[0]) || 0;
-    if (parts.length >= 2) m = parseFloat(parts[1]) || 0;
-    return (h + m / 60) * 15;
 }
 
 // Result line inside the bulk-edit dialogs. Messages start with a check or cross.
@@ -450,7 +440,9 @@ export default function Search() {
 
     function applyCurrentFilters(updatedFilters, overrideRaString = null) {
         const params = new URLSearchParams();
-        const raValue = overrideRaString !== null ? overrideRaString : (raInput ? hmsToDegrees(raInput).toFixed(4) : '');
+        const parsedRa = parseRa(raInput);
+        if (overrideRaString === null && parsedRa === null) return; // invalid RA: the field shows why
+        const raValue = overrideRaString !== null ? overrideRaString : parsedRa;
 
         Object.entries({ ...updatedFilters, ra: raValue }).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== '') {
@@ -469,11 +461,9 @@ export default function Search() {
         // Q1d: FWHM/HFR bounds are in the units the viewer entered them in.
         const hasSize = filtersToApply.fwhm_min || filtersToApply.fwhm_max || filtersToApply.hfr_max;
         filtersToApply.quality_units = hasSize ? (filtersToApply.quality_units || units) : '';
-        if (raInput) {
-            filtersToApply.ra = hmsToDegrees(raInput).toFixed(4);
-        } else {
-            filtersToApply.ra = '';
-        }
+        const parsedRa = parseRa(raInput);
+        if (parsedRa === null) return; // invalid RA: the field shows why
+        filtersToApply.ra = parsedRa;
 
         Object.entries(filtersToApply).forEach(([key, value]) => {
             if (value) params.set(key, value);

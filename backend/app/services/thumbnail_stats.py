@@ -68,6 +68,29 @@ def record_write(thumb_path: Optional[str], old_size: Optional[int]) -> None:
         logger.warning(f"Could not update thumbnail stats: {e}")
 
 
+def remove_tracked(thumb_paths) -> int:
+    """Delete thumbnail files and subtract them from the stats. Never raises. Returns files removed."""
+    removed = 0
+    freed = 0
+    for thumb in thumb_paths:
+        size = file_size(thumb)
+        try:
+            os.remove(thumb)
+        except OSError:
+            continue  # already gone or unreadable; a stale thumbnail is only wasted space
+        removed += 1
+        freed += size or 0
+    if removed:
+        try:
+            from app.database import SessionLocal
+            with SessionLocal() as session:
+                apply_delta(session, -removed, -freed)
+                session.commit()
+        except Exception as e:
+            logger.warning(f"Could not update thumbnail stats: {e}")
+    return removed
+
+
 def generate_tracked(source_path: str, output_dir: str, **kwargs) -> Optional[str]:
     """ThumbnailGenerator.generate plus the stats delta for whatever it wrote."""
     from app.services.thumbnails import ThumbnailGenerator

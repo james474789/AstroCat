@@ -50,15 +50,34 @@ SessionLocal = sessionmaker(
 Base = declarative_base()
 
 
+# Bumped when a database restore terminates every other connection. Sessions that
+# were opened before then hold a dead connection and must not try to commit on it.
+_restore_epoch = 0
+
+
+def mark_database_restored() -> None:
+    """Record that all pooled/open connections were terminated by a restore."""
+    global _restore_epoch
+    _restore_epoch += 1
+
+
 async def get_db() -> AsyncSession:
     """
     Dependency that provides a database session.
     Use with FastAPI's Depends().
     """
+    started_epoch = _restore_epoch
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
+            if started_epoch != _restore_epoch:
+                # A restore killed this session's connection mid-request; nothing to commit.
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+            else:
+                await session.commit()
         except Exception:
             await session.rollback()
             raise

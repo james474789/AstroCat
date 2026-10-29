@@ -14,6 +14,18 @@ export function parseDec(text) {
     return `${sign === '-' ? '-' : ''}${Number(value.toFixed(5))}`;
 }
 
+// "12:30", "12" and "5.5" (hours) -> decimal degrees; '' when empty, null when not a valid RA (0 up to 24 h).
+export function parseRa(text) {
+    const t = String(text ?? '').trim();
+    if (!t) return '';
+    const m = t.match(/^(\d+(?:\.\d*)?)(?:[:\s]+(\d+(?:\.\d*)?))?(?:[:\s]+(\d+(?:\.\d*)?))?[:\s]*$/);
+    if (!m) return null;
+    const [, h, min = '0', sec = '0'] = m;
+    const hours = Number(h) + Number(min) / 60 + Number(sec) / 3600;
+    if (Number(min) >= 60 || Number(sec) >= 60 || hours >= 24) return null;
+    return (hours * 15).toFixed(4);
+}
+
 /**
  * Improved spatial search component for celestial coordinates
  * Provides clean input for RA, Dec, and Radius with visual grouping
@@ -36,6 +48,7 @@ export default function SpatialSearchInput({
             setDecText(dec ?? '');
         }
     }, [dec]);
+    const raInvalid = parseRa(raHms) === null;
     const decInvalid = decText !== '' && parseDec(decText) === null;
 
     return (
@@ -53,8 +66,11 @@ export default function SpatialSearchInput({
                             className="input spatial-input"
                             placeholder="12:30"
                             value={raHms}
+                            aria-invalid={raInvalid}
+                            title={raInvalid ? 'Use hours:minutes (12:30), from 0 up to 24 hours' : undefined}
                             onChange={(e) => onRaChange(e.target.value)}
                         />
+                        {raInvalid && <span className="spatial-hint text-caption">Use 12:30 (0 to 24 h)</span>}
                     </div>
 
                     <div className="spatial-field">
