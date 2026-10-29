@@ -47,3 +47,27 @@ def test_record_write_never_raises(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ts, "apply_delta", boom)
     ts.record_write(str(f), None)  # must swallow
+
+
+def test_remove_tracked_deletes_files_and_subtracts_them(tmp_path, monkeypatch):
+    a = tmp_path / "a_thumb.jpg"
+    a.write_bytes(b"x" * 10)
+    b = tmp_path / "b_thumb.jpg"
+    b.write_bytes(b"x" * 5)
+    deltas = []
+
+    class _S:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *e):
+            return False
+
+        def commit(self):
+            pass
+
+    monkeypatch.setattr("app.database.SessionLocal", lambda: _S())
+    monkeypatch.setattr(ts, "apply_delta", lambda s, c, b_: deltas.append((c, b_)))
+    assert ts.remove_tracked([str(a), str(b), str(tmp_path / "gone.jpg")]) == 2
+    assert not a.exists() and not b.exists()
+    assert deltas == [(-2, -15)]

@@ -531,6 +531,19 @@ async def upload_backup(file: UploadFile = File(...)):
             if proc.returncode != 0:
                 raise Exception(f"psql restore failed: {stderr.decode()}")
 
+            # psql terminated every other connection; drop the pool's stale ones and
+            # tell in-flight request sessions (e.g. auth) not to commit on a dead link.
+            from app.database import engine, mark_database_restored
+            mark_database_restored()
+            await engine.dispose()
+
+            # The restored system_stats row describes the backup's cache, not this disk.
+            try:
+                from app.tasks.indexer import update_thumbnail_stats
+                update_thumbnail_stats.delay()
+            except Exception as exc:
+                logger.warning(f"Could not queue thumbnail recount after restore: {exc}")
+
             logger.info(f"Database restore completed successfully from file: {file.filename}")
             return JSONResponse(content={
                 "message": "Database restored successfully",

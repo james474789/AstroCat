@@ -6,6 +6,7 @@ Populates the Messier and NGC catalogs with astronomical data.
 import asyncio
 import json
 import csv
+import re
 import os
 from pathlib import Path
 
@@ -281,16 +282,9 @@ async def seed_ngc_from_csv(session: AsyncSession, csv_path: str) -> int:
             if existing.fetchone():
                 continue
 
-            # Extract number
-            try:
-                num_val = 0
-                if name.startswith('NGC'):
-                    num_str = name[3:].lstrip('0')
-                    num_val = int(num_str) if num_str else 0
-                elif name.startswith('IC'):
-                    num_str = name[2:].lstrip('0')
-                    num_val = int(num_str) if num_str else 0
-            except: num_val = 0
+            # Extract number ("NGC 4303A" -> 4303: the letter suffix is not part of it)
+            digits = re.sub(r"\D", "", name)
+            num_val = int(digits) if digits and name.startswith(('NGC', 'IC')) else 0
 
             obj = NGCCatalog(
                 designation=name.replace(" ", ""),

@@ -17,6 +17,14 @@ from app.utils.frame_filters import lights_clause
 router = APIRouter()
 
 
+def ngc_designation_number():
+    """Numeric part of the designation ("NGC4303A" -> 4303), so letter-suffixed rows sort with their number."""
+    from sqlalchemy import Integer, cast, func
+    from app.models.catalog import NGCCatalog
+    digits = func.regexp_replace(NGCCatalog.designation, "[^0-9]", "", "g")
+    return cast(func.nullif(digits, ""), Integer)
+
+
 @router.get("/messier", response_model=PaginatedResponse[MessierSchema])
 async def list_messier(
     page: int = Query(1, ge=1),
@@ -171,12 +179,12 @@ async def list_ngc(
     elif sort_by == "ra":
         order_col = NGCCatalog.ra_degrees
     else:
-        order_col = NGCCatalog.ngc_number
+        order_col = ngc_designation_number()
 
     if sort_order == "desc":
-        stmt = base_stmt.order_by(desc(order_col))
+        stmt = base_stmt.order_by(desc(order_col), desc(NGCCatalog.designation))
     else:
-        stmt = base_stmt.order_by(order_col)
+        stmt = base_stmt.order_by(order_col, NGCCatalog.designation)
 
     # Get page items
     stmt = stmt.offset((page - 1) * page_size).limit(page_size)

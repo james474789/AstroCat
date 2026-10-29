@@ -39,7 +39,9 @@ export default function ConfirmProvider({ children }) {
                 hideCancel={options.hideCancel}
                 onConfirm={() => settle(true)}
                 onCancel={() => settle(false)}
-            />
+            >
+                {options.children}
+            </ConfirmDialog>
         </ConfirmContext.Provider>
     );
 }

@@ -165,11 +165,8 @@ def _remove_orphaned_images(roots: list) -> int:
             removed += len(batch)
         session.commit()
 
-    for thumb in thumbnails:
-        try:
-            os.remove(thumb)
-        except OSError:
-            pass  # already gone or unreadable; a stale thumbnail is only wasted space
+    from app.services.thumbnail_stats import remove_tracked
+    remove_tracked(thumbnails)
 
     logger.warning(
         f"Removed {removed} of {total_rows} indexed images that are outside the configured "
