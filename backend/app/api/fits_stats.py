@@ -90,8 +90,8 @@ async def get_fits_stats(
             .group_by(column)\
             .order_by(func.count(column).desc())
         stmt = apply_filters(stmt)
-        # Filter out nulls for cleaner stats
-        stmt = stmt.where(column.isnot(None))
+        # Filter out nulls and blank strings for cleaner stats
+        stmt = stmt.where(column.isnot(None), func.trim(column) != '')
         result = await db.execute(stmt)
         return [UsageStats(name=str(row[0]), count=row[1]) for row in result.all()]
 
