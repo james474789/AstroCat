@@ -42,8 +42,31 @@ jobs:
           echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
           echo "semver=$semver" >> "$GITHUB_OUTPUT"
 
+  # A tag must not ship before CI (all three OSes) has passed on the tagged commit.
+  ci-gate:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 60); do
+            read -r status conclusion < <(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml               --commit "$GITHUB_SHA" --event push --limit 1 --json status,conclusion               -q '.[0] | "\(.status // "none") \(.conclusion // "none")"')
+            echo "CI on $GITHUB_SHA: ${status:-none} ${conclusion:-none}"
+            if [ "$status" = "completed" ]; then
+              [ "$conclusion" = "success" ] && exit 0
+              echo "CI did not pass on the tagged commit"; exit 1
+            fi
+            sleep 30
+          done
+          echo "Timed out waiting for CI"; exit 1
+
   docker:
-    needs: version
+    needs: [version, ci-gate]
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -69,7 +92,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
   desktop:
-    needs: version
+    needs: [version, ci-gate]
+    if: ${{ !failure() && !cancelled() }}
     # A runner that never starts would otherwise hold the release for hours; fail fast and
     # re-run only the failed job (gh run rerun <id> --failed).
     timeout-minutes: 45
