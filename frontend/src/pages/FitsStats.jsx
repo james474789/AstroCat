@@ -672,7 +672,13 @@ export default function FitsStats() {
                                 }}
                                 itemStyle={{ color: CHART_TEXT }}
                             />
-                            <Legend />
+                            {/* Explicit entries: the auto-built legend added a stray "value" item */}
+                            <Legend payload={cameraData.map((entry, index) => ({
+                                value: entry.name,
+                                type: 'circle',
+                                color: COLORS[index % COLORS.length],
+                                id: `camera-${index}`,
+                            }))} />
                         </PieChart>
                     </ResponsiveContainer>
                 </div>

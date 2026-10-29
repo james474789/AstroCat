@@ -23,7 +23,7 @@ from app.services.matching import SyncCatalogMatcher
 from app.services.frame_type import classify_frame_type
 from app.utils.field_geometry import effective_field_radius
 from app.config import settings
-from app.utils.path_security import path_under_root, root_prefix_pattern
+from app.utils.path_security import is_under_any_root, path_under_root, root_prefix_pattern
 from sqlalchemy import select, func, delete, update, or_, not_
 from sqlalchemy.exc import OperationalError
 from celery.exceptions import SoftTimeLimitExceeded, TimeLimitExceeded
@@ -624,6 +624,12 @@ def process_image(self, file_path: str, generate_thumbnail: bool = True):
       this point: they are handled inside _process_image_impl, which inserts a
       minimal record so the scanner stops re-queueing the file on every scan.
     """
+    roots = list(settings.image_paths_list)
+    if roots and not is_under_any_root(file_path, roots):
+        # Queued before the library folders were changed: indexing it now would re-create
+        # a row the orphan cleanup has already removed (or is about to remove).
+        logger.info(f"Skipping {file_path}: outside the configured library folders")
+        return {"status": "skipped", "reason": "outside_library_folders", "file": file_path}
     if _crash_loop_exceeded(file_path):
         msg = (f"Worker was killed {MAX_CRASH_STARTS} times while processing this file "
                "(likely out of memory); skipped")

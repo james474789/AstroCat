@@ -569,7 +569,7 @@ async def seed_all():
         res = await session.execute(text("SELECT count(*) FROM sh2_catalog"))
         sh2_count = res.scalar() or 0
 
-        if m_count >= 110 and n_count >= 13000 and c_count >= 103 and sh2_count >= 313:
+        if m_count >= 110 and n_count >= 13000 and c_count >= 109 and sh2_count >= 313:
             print(f"⏩ Catalogs already appear to be seeded (Messier: {m_count}, NGC: {n_count}, Caldwell: {c_count}, Sh2: {sh2_count}). Skipping.")
             return m_count + n_count + c_count + sh2_count
 
