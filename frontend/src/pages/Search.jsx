@@ -520,12 +520,27 @@ export default function Search() {
         return params;
     }
 
-    function handleExportCsv() {
-        // Use current search scope (including the implicit Lights default)
+    async function handleExportCsv() {
+        // Use current search scope (including the implicit Lights default).
+        // Fetched as a blob: navigating the window to the URL replaces the
+        // whole app in the desktop webview instead of saving a file.
         const params = effectiveSearchParams();
-        const url = `${API_BASE_URL}/images/export_csv?${params.toString()}`;
-        // Trigger download
-        window.location.href = url;
+        try {
+            const response = await fetch(`${API_BASE_URL}/images/export_csv?${params.toString()}`, { credentials: 'include' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const blobUrl = window.URL.createObjectURL(await response.blob());
+            const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '_');
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.setAttribute('download', `astrocat_images_${stamp}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(blobUrl);
+            toast.success('CSV export downloaded.');
+        } catch (error) {
+            toast.error(`CSV export failed: ${error.message}`);
+        }
     }
 
     async function handleSyncMetadata() {
