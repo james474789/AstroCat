@@ -2,7 +2,7 @@
 
 AstroCat ships from one codebase as Docker images and as Windows and macOS desktop apps. Docker runs the backend under supervisord in a Linux container; the desktop apps run the same processes through a Python launcher (`backend/app/desktop/launcher.py`) with a bundled Postgres, PostGIS and Redis. How the desktop build works: [D1](design/20261027-D1-desktop-apps.md). Why these checks exist: [D2](design/20261028-D2-desktop-parity-and-release.md).
 
-Run through this list for any backend change. CI enforces the starred items: the backend tests run on Linux, Windows and macOS, and `desktop-smoke` builds and starts the real desktop runtime on Windows and macOS whenever backend or desktop code changes.
+Run through this list for any backend change. CI enforces the starred items: the backend tests run on Linux for pull requests and on Linux, Windows and macOS once merged to `main` (so check `main`'s CI is green before tagging a release), and `desktop-smoke` builds and starts the real desktop runtime on Windows and macOS whenever backend or desktop code changes.
 
 ## Checklist
 

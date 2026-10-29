@@ -11,13 +11,21 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR branch supersedes its running checks; main keeps every run.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   backend:
+    # Pull requests run Linux only (about 2.5 min); the Windows and macOS runs (Windows takes
+    # about 7.5 min) happen on main after merge and before a release tag is pushed.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest","windows-latest","macos-14"]') }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     defaults:
       run:
         shell: bash
@@ -69,6 +77,7 @@ jobs:
       pull-requests: read  # paths-filter lists a PR's files through the API
     outputs:
       desktop: ${{ steps.filter.outputs.desktop }}
+      desktop_core: ${{ steps.filter.outputs.desktop_core }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -82,12 +91,21 @@ jobs:
               - 'desktop/**'
               - '.github/workflows/**'
               - '.github/actions/**'
+            # What a pull request builds the desktop runtime for; other backend changes are
+            # covered by the full `desktop` filter once they reach main.
+            desktop_core:
+              - 'backend/requirements.txt'
+              - 'backend/app/desktop/**'
+              - 'desktop/**'
+              - '.github/workflows/**'
+              - '.github/actions/**'
 
   # Compile check of the Tauri shell (main.rs, plugins, capabilities): the installer build only
   # runs in release.yml, so without this a Rust error would first show up on release day.
   desktop-shell:
     needs: changes
-    if: needs.changes.outputs.desktop == 'true'
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.desktop_core == 'true' || github.event_name != 'pull_request' && needs.changes.outputs.desktop == 'true' }}
+    timeout-minutes: 30
     runs-on: windows-latest
     defaults:
       run:
@@ -108,7 +126,8 @@ jobs:
   # Tauri installer build.
   desktop-smoke:
     needs: changes
-    if: needs.changes.outputs.desktop == 'true'
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.desktop_core == 'true' || github.event_name != 'pull_request' && needs.changes.outputs.desktop == 'true' }}
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:

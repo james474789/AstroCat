@@ -70,6 +70,9 @@ jobs:
 
   desktop:
     needs: version
+    # A runner that never starts would otherwise hold the release for hours; fail fast and
+    # re-run only the failed job (gh run rerun <id> --failed).
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
