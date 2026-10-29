@@ -201,9 +201,9 @@ export default function Dashboard() {
                     <div className="stat-card-icon"><Target size={32} aria-hidden="true" /></div>
                 </div>
 
-                <div className="stat-card">
+                <div className="stat-card" title="Distinct catalogue objects (Messier, NGC, Sharpless, ...) that fall inside your images' fields. The Targets page counts only the objects you actually imaged, so it is lower.">
                     <div className="stat-card-value">{stats?.unique_objects_imaged}</div>
-                    <div className="stat-card-label">Unique Objects</div>
+                    <div className="stat-card-label">Catalogued Objects in Fields</div>
                     <div className="stat-card-icon"><Star size={32} aria-hidden="true" /></div>
                 </div>
             </div>

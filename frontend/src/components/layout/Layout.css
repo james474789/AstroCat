@@ -235,6 +235,7 @@
 /* Main Content */
 .main-content {
     flex: 1;
+    min-width: 0; /* wide tables scroll inside their own wrapper instead of widening the page */
     margin-left: var(--sidebar-width);
     min-height: 100vh;
     min-height: 100dvh;

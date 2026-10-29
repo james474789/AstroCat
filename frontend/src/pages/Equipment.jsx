@@ -1508,10 +1508,6 @@ export default function Equipment() {
     const data = equipmentQuery.data;
     const sites = sitesQuery.data || [];
 
-    const detectedRigCount = useMemo(
-        () => (detectQuery.data?.rigs || []).filter((p) => !p.exists).length,
-        [detectQuery.data],
-    );
     const totalNewProposals = useMemo(() => {
         if (!detectQuery.data) return 0;
         return ['cameras', 'optics', 'filters', 'rigs', 'sites'].reduce(
@@ -1520,6 +1516,16 @@ export default function Equipment() {
         );
     }, [detectQuery.data]);
     const hasDetected = totalNewProposals > 0;
+    // Name what was found: counting filters or sites as "setups" misled the reader
+    const detectedSummary = useMemo(() => {
+        if (!detectQuery.data) return '';
+        const noun = { rigs: ['setup', 'setups'], cameras: ['camera', 'cameras'], optics: ['optic', 'optics'], filters: ['filter', 'filters'], sites: ['site', 'sites'] };
+        return Object.keys(noun)
+            .map((k) => [k, (detectQuery.data[k] || []).filter((p) => !p.exists).length])
+            .filter(([, n]) => n > 0)
+            .map(([k, n]) => `${n} ${noun[k][n === 1 ? 0 : 1]}`)
+            .join(', ');
+    }, [detectQuery.data]);
 
     async function handleAssignImages() {
         try {
@@ -1658,7 +1664,7 @@ export default function Equipment() {
             {hasDetected && (
                 <div className="detect-banner">
                     <Sparkles size={18} />
-                    <span>AstroCat found {detectedRigCount || totalNewProposals} setup{(detectedRigCount || totalNewProposals) === 1 ? '' : 's'} in your library.</span>
+                    <span>AstroCat found {detectedSummary} in your library.</span>
                     <Button variant="filled" size="sm" onClick={() => setReviewOpen(true)}>Review</Button>
                 </div>
             )}

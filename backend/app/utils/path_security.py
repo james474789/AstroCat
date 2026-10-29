@@ -20,6 +20,16 @@ def escape_like(value: str) -> str:
     return value.replace("!", "!!").replace("%", "!%").replace("_", "!_")
 
 
+def is_under_any_root(file_path: str, roots) -> bool:
+    """True if `file_path` is one of `roots` or lies beneath one, using the stored-path convention."""
+    for root in roots:
+        exact, like = root_prefix_pattern(root)
+        prefix = like[:-1].replace("!%", "%").replace("!_", "_").replace("!!", "!")
+        if file_path == exact or file_path.startswith(prefix):
+            return True
+    return False
+
+
 def root_prefix_pattern(root: str) -> tuple[str, str]:
     """
     (exact, like_pattern) matching a folder and everything under it, for LIKE ... ESCAPE '!'.

@@ -2,7 +2,7 @@
   "#objective": "Normalized caldwell deep-sky catalog. Coordinates are J2000 decimal degrees.",
   "schema": "space-cats-v1",
   "source": "/home/ed/seevar/catalogs/ngc-ic-messier-catalog.json",
-  "target_count": 103,
+  "target_count": 109,
   "targets": [
     {
       "name": "C1",
@@ -181,6 +181,28 @@
       "duration": 900
     },
     {
+      "name": "C9",
+      "common_name": "Cave Nebula",
+      "source_id": "Sh2-155",
+      "aliases": [
+        "Sh2-155"
+      ],
+      "ra": 344.2,
+      "dec": 62.62,
+      "type": "Neb",
+      "object_definition": "Nebula",
+      "catalog": "caldwell",
+      "science_mode": "imaging",
+      "max_mag": 7.7,
+      "b_mag": 7.7,
+      "v_mag": null,
+      "constellation": "Cep",
+      "major_axis_arcmin": 50.0,
+      "minor_axis_arcmin": 10.0,
+      "priority": -5,
+      "duration": 900
+    },
+    {
       "name": "C10",
       "common_name": "",
       "source_id": "NGC663",
@@ -265,6 +287,29 @@
       "constellation": "Cas",
       "major_axis_arcmin": 7.8,
       "minor_axis_arcmin": null,
+      "priority": -5,
+      "duration": 900
+    },
+    {
+      "name": "C14",
+      "common_name": "Perseus Double Cluster",
+      "source_id": "NGC869",
+      "aliases": [
+        "NGC869",
+        "NGC884"
+      ],
+      "ra": 34.75,
+      "dec": 57.15,
+      "type": "OCl",
+      "object_definition": "Open Cluster",
+      "catalog": "caldwell",
+      "science_mode": "imaging",
+      "max_mag": 4.3,
+      "b_mag": 4.3,
+      "v_mag": null,
+      "constellation": "Per",
+      "major_axis_arcmin": 30.0,
+      "minor_axis_arcmin": 30.0,
       "priority": -5,
       "duration": 900
     },
@@ -665,6 +710,29 @@
       "duration": 900
     },
     {
+      "name": "C33",
+      "common_name": "East Veil Nebula",
+      "source_id": "NGC6992",
+      "aliases": [
+        "NGC6992",
+        "NGC6995"
+      ],
+      "ra": 314.1,
+      "dec": 31.72,
+      "type": "SNR",
+      "object_definition": "Supernova remnant",
+      "catalog": "caldwell",
+      "science_mode": "imaging",
+      "max_mag": 7.0,
+      "b_mag": 7.0,
+      "v_mag": null,
+      "constellation": "Cyg",
+      "major_axis_arcmin": 60.0,
+      "minor_axis_arcmin": 8.0,
+      "priority": -5,
+      "duration": 900
+    },
+    {
       "name": "C34",
       "common_name": "West Veil Nebula",
       "source_id": "NGC6960",
@@ -819,6 +887,28 @@
       "duration": 900
     },
     {
+      "name": "C41",
+      "common_name": "Hyades",
+      "source_id": "Mel25",
+      "aliases": [
+        "Mel25"
+      ],
+      "ra": 66.75,
+      "dec": 15.87,
+      "type": "OCl",
+      "object_definition": "Open Cluster",
+      "catalog": "caldwell",
+      "science_mode": "imaging",
+      "max_mag": 0.5,
+      "b_mag": 0.5,
+      "v_mag": null,
+      "constellation": "Tau",
+      "major_axis_arcmin": 330.0,
+      "minor_axis_arcmin": 330.0,
+      "priority": -5,
+      "duration": 900
+    },
+    {
       "name": "C42",
       "common_name": "",
       "source_id": "NGC7006",
@@ -969,6 +1059,28 @@
       "constellation": "Cnc",
       "major_axis_arcmin": 4.25,
       "minor_axis_arcmin": 3.36,
+      "priority": -5,
+      "duration": 900
+    },
+    {
+      "name": "C49",
+      "common_name": "Rosette Nebula",
+      "source_id": "NGC2237",
+      "aliases": [
+        "NGC2237"
+      ],
+      "ra": 98.08,
+      "dec": 4.98,
+      "type": "Neb",
+      "object_definition": "Nebula",
+      "catalog": "caldwell",
+      "science_mode": "imaging",
+      "max_mag": 9.0,
+      "b_mag": 9.0,
+      "v_mag": null,
+      "constellation": "Mon",
+      "major_axis_arcmin": 80.0,
+      "minor_axis_arcmin": 60.0,
       "priority": -5,
       "duration": 900
     },
@@ -2047,6 +2159,28 @@
       "constellation": "Cru",
       "major_axis_arcmin": 5.4,
       "minor_axis_arcmin": null,
+      "priority": -5,
+      "duration": 900
+    },
+    {
+      "name": "C99",
+      "common_name": "Coalsack Nebula",
+      "source_id": "Coalsack",
+      "aliases": [
+        "Coalsack"
+      ],
+      "ra": 193.25,
+      "dec": -63.0,
+      "type": "DrkN",
+      "object_definition": "Dark Nebula",
+      "catalog": "caldwell",
+      "science_mode": "imaging",
+      "max_mag": null,
+      "b_mag": null,
+      "v_mag": null,
+      "constellation": "Cru",
+      "major_axis_arcmin": 420.0,
+      "minor_axis_arcmin": 300.0,
       "priority": -5,
       "duration": 900
     },

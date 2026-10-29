@@ -28,7 +28,7 @@ class FakeRedis:
 
 def _run(fake, impl):
     with patch.object(indexer.redis, "from_url", return_value=fake), \
-            patch.object(indexer, "_process_image_impl", impl):
+            patch.object(indexer.settings, "image_paths", "/data"),             patch.object(indexer, "_process_image_impl", impl):
         return indexer.process_image.run("/data/x/big.dng")
 
 
@@ -62,3 +62,12 @@ def test_counter_cleared_when_impl_raises():
         except ValueError:
             pass
     assert not [k for k in fake.store if k.startswith("indexer:starts:")]
+
+
+def test_file_outside_library_folders_is_skipped():
+    called = []
+    with patch.object(indexer.settings, "image_paths", "/data"), \
+            patch.object(indexer, "_process_image_impl", lambda *a: called.append(a)):
+        result = indexer.process_image.run("/old-library/x.fits")
+    assert result["reason"] == "outside_library_folders"
+    assert called == []
