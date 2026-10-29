@@ -154,7 +154,7 @@ export default function FitsStats() {
     let cameraData = [];
     if (stats?.cameras) {
         // Sort by count descending
-        const sortedCameras = [...stats.cameras].sort((a, b) => b.count - a.count);
+        const sortedCameras = stats.cameras.filter(cam => cam.name?.trim()).sort((a, b) => b.count - a.count);
 
         // Take top 10
         const topCameras = sortedCameras.slice(0, 10);
