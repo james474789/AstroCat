@@ -152,7 +152,9 @@ def _remove_orphaned_images(roots: list) -> int:
 
     with SessionLocal() as session:
         total_rows = session.execute(select(func.count()).select_from(Image)).scalar() or 0
-        orphans = [row[0] for row in session.execute(select(Image.file_path).where(not_(in_any_root))).all()]
+        rows = session.execute(select(Image.file_path, Image.thumbnail_path).where(not_(in_any_root))).all()
+        orphans = [row[0] for row in rows]
+        thumbnails = [row[1] for row in rows if row[1]]
         if not orphans:
             return 0
 
@@ -162,6 +164,12 @@ def _remove_orphaned_images(roots: list) -> int:
             session.execute(delete(Image).where(Image.file_path.in_(batch)))
             removed += len(batch)
         session.commit()
+
+    for thumb in thumbnails:
+        try:
+            os.remove(thumb)
+        except OSError:
+            pass  # already gone or unreadable; a stale thumbnail is only wasted space
 
     logger.warning(
         f"Removed {removed} of {total_rows} indexed images that are outside the configured "

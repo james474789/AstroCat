@@ -76,6 +76,29 @@ def read_manifest(key) -> Optional[dict]:
         return None
 
 
+def adopt(key, image_id) -> None:
+    """
+    Point a cached manifest at `image_id`.
+
+    The key is derived from the file (path, mtime, size), not the image row, so a
+    re-indexed file gets a new id but finds the same cache entry. Without this the
+    tile routes refuse it as belonging to another image.
+    """
+    path = key_dir(key) / MANIFEST_NAME
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        if manifest.get("image_id") == image_id:
+            return
+        manifest["image_id"] = image_id
+        tmp = path.with_name(MANIFEST_NAME + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+        os.replace(tmp, path)
+    except (OSError, ValueError):
+        pass
+
+
 # ----------------------------------------------------------------------------
 # Status and build lock
 # ----------------------------------------------------------------------------
