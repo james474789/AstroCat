@@ -48,7 +48,7 @@ Every [GitHub Release](https://github.com/james474789/AstroCat/releases/latest) 
 | Windows 10/11 (64-bit) | `AstroCat_<version>_x64-setup.exe` |
 | macOS 12+ on Apple Silicon | `AstroCat_<version>_aarch64.dmg` |
 
-The builds are not code-signed yet, so the first launch needs one extra click. See [docs/install-desktop.md](docs/install-desktop.md). After it starts, use the tray/menu-bar icon → **Choose library folders…** to point it at your images.
+The builds are not code-signed yet, so the first launch needs one extra click. See [docs/install-desktop.md](docs/install-desktop.md). After it starts, use the tray/menu-bar icon → **Add library folders…** to point it at your images.
 
 To run AstroCat on a server or NAS, use Docker as described below.
 

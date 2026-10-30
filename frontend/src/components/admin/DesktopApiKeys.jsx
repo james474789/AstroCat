@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { KeyRound } from 'lucide-react';
-import { fetchDesktopKeys, saveDesktopKeys, isApiHealthy } from '../../api/client';
+import { fetchDesktopKeys, saveDesktopKeys, waitForApiRestart } from '../../api/client';
 import { Button, useToast } from '../ui';
 
 // Desktop app only (D3 5.3): the integration keys Docker users put in .env. They are saved to
@@ -14,22 +14,6 @@ const KEYS = [
     { name: 'TELESCOPIUS_API_KEY', label: 'Telescopius API key', help: 'Target planning data.' },
     { name: 'METEOBLUE_API_KEY', label: 'meteoblue API key', help: 'Planetary seeing forecasts.' },
 ];
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// The launcher waits ~1 s after the file changes, then restarts the API: wait for it to drop
-// (up to 8 s; it may not if nothing changed) and then to come back (up to 2 min).
-async function waitForRestart() {
-    for (let i = 0; i < 16; i++) {
-        if (!(await isApiHealthy())) break;
-        await sleep(500);
-    }
-    for (let i = 0; i < 120; i++) {
-        if (await isApiHealthy()) return true;
-        await sleep(1000);
-    }
-    return false;
-}
 
 export default function DesktopApiKeys() {
     const toast = useToast();
@@ -60,7 +44,7 @@ export default function DesktopApiKeys() {
             return;
         }
         setStatus('restarting');
-        const back = await waitForRestart();
+        const back = await waitForApiRestart();
         setDrafts({});
         setRemoved({});
         setStatus('idle');

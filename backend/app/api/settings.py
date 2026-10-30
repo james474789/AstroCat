@@ -228,3 +228,98 @@ def put_desktop_keys(changes: Dict[str, Optional[str]], _admin=Depends(require_a
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Could not save config.json: {e}")
     return _desktop_keys_view(cfg)
+
+
+# --- Desktop app: library folders (QA-30) -----------------------------------------------------
+# The desktop app's mount points are "image_paths" in config.json. These routes add or remove one
+# folder at a time and never touch the other entries; the launcher notices the change and
+# restarts the app processes with the new list, as it does for the keys above. No upper limit.
+# Docker mount points come from .env and docker-compose.yml, so these routes don't exist there.
+
+class LibraryFolder(BaseModel):
+    path: str
+
+
+def _folder_key(path: Path) -> Path:
+    """Comparable form of a folder: absolute, symlinks resolved, case-folded where the OS ignores case."""
+    return Path(os.path.normcase(str(path.resolve(strict=False))))
+
+
+def _desktop_folders(cfg: dict) -> list:
+    return [str(p) for p in (cfg.get("image_paths") or []) if str(p).strip()]
+
+
+def _check_new_folder(raw: str, existing: list) -> str:
+    """The folder to store for `raw`, or an HTTPException saying exactly why it can't be added."""
+    raw = raw.strip().strip('"').strip("'").strip()  # Windows "Copy as path" adds quotes
+    if not raw:
+        raise HTTPException(status_code=400, detail="Enter the full path of a folder to add.")
+    folder = Path(os.path.normpath(os.path.expanduser(raw)))
+    if not folder.is_absolute():
+        raise HTTPException(status_code=400, detail=f"'{raw}' is not a full path. Enter the whole path, "
+                                                    "for example D:\\Astro on Windows or /Users/you/Astro on macOS.")
+    if not folder.exists():
+        raise HTTPException(status_code=400, detail=f"Folder not found: {folder}. Check the spelling, "
+                                                    "and that the drive or network share is connected.")
+    if not folder.is_dir():
+        raise HTTPException(status_code=400, detail=f"{folder} is a file, not a folder.")
+    try:
+        with os.scandir(folder) as entries:
+            next(entries, None)
+    except OSError as e:
+        raise HTTPException(status_code=400, detail=f"AstroCat can't read {folder}: {e.strerror or e}. "
+                                                    "Check the folder's permissions (on macOS, allow AstroCat "
+                                                    "access in System Settings > Privacy & Security > Files and Folders).")
+    key = _folder_key(folder)
+    for other in existing:
+        other_key = _folder_key(Path(other))
+        if key == other_key:
+            raise HTTPException(status_code=409, detail=f"{folder} is already a library folder.")
+        if key.is_relative_to(other_key):
+            raise HTTPException(status_code=409, detail=f"{folder} is inside the library folder {other}, "
+                                                        "which already includes it.")
+        if other_key.is_relative_to(key):
+            raise HTTPException(status_code=409, detail=f"{folder} contains the library folder {other}. "
+                                                        f"Remove {other} first, then add {folder}.")
+    return str(folder)
+
+
+def _save_desktop_folders(path: Path, cfg: dict, folders: list) -> dict:
+    cfg["image_paths"] = folders
+    try:
+        _write_json_atomic(path, cfg)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Could not save config.json: {e}")
+    return {"folders": folders}
+
+
+@router.get("/desktop-library-folders")
+def get_desktop_library_folders(_admin=Depends(require_admin)):
+    """The library folders in config.json (the running app picks up changes after its restart)."""
+    return {"folders": _desktop_folders(_read_desktop_config(_desktop_config_path()))}
+
+
+@router.post("/desktop-library-folders")
+def add_desktop_library_folder(body: LibraryFolder, _admin=Depends(require_admin)):
+    """Append one folder. Existing folders are kept unchanged; there is no limit on how many."""
+    path = _desktop_config_path()
+    cfg = _read_desktop_config(path)
+    folders = _desktop_folders(cfg)
+    folder = _check_new_folder(body.path, folders)
+    return _save_desktop_folders(path, cfg, folders + [folder])
+
+
+@router.delete("/desktop-library-folders")
+def remove_desktop_library_folder(body: LibraryFolder, _admin=Depends(require_admin)):
+    """Stop indexing one folder. Files on disk are never touched; the next full scan drops its images."""
+    path = _desktop_config_path()
+    cfg = _read_desktop_config(path)
+    folders = _desktop_folders(cfg)
+    target = body.path.strip()
+    keep = [f for f in folders if f != target]
+    if len(keep) == len(folders):
+        key = _folder_key(Path(target)) if target else None
+        keep = [f for f in folders if _folder_key(Path(f)) != key]
+    if len(keep) == len(folders):
+        raise HTTPException(status_code=404, detail=f"{target or '(empty path)'} is not a library folder.")
+    return _save_desktop_folders(path, cfg, keep)

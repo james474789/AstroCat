@@ -670,6 +670,42 @@ export async function isApiHealthy() {
     }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Desktop app: after a config.json change the launcher waits ~1 s, then restarts the API. Wait
+// for it to drop (up to 8 s; it may not if nothing changed) and then to come back (up to 2 min).
+export async function waitForApiRestart() {
+    for (let i = 0; i < 16; i++) {
+        if (!(await isApiHealthy())) break;
+        await sleep(500);
+    }
+    for (let i = 0; i < 120; i++) {
+        if (await isApiHealthy()) return true;
+        await sleep(1000);
+    }
+    return false;
+}
+
+// Desktop app library folders (QA-30): one folder per call, the others are never changed.
+// The launcher then restarts the app's services; use waitForApiRestart().
+export async function addDesktopLibraryFolder(path) {
+    return handleResponse(await fetch(`${API_BASE_URL}/settings/desktop-library-folders`, {
+        method: 'POST',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ path }),
+        credentials: 'include'
+    }));
+}
+
+export async function removeDesktopLibraryFolder(path) {
+    return handleResponse(await fetch(`${API_BASE_URL}/settings/desktop-library-folders`, {
+        method: 'DELETE',
+        headers: withCsrfHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ path }),
+        credentials: 'include'
+    }));
+}
+
 // ============ Filesystem API ============
 export async function fetchDirectoryListing(path) {
     const params = path ? `?path=${encodeURIComponent(path)}` : '';
