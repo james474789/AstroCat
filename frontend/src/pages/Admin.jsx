@@ -26,7 +26,10 @@ import {
     createUser,
     deleteUser,
     updateUserRole,
-    fetchSystemVersion
+    fetchSystemVersion,
+    addDesktopLibraryFolder,
+    removeDesktopLibraryFolder,
+    waitForApiRestart
 } from '../api/client';
 import { Orbit, FolderOpen, Library, Settings, Database, DatabaseBackup, RotateCcw, Search, Cloud, HardDrive, Folder, Save, Check, X, RefreshCw, Image as ImageIcon, Contrast, Target, Users, Info, Activity, HeartPulse, Star, Globe, KeyRound } from 'lucide-react';
 import TelescopeIcon from '../components/icons/TelescopeIcon';
@@ -63,6 +66,10 @@ function Admin() {
 
     const confirm = useConfirm();
     const toast = useToast();
+    // Desktop library folders (QA-30): the path being typed, the backend's refusal, and progress
+    const [newFolder, setNewFolder] = useState('');
+    const [folderError, setFolderError] = useState('');
+    const [folderStatus, setFolderStatus] = useState('idle'); // idle | saving | restarting
     // Admin Dashboard State
     const [stats, setStats] = useState(null);
     const [workerStats, setWorkerStats] = useState(null);
@@ -495,14 +502,8 @@ function Admin() {
     function handleAddMountPoint() {
         return confirm({
             title: 'Add a mount point',
-            description: desktopMode ? 'To add a library folder:' : 'To add a new mount point:',
-            children: desktopMode ? (
-                <ol>
-                    <li>Choose "Choose library folders…" from the menu bar</li>
-                    <li>Add the folder and confirm</li>
-                    <li>Run a scan from Admin &gt; Indexer</li>
-                </ol>
-            ) : (
+            description: 'To add a new mount point:',
+            children: (
                 <ol>
                     <li>Add the path to your .env file (IMAGE_PATH_X)</li>
                     <li>Add the volume mapping in docker-compose.yml</li>
@@ -512,6 +513,52 @@ function Admin() {
             confirmLabel: 'Got it',
             hideCancel: true,
         });
+    }
+
+    // Desktop app: config.json changes restart the services, so wait for the API to come back
+    async function applyLibraryChange(change, doneMessage) {
+        setFolderStatus('saving');
+        try {
+            await change();
+        } catch (err) {
+            setFolderStatus('idle');
+            return err.message;
+        }
+        setFolderStatus('restarting');
+        const back = await waitForApiRestart();
+        setFolderStatus('idle');
+        if (back) {
+            await loadData().catch(() => {});
+            showToast(doneMessage, 'success', 6000);
+        } else {
+            showToast('Saved, but the services did not come back within 2 minutes. Check the logs folder.', 'error', 8000);
+        }
+        return null;
+    }
+
+    async function handleAddLibraryFolder(e) {
+        e?.preventDefault();
+        setFolderError('');
+        const path = newFolder.trim();
+        if (!path) {
+            setFolderError('Enter the full path of a folder to add.');
+            return;
+        }
+        const error = await applyLibraryChange(() => addDesktopLibraryFolder(path),
+            'Library folder added. Run a scan from Admin > Indexer to index it.');
+        if (error) setFolderError(error);
+        else setNewFolder('');
+    }
+
+    async function handleRemoveLibraryFolder(path) {
+        if (!(await confirm({
+            title: 'Remove library folder?',
+            description: `AstroCat will stop indexing ${path}. Files on disk are not touched; its images leave the catalog after the next full scan.`,
+            confirmLabel: 'Remove',
+            destructive: true,
+        }))) return;
+        const error = await applyLibraryChange(() => removeDesktopLibraryFolder(path), 'Library folder removed.');
+        if (error) showToast(`Could not remove the folder: ${error}`, 'error', 8000);
     }
 
     function closeRescanModal() {
@@ -1027,6 +1074,7 @@ function Admin() {
                                                 </div>
                                             </div>
                                             <span className={`mount-status ${mount.status}`}>{mount.status === 'connected' ? <><Check size={14} /> Connected</> : <><X size={14} /> Disconnected</>}</span>
+                                            {desktopMode && <Button size="sm" variant="plain" disabled={folderStatus !== 'idle'} onClick={() => handleRemoveLibraryFolder(mount.path)}>Remove</Button>}
                                         </div>
                                         <div className="mount-stats">
                                             <div className="mount-stat"><span className="stat-value">{mount.file_count.toLocaleString()}</span><span className="stat-label">Files</span></div>
@@ -1068,7 +1116,31 @@ function Admin() {
                                     </div>
                                 ))}
                             </div>
-                            <div className="mount-actions"><Button onClick={handleAddMountPoint}>+ Add Mount Point</Button><p className="text-sm text-muted mt-sm">{desktopMode ? 'Note: Library folders are chosen from the menu bar item "Choose library folders…".' : 'Note: Mount points are configured in docker-compose.yml'}</p></div>
+                            {desktopMode ? (
+                                <form className="mount-actions" onSubmit={handleAddLibraryFolder}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <input
+                                            type="text"
+                                            className="input font-mono"
+                                            aria-label="Folder to add"
+                                            placeholder="Full folder path, e.g. D:\Astro or /Users/you/Astro"
+                                            spellCheck={false}
+                                            autoComplete="off"
+                                            value={newFolder}
+                                            disabled={folderStatus !== 'idle'}
+                                            onChange={(e) => { setNewFolder(e.target.value); setFolderError(''); }}
+                                            style={{ flex: '1 1 320px', minWidth: 0, background: 'var(--color-border)', border: '1px solid var(--color-border-light)', color: 'var(--color-text-primary)', padding: '0.4rem 0.6rem', borderRadius: '0.25rem' }}
+                                        />
+                                        <Button type="submit" loading={folderStatus !== 'idle'} disabled={folderStatus !== 'idle'}>
+                                            {folderStatus === 'restarting' ? 'Restarting services…' : '+ Add Mount Point'}
+                                        </Button>
+                                    </div>
+                                    {folderError && <p role="alert" className="text-sm text-error mt-sm">{folderError}</p>}
+                                    <p className="text-sm text-muted mt-sm">Adding or removing a folder restarts AstroCat&apos;s background services for a few seconds. You can also add folders from the menu bar item &quot;Add library folders…&quot;.</p>
+                                </form>
+                            ) : (
+                                <div className="mount-actions"><Button onClick={handleAddMountPoint}>+ Add Mount Point</Button><p className="text-sm text-muted mt-sm">Note: Mount points are configured in docker-compose.yml</p></div>
+                            )}
                         </section>
                     )}
 

@@ -303,17 +303,41 @@ fn open_logs(app: AppHandle) {
     let _ = app.opener().open_path(logs.to_string_lossy(), None::<&str>);
 }
 
-fn write_image_paths(config: &Path, paths: &[String]) -> Result<(), String> {
+/// Same folder? Windows and macOS file systems ignore case by default.
+fn same_folder(a: &str, b: &str) -> bool {
+    let norm = |s: &str| s.trim_end_matches(|c| c == '/' || c == '\\').to_lowercase();
+    norm(a) == norm(b)
+}
+
+/// Appends the folders not already listed; existing entries are never changed (QA-30).
+/// Returns how many were added.
+fn add_image_paths(config: &Path, picked: &[String]) -> Result<usize, String> {
     let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
     let mut cfg: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    cfg["image_paths"] = Value::from(paths.to_vec());
+    let mut paths: Vec<String> = cfg["image_paths"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    let before = paths.len();
+    for p in picked {
+        if !paths.iter().any(|q| same_folder(q, p)) {
+            paths.push(p.clone());
+        }
+    }
+    let added = paths.len() - before;
+    if added == 0 {
+        return Ok(0);
+    }
+    cfg["image_paths"] = Value::from(paths);
     let tmp = config.with_extension("json.tmp");
     let body = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
     std::fs::write(&tmp, body).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, config).map_err(|e| e.to_string())
+    std::fs::rename(&tmp, config).map_err(|e| e.to_string())?;
+    Ok(added)
 }
 
-/// The picked folders replace the library list; the launcher restarts the app processes with it.
+/// The picked folders are added to the library list (removing one is done in Admin > Mounts);
+/// the launcher restarts the app processes with it.
 fn choose_library_folders(app: &AppHandle) {
     let config = data_dir(app).join("config.json");
     if !config.exists() {
@@ -326,7 +350,7 @@ fn choose_library_folders(app: &AppHandle) {
     let handle = app.clone();
     app.dialog()
         .file()
-        .set_title("Select every folder AstroCat should index")
+        .set_title("Add folders for AstroCat to index")
         .pick_folders(move |folders| {
             let Some(folders) = folders else { return };
             let paths: Vec<String> = folders
@@ -337,8 +361,15 @@ fn choose_library_folders(app: &AppHandle) {
             if paths.is_empty() {
                 return;
             }
-            match write_image_paths(&config, &paths) {
-                Ok(()) => send(&handle, "restart"),
+            match add_image_paths(&config, &paths) {
+                Ok(0) => {
+                    handle
+                        .dialog()
+                        .message("Those folders are already in your library.")
+                        .kind(MessageDialogKind::Info)
+                        .show(|_| {});
+                }
+                Ok(_) => send(&handle, "restart"),
                 Err(e) => {
                     handle
                         .dialog()
@@ -352,7 +383,7 @@ fn choose_library_folders(app: &AppHandle) {
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open AstroCat", true, None::<&str>)?;
-    let folders = MenuItem::with_id(app, "folders", "Choose library folders…", true, None::<&str>)?;
+    let folders = MenuItem::with_id(app, "folders", "Add library folders…", true, None::<&str>)?;
     let logs = MenuItem::with_id(app, "logs", "Open logs folder", true, None::<&str>)?;
     let update = MenuItem::with_id(app, "update", UPDATE_ITEM_IDLE, true, None::<&str>)?;
     *app.state::<Updates>().item.lock().unwrap() = Some(update.clone());

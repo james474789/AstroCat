@@ -26,7 +26,7 @@ The app includes its own database, cache and background workers. It doesn't need
 ## First run
 
 - The first launch takes a little longer while AstroCat creates its database. You'll see a splash screen, then the app signs you in automatically. The desktop app has a single local user and no password.
-- Use the **AstroCat icon** in the system tray (Windows) or the menu bar (macOS) → **Choose library folders…** and select every folder AstroCat should index. Then start a scan from **Admin → Indexer**.
+- Use the **AstroCat icon** in the system tray (Windows) or the menu bar (macOS) → **Add library folders…** and select the folders AstroCat should index, or type a folder's path in **Admin → Mounts → + Add Mount Point**. Each folder is added to the ones you already have; there is no limit. Remove one with its **Remove** button in **Admin → Mounts** (your files are never touched). Then start a scan from **Admin → Indexer**.
 - Closing the window quits AstroCat and stops its background services.
 
 ## Where your data lives
