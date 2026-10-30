@@ -109,7 +109,6 @@ function Admin() {
         // Load all initial data in parallel
         Promise.all([
             loadData().catch(err => console.error('Failed to load stats:', err)),
-            loadCacheStats().catch(err => console.error('Failed to load cache stats:', err)),
             loadSystemSettings().catch(err => console.error('Failed to load settings:', err)),
             loadUsers().catch(err => console.error('Failed to load users:', err)),
             loadDataMigrations().catch(err => console.error('Failed to load data migrations:', err))
@@ -125,6 +124,15 @@ function Admin() {
             if (fetchAdminStatsRef.current) clearInterval(fetchAdminStatsRef.current);
         };
     }, []);
+
+    // Cache stats change in the background (Regenerate All, scans, cleanup), and switching
+    // Admin sections does not remount the page, so refetch on entering Thumbnails and poll there (QA-27)
+    useEffect(() => {
+        if (activeSection !== 'thumbnails') return;
+        loadCacheStats();
+        const timer = setInterval(loadCacheStats, 5000);
+        return () => clearInterval(timer);
+    }, [activeSection]);
 
     // Refresh data migration status while a run is in progress
     useEffect(() => {
