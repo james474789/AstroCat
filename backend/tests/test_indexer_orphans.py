@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import Column, Integer, String, create_engine, select
+from sqlalchemy import BigInteger, Column, DateTime, Integer, String, create_engine, select
 from sqlalchemy.orm import Session, declarative_base
 
 from app.config import settings
@@ -25,6 +25,8 @@ class FakeImage(Base):
     file_path = Column(String, unique=True, nullable=False)
     thumbnail_path = Column(String, nullable=True)
     pixinsight_annotation_path = Column(String, nullable=True)
+    file_size_bytes = Column(BigInteger, nullable=True)
+    file_last_modified = Column(DateTime, nullable=True)
 
 
 @pytest.fixture
@@ -135,3 +137,46 @@ def test_scan_removes_thumbnails_of_deleted_files(db, tmp_path):
     assert result["files_removed"] == 1
     assert remaining() == []
     assert removed == [str(thumb)]
+
+
+def _scan_with_row(db, tmp_path, size_delta=0, mtime_delta=0.0):
+    """Index state for lib/a.jpg differs from the file on disk by the given deltas."""
+    import os
+    from datetime import datetime
+
+    seed, _ = db
+    root = tmp_path / "lib"
+    root.mkdir()
+    f = root / "a.jpg"
+    f.write_bytes(b"x" * 100)
+    st = os.stat(f)
+    with indexer.SessionLocal() as s:
+        s.add(FakeImage(
+            file_path=str(f),
+            file_size_bytes=st.st_size + size_delta,
+            file_last_modified=datetime.fromtimestamp(st.st_mtime + mtime_delta),
+        ))
+        s.commit()
+    queued = []
+    with patch.object(indexer.redis, "from_url", return_value=MagicMock()),          patch.object(indexer.process_image, "delay", side_effect=queued.append):
+        result = indexer._scan_directory(str(root))
+    return result, queued, str(f)
+
+
+def test_scan_requeues_file_whose_size_changed(db, tmp_path):
+    """QA-43: a modified file must be re-indexed, not left stale."""
+    result, queued, path = _scan_with_row(db, tmp_path, size_delta=-1)
+    assert result["files_updated"] == 1
+    assert queued == [path]
+
+
+def test_scan_requeues_file_whose_mtime_changed(db, tmp_path):
+    result, queued, path = _scan_with_row(db, tmp_path, mtime_delta=-60)
+    assert result["files_updated"] == 1
+    assert queued == [path]
+
+
+def test_scan_leaves_unchanged_file_alone(db, tmp_path):
+    result, queued, _ = _scan_with_row(db, tmp_path)
+    assert result["files_updated"] == 0
+    assert queued == []
