@@ -84,7 +84,7 @@ def test_scan_looks_up_existing_rows_with_an_escaped_prefix(tmp_path):
     def execute(stmt, *a, **k):
         statements.append(stmt)
         result = MagicMock()
-        result.all.return_value = [(str(existing), "annotated")]
+        result.all.return_value = [(str(existing), "annotated", 0, None)]
         return result
 
     session = MagicMock()
