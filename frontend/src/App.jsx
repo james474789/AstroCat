@@ -14,6 +14,7 @@ import FitsStats from './pages/FitsStats';
 import Admin from './pages/Admin';
 import Equipment from './pages/Equipment';
 import NightReport from './pages/NightReport';
+import NotFound from './pages/NotFound';
 import { AuthProvider } from './context/AuthContext';
 import { QualityUnitsProvider } from './context/QualityUnitsContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -115,6 +116,7 @@ const AppRoutes = () => {
                   <Route path="/stats" element={<FitsStats />} />
                   <Route path="/stats/fits" element={<Navigate to="/stats" replace />} />
                   <Route path="/admin" element={<ErrorBoundary><Admin /></ErrorBoundary>} />
+                  <Route path="*" element={<NotFound />} />
                 </Routes>
               </Layout>
               </QualityUnitsProvider>
