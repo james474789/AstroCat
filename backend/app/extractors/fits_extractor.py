@@ -30,6 +30,17 @@ logger = logging.getLogger(__name__)
 class FITSExtractor(BaseExtractor):
     """Extractor for FITS (Flexible Image Transport System) files."""
 
+    def _check_not_truncated(self) -> None:
+        """Raise when an HDU's data runs past the end of the file (astropy only warns)."""
+        import os
+        size = os.path.getsize(self.file_path)
+        with fits.open(self.file_path) as probe:
+            len(probe)  # load the HDU index so fileinfo has the data span
+            info = probe.fileinfo(0)
+        end = ((info or {}).get("datLoc") or 0) + ((info or {}).get("datSpan") or 0)
+        if end > size:
+            raise ValueError(f"Truncated FITS file: data ends at byte {end} but the file is {size} bytes")
+
     def extract(self) -> Dict[str, Any]:
         """Extract metadata from FITS header."""
         
@@ -39,6 +50,8 @@ class FITSExtractor(BaseExtractor):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', AstropyWarning)
             
+            self._check_not_truncated()
+
             with fits.open(self.file_path) as hdul:
                 # Usually primary header has the info
                 header = hdul[0].header
