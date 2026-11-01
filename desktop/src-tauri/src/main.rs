@@ -8,6 +8,8 @@
 // Updates (D3 5.2): a background check against the GitHub release's latest.json. A found update
 // only adds a tray item and a one-time dialog; installing stops the backend first (NSIS can't
 // replace a running python.exe, and Postgres must shut down cleanly), then runs the installer.
+// The tray's "Get beta updates" switches the check to the beta channel's manifest (RC1,
+// docs/design/20261101-RC1-release-channels.md), saved as update_channel in config.json.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -19,7 +21,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent, Wry};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -34,6 +36,11 @@ const FIRST_UPDATE_CHECK: Duration = Duration::from_secs(20);
 const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 const UPDATE_ITEM_IDLE: &str = "Check for updates…";
 
+/// Stable is the GitHub release marked Latest; beta is a rolling prerelease that only holds the
+/// manifest of the newest build (RC1 §2). tauri.conf.json keeps the stable URL as the default.
+const STABLE_ENDPOINT: &str = "https://github.com/james474789/AstroCat/releases/latest/download/latest.json";
+const BETA_ENDPOINT: &str = "https://github.com/james474789/AstroCat/releases/download/beta/latest.json";
+
 #[derive(Default)]
 struct Updates {
     /// The update found by the last check, installed when the tray item is clicked.
@@ -41,6 +48,7 @@ struct Updates {
     /// The version the user was last told about, so the dialog appears once per version.
     notified: Mutex<Option<String>>,
     item: Mutex<Option<MenuItem<Wry>>>,
+    beta_item: Mutex<Option<CheckMenuItem<Wry>>>,
     checker_started: AtomicBool,
     installing: AtomicBool,
 }
@@ -192,13 +200,22 @@ fn start_update_checker(app: &AppHandle) {
 /// Ask GitHub whether a newer release exists. A manual check (tray click) also reports "up to
 /// date" and errors; the background check stays silent unless there is something to install.
 fn check_for_update(app: &AppHandle, manual: bool) {
+    let beta = beta_updates(app);
     let result = tauri::async_runtime::block_on(async {
-        let updater = app.updater().map_err(|e| e.to_string())?;
+        let endpoint = if beta { BETA_ENDPOINT } else { STABLE_ENDPOINT };
+        let url = endpoint.parse::<tauri::Url>().map_err(|e| e.to_string())?;
+        let updater = app
+            .updater_builder()
+            .endpoints(vec![url])
+            .map_err(|e| e.to_string())?
+            .build()
+            .map_err(|e| e.to_string())?;
         updater.check().await.map_err(|e| e.to_string())
     });
     match result {
         Ok(Some(update)) => {
             let version = update.version.clone();
+            let label = if beta { format!("{version} (beta)") } else { version.clone() };
             let state = app.state::<Updates>();
             *state.pending.lock().unwrap() = Some(update);
             set_update_item(app, &format!("Install update {version} and restart"), true);
@@ -212,7 +229,7 @@ fn check_for_update(app: &AppHandle, manual: bool) {
                 let handle = app.clone();
                 app.dialog()
                     .message(format!(
-                        "AstroCat {version} is available. Installing stops AstroCat's background services, \
+                        "AstroCat {label} is available. Installing stops AstroCat's background services, \
                          updates the app and restarts it. Your library and settings are kept."
                     ))
                     .title("Update available")
@@ -230,7 +247,8 @@ fn check_for_update(app: &AppHandle, manual: bool) {
         }
         Ok(None) => {
             if manual {
-                info_dialog(app, "AstroCat is up to date.".into(), MessageDialogKind::Info);
+                let channel = if beta { " (beta updates)" } else { "" };
+                info_dialog(app, format!("AstroCat is up to date{channel}."), MessageDialogKind::Info);
             }
         }
         Err(e) => {
@@ -312,8 +330,7 @@ fn same_folder(a: &str, b: &str) -> bool {
 /// Appends the folders not already listed; existing entries are never changed (QA-30).
 /// Returns how many were added.
 fn add_image_paths(config: &Path, picked: &[String]) -> Result<usize, String> {
-    let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
-    let mut cfg: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let mut cfg = read_config(config)?;
     let mut paths: Vec<String> = cfg["image_paths"]
         .as_array()
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
@@ -329,11 +346,59 @@ fn add_image_paths(config: &Path, picked: &[String]) -> Result<usize, String> {
         return Ok(0);
     }
     cfg["image_paths"] = Value::from(paths);
-    let tmp = config.with_extension("json.tmp");
-    let body = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
-    std::fs::write(&tmp, body).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, config).map_err(|e| e.to_string())?;
+    write_config(config, &cfg)?;
     Ok(added)
+}
+
+fn read_config(config: &Path) -> Result<Value, String> {
+    let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
+    // the launcher reads it as utf-8-sig, so a hand-edited file may carry a BOM
+    serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| e.to_string())
+}
+
+fn write_config(config: &Path, cfg: &Value) -> Result<(), String> {
+    let tmp = config.with_extension("json.tmp");
+    let body = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
+    std::fs::write(&tmp, body).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, config).map_err(|e| e.to_string())
+}
+
+/// update_channel "beta" in config.json; anything else, or no config yet, means stable.
+fn beta_updates(app: &AppHandle) -> bool {
+    read_config(&data_dir(app).join("config.json"))
+        .is_ok_and(|cfg| cfg["update_channel"] == "beta")
+}
+
+/// Tray toggle: save the channel, forget an update found on the other channel, check again.
+/// Versions only go up, so leaving beta keeps the installed build until stable passes it.
+fn toggle_beta_updates(app: &AppHandle) {
+    let beta = !beta_updates(app);
+    let config = data_dir(app).join("config.json");
+    let saved = read_config(&config).and_then(|mut cfg| {
+        cfg["update_channel"] = Value::from(if beta { "beta" } else { "stable" });
+        write_config(&config, &cfg)
+    });
+    let state = app.state::<Updates>();
+    if let Some(item) = state.beta_item.lock().unwrap().as_ref() {
+        // the menu flips the tick itself on click; set it from what was actually saved
+        let _ = item.set_checked(beta_updates(app));
+    }
+    if let Err(e) = saved {
+        let message = if config.exists() {
+            format!("Could not save the update setting: {e}")
+        } else {
+            "AstroCat is still starting. Try again in a moment.".into()
+        };
+        info_dialog(app, message, MessageDialogKind::Error);
+        return;
+    }
+    if state.installing.load(Ordering::SeqCst) {
+        return;
+    }
+    *state.pending.lock().unwrap() = None;
+    *state.notified.lock().unwrap() = None;
+    set_update_item(app, UPDATE_ITEM_IDLE, true);
+    check_for_update(app, true);
 }
 
 /// The picked folders are added to the library list (removing one is done in Admin > Mounts);
@@ -387,9 +452,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let logs = MenuItem::with_id(app, "logs", "Open logs folder", true, None::<&str>)?;
     let update = MenuItem::with_id(app, "update", UPDATE_ITEM_IDLE, true, None::<&str>)?;
     *app.state::<Updates>().item.lock().unwrap() = Some(update.clone());
+    let beta = CheckMenuItem::with_id(app, "beta", "Get beta updates", true, beta_updates(app), None::<&str>)?;
+    *app.state::<Updates>().beta_item.lock().unwrap() = Some(beta.clone());
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit AstroCat", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &folders, &logs, &update, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[&open, &folders, &logs, &update, &beta, &separator, &quit_item])?;
 
     let mut tray = TrayIconBuilder::with_id("main").tooltip("AstroCat").menu(&menu);
     if let Some(icon) = app.default_window_icon() {
@@ -408,6 +475,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                     check_for_update(&app, true);
                 }
             });
+        }
+        "beta" => {
+            let app = app.clone();
+            std::thread::spawn(move || toggle_beta_updates(&app));
         }
         "quit" => quit(app),
         _ => {}
