@@ -49,6 +49,12 @@ Updates keep your data folder. On macOS the unsigned app is replaced in place; i
 
 You can always install a newer download over the old one instead.
 
+### Beta updates
+
+Stable releases come out about once a week. In between, every fix is published as a beta build first; on the [releases page](https://github.com/james474789/AstroCat/releases) betas are marked **Pre-release** and the current stable one is marked **Latest**.
+
+To get beta builds, tick **Get beta updates** in the tray (or menu bar) menu. AstroCat checks right away and then once a day as usual. Untick it to go back to stable updates. Versions only go up, so you keep the beta you have until a stable release is newer than it.
+
 ## Upgrading
 
 Install a newer version over the old one; your data folder is kept and the database is updated on the next start.
