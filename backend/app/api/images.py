@@ -2416,7 +2416,10 @@ async def rescan_image(image_id: int, force: bool = Query(False), db: AsyncSessi
              api_key = settings.astrometry_api_key
     
     if not api_key:
-         raise HTTPException(status_code=500, detail="Astrometry API key not configured")
+         raise HTTPException(
+             status_code=409,
+             detail="Plate solving needs an astrometry.net API key or a local solver. Add one in Settings.",
+         )
 
     # 2. Synchronous Upload
     try:
