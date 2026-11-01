@@ -32,12 +32,29 @@ from app.models.system_stats import SystemStats
 logger = logging.getLogger(__name__)
 
 
+MTIME_TOLERANCE_SECONDS = 2  # FAT and network shares round modification times
+
+
+def _file_changed(file_path: str, indexed_size, indexed_mtime) -> bool:
+    """Has the file on disk changed since it was indexed? A missing stored time is not a change."""
+    try:
+        st = os.stat(file_path)
+    except OSError:
+        return False
+    if indexed_size is not None and st.st_size != indexed_size:
+        return True
+    if indexed_mtime is not None:
+        return abs(st.st_mtime - indexed_mtime.timestamp()) > MTIME_TOLERANCE_SECONDS
+    return False
+
+
 def _scan_directory(directory_path: str):
     """Core scan logic shared by Celery tasks and synchronous calls."""
     logger.info(f"Scanning directory: {directory_path}")
     files_found = 0
     files_queued = 0
     files_removed = 0
+    files_updated = 0
 
     allowed_extensions = {
         '.fits', '.fit', '.xisf', '.jpg', '.jpeg', '.png', '.cr2', '.cr3', '.arw', '.nef', '.dng', '.tif', '.tiff'
@@ -49,10 +66,15 @@ def _scan_directory(directory_path: str):
     try:
         with SessionLocal() as session:
             # 1. Get all existing file paths in this directory from DB for bulk lookup
-            stmt = select(Image.file_path, Image.pixinsight_annotation_path).where(path_under_root(Image.file_path, directory_path))
+            stmt = select(
+                Image.file_path, Image.pixinsight_annotation_path, Image.file_size_bytes, Image.file_last_modified
+            ).where(path_under_root(Image.file_path, directory_path))
             result = session.execute(stmt)
+            rows = result.all()
             # Map file_path -> pixinsight_annotation_path
-            existing_paths = {row[0]: row[1] for row in result.all()}
+            existing_paths = {row[0]: row[1] for row in rows}
+            # Map file_path -> (size, last modified) as last indexed, to spot changed files
+            existing_stats = {row[0]: (row[2], row[3]) for row in rows}
 
             # 2. Walk directory to find current files
             for root, _, files in os.walk(directory_path):
@@ -71,6 +93,11 @@ def _scan_directory(directory_path: str):
                             # Skip if this IS an annotation file (safety check)
                             if file_path.stem.endswith("_Annotated"):
                                 continue
+
+                            if _file_changed(str_path, *existing_stats.get(str_path, (None, None))):
+                                logger.info(f"Re-indexing modified file: {str_path}")
+                                process_image.delay(str_path)
+                                files_updated += 1
 
                             current_annotation = existing_paths[str_path]
                             if not current_annotation:
@@ -138,7 +165,8 @@ def _scan_directory(directory_path: str):
         "directory": directory_path,
         "files_found": files_found,
         "files_queued": files_queued,
-        "files_removed": files_removed
+        "files_removed": files_removed,
+        "files_updated": files_updated,
     }
 
 
@@ -682,6 +710,7 @@ def reindex_all(self):
     total_files_scanned = 0
     total_files_added = 0
     total_files_removed = 0
+    total_files_updated = 0
     
     results = []
     # Orphan cleanup needs a complete view of every configured root: any skipped
@@ -709,14 +738,15 @@ def reindex_all(self):
             total_files_scanned += result.get("files_found", 0)
             total_files_added += result.get("files_queued", 0)
             total_files_removed += result.get("files_removed", 0)
+            total_files_updated += result.get("files_updated", 0)
 
             # Publish live progress after each mount so the Admin UI never
             # shows stale counters (and looks frozen) mid-scan.
             r.set("indexer:files_scanned", str(total_files_scanned))
             r.set("indexer:files_added", str(total_files_added))
-            r.set("indexer:files_updated", "0")
+            r.set("indexer:files_updated", str(total_files_updated))
             r.set("indexer:files_removed", str(total_files_removed))
-            logger.info(f"Scan progress: {path} done; scanned={total_files_scanned} added={total_files_added} removed={total_files_removed}")
+            logger.info(f"Scan progress: {path} done; scanned={total_files_scanned} added={total_files_added} updated={total_files_updated} removed={total_files_removed}")
 
         # Rows under no configured root (e.g. a folder removed from the library) are
         # invisible to the per-root scans above. Only safe with a complete view of
@@ -766,7 +796,7 @@ def reindex_all(self):
         r.set("indexer:last_scan_duration", str(duration))
         r.set("indexer:files_scanned", str(total_files_scanned))
         r.set("indexer:files_added", str(total_files_added))
-        r.set("indexer:files_updated", "0")
+        r.set("indexer:files_updated", str(total_files_updated))
         r.set("indexer:files_removed", str(total_files_removed))
         
         # Remove live-scan-only markers that are meaningless once the scan ends
