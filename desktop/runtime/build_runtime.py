@@ -76,7 +76,7 @@ PGSQL_TOOLS = {"postgres", "initdb", "pg_ctl", "pg_dump", "pg_restore", "psql", 
 # EDB's zip has no MSVC runtime; the conda env's vc14_runtime copies go next to postgres.exe
 MSVC_RUNTIME = ["vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll"]
 EDB_LICENSES = ["server_license.txt", "commandlinetools_3rd_party_licenses.txt"]
-SMOKE_IMPORTS = "import astropy, rawpy, sep, cv2, numpy, scipy, asyncpg, psycopg2, celery, uvicorn, kombu, pyvips"
+SMOKE_IMPORTS = "import astropy, rawpy, sep, cv2, imagecodecs, numpy, scipy, asyncpg, psycopg2, celery, uvicorn, kombu, pyvips"
 
 
 def run(*argv, **kw):
