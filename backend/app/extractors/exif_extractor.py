@@ -122,6 +122,13 @@ class ExifExtractor(BaseExtractor):
         except Exception as e:
             print(f"ExifRead failed for {self.file_path}: {e}")
         
+        # CR3 is an ISO media container that exifread cannot open; read Canon's EXIF boxes directly
+        if str(self.file_path).lower().endswith(".cr3"):
+            from app.extractors.cr3 import read_cr3_exif
+            for key, value in read_cr3_exif(self.file_path).items():
+                if not metadata.get(key):
+                    metadata[key] = value
+
         # Try to extract XMP rating with priority chain:
         # 1. XMP Sidecar file (highest - external editor like Lightroom)
         # 2. Embedded XMP (user-controlled metadata)
