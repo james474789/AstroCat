@@ -24,6 +24,7 @@ class FakeImage(Base):
     id = Column(Integer, primary_key=True)
     file_path = Column(String, unique=True, nullable=False)
     thumbnail_path = Column(String, nullable=True)
+    pixinsight_annotation_path = Column(String, nullable=True)
 
 
 @pytest.fixture
@@ -112,3 +113,25 @@ def test_reindex_skips_cleanup_when_a_scan_fails():
 def test_reindex_skips_cleanup_with_no_roots():
     cleanup, _, _ = _run_reindex([], exists=lambda p: True)
     cleanup.assert_not_called()
+
+
+def test_scan_removes_thumbnails_of_deleted_files(db, tmp_path):
+    """QA-39: a file deleted from disk must not leave its thumbnail behind."""
+    seed, remaining = db
+    root = tmp_path / "lib"
+    root.mkdir()
+    thumb = tmp_path / "gone.jpg"
+    thumb.write_bytes(b"x")
+    gone = str(root / "gone.fits")
+    with indexer.SessionLocal() as s:
+        s.add(FakeImage(file_path=gone, thumbnail_path=str(thumb)))
+        s.commit()
+
+    removed = []
+    with patch.object(indexer.redis, "from_url", return_value=MagicMock()), \
+         patch("app.services.thumbnail_stats.remove_tracked", side_effect=lambda t: removed.extend(t)):
+        result = indexer._scan_directory(str(root))
+
+    assert result["files_removed"] == 1
+    assert remaining() == []
+    assert removed == [str(thumb)]

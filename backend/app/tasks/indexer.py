@@ -107,12 +107,21 @@ def _scan_directory(directory_path: str):
                 # Bulk delete in batches for safety/performance
                 missing_list = list(missing_paths)
                 batch_size = 500
+                orphan_thumbnails = []
                 for i in range(0, len(missing_list), batch_size):
                     batch = missing_list[i:i + batch_size]
+                    thumbs = session.execute(
+                        select(Image.thumbnail_path).where(Image.file_path.in_(batch))
+                    ).scalars().all()
+                    orphan_thumbnails.extend(t for t in thumbs if t)
                     stmt = delete(Image).where(Image.file_path.in_(batch))
                     session.execute(stmt)
 
                 session.commit()
+
+                # The rows are gone, so their cached thumbnails would never be cleaned up
+                from app.services.thumbnail_stats import remove_tracked
+                remove_tracked(orphan_thumbnails)
 
     except Exception as e:
         logger.error(f"Error scanning directory {directory_path}: {e}", exc_info=True)
