@@ -385,6 +385,24 @@ async def get_messier(designation: str, db: AsyncSession = Depends(get_db)):
     
     if not item:
         raise HTTPException(status_code=404, detail="Object not found")
+
+    # Same per-object stats the list endpoint reports
+    from app.models.matches import ImageCatalogMatch
+    from app.models.image import Image
+    stats = (await db.execute(
+        select(
+            func.coalesce(func.sum(Image.exposure_time_seconds), 0),
+            func.count(func.distinct(ImageCatalogMatch.image_id)),
+            func.coalesce(func.max(ImageCatalogMatch.angular_separation_degrees), 0),
+        ).join(Image, Image.id == ImageCatalogMatch.image_id).where(
+            ImageCatalogMatch.catalog_type == "MESSIER",
+            ImageCatalogMatch.catalog_designation == item.designation,
+            lights_clause(),
+        )
+    )).one()
+    item.cumulative_exposure_seconds = stats[0]
+    item.image_count = stats[1]
+    item.max_separation_degrees = stats[2]
     return item
 
 
