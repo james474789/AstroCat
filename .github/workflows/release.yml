@@ -105,7 +105,7 @@ jobs:
             bundles: nsis
             # relative to target/release/bundle: the installer (also the Windows update artifact) + its .sig
             files: nsis/*.exe nsis/*.exe.sig
-          - os: macos-14 # Apple Silicon
+          - os: macos-15 # Apple Silicon
             bundles: app,dmg
             # the dmg for people, the .app tarball + .sig for the updater
             files: dmg/*.dmg macos/*.app.tar.gz macos/*.app.tar.gz.sig
