@@ -192,6 +192,23 @@ def feed_astrometry_queue():
             pass
 
 
+def _run_async(coro_factory):
+    """
+    Run a coroutine to completion on a private event loop. Celery's thread pool
+    (the desktop build) has no current loop in its worker threads, so
+    get_event_loop() raises there. Pooled DB connections are bound to the loop
+    that opened them, so the engine is disposed before the loop closes.
+    """
+    async def _wrapped():
+        try:
+            return await coro_factory()
+        finally:
+            from app.database import engine
+            await engine.dispose()
+
+    return asyncio.run(_wrapped())
+
+
 @celery_app.task(bind=True, name="app.tasks.astrometry.astrometry_task", max_retries=MAX_UPLOAD_RETRIES)
 def astrometry_task(self, image_id: int):
     """
@@ -199,8 +216,7 @@ def astrometry_task(self, image_id: int):
     no worker slot is held while the solve runs.
     """
     try:
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(_submit(self, image_id))
+        return _run_async(lambda: _submit(self, image_id))
     finally:
         try:
             _redis().zrem(DISPATCHED_KEY, str(image_id))
@@ -215,9 +231,8 @@ def monitor_astrometry_task(self, submission_id: str, image_id: int, started_at:
     finishes or MONITOR_TIMEOUT passes.
     """
     started_at = started_at or time.time()
-    loop = asyncio.get_event_loop()
     try:
-        result = loop.run_until_complete(_check_submission(submission_id, image_id))
+        result = _run_async(lambda: _check_submission(submission_id, image_id))
     except Exception as e:
         # Only retryable errors get here (see _apply_solution); poll again.
         logger.warning(f"[ASTROMETRY] Check of submission {submission_id} failed: {e}")
@@ -225,7 +240,7 @@ def monitor_astrometry_task(self, submission_id: str, image_id: int, started_at:
 
     if result is None and time.time() - started_at > MONITOR_TIMEOUT:
         logger.error(f"[ASTROMETRY] Timed out waiting for submission {submission_id} (image {image_id})")
-        loop.run_until_complete(_set_status(image_id, "FAILED"))
+        _run_async(lambda: _set_status(image_id, "FAILED"))
         result = {"status": "timeout"}
 
     if result is None:
@@ -539,5 +554,4 @@ def cleanup_stuck_astrometry():
             await session.commit()
             return count
 
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(_cleanup())
+    return _run_async(_cleanup)
