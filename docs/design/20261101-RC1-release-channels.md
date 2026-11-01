@@ -1,6 +1,7 @@
 # RC1: Beta and stable release channels
 
-**Status:** ready to implement (decisions in §6 answered) · **Created:** 2026-11-01 · **Base commit:** `a6c11d2` (`main`, tag `v20261101.13`)
+**Status:** implemented, not yet rolled out (§4) · **Created:** 2026-11-01
+**Code:** step 1 (desktop toggle, `main.rs`) in PR 35; beta publishing (`release.yml`), `promote.yml` and `desktop/scripts/semver_newer.py` in the stacked PR on `claude/rc1-beta-publish`. · **Base commit:** `a6c11d2` (`main`, tag `v20261101.13`)
 **Builds on:** [D2](20261028-D2-desktop-parity-and-release.md) §7 (first release) and §9 E1 (auto-updater).
 
 This is a handover document. It says what to build, in what order, how to check it, and where to stop and ask the user. If something on the ground contradicts it, stop and ask; don't improvise.
@@ -62,15 +63,7 @@ Beta always holds the newest build, because every build is a beta first. So prom
 
 1. `softprops/action-gh-release`: add `prerelease: true` and `make_latest: false`. Name the release `AstroCat ${version} (beta)`, and add a line to the body: "Beta build. Stable releases are marked Latest."
 2. After the release step, publish the beta manifest:
-   ```bash
-   gh release view beta >/dev/null 2>&1 || \
-     gh release create beta --prerelease --latest=false --title "Beta channel" \
-       --notes "Rolling updater manifest for beta builds. Not a release."
-   current=$(gh release download beta -p latest.json -O - 2>/dev/null | jq -r .version || echo "0.0.0")
-   python3 desktop/scripts/updater_manifest.py --newer "$current" dist/latest.json \
-     && gh release upload beta dist/latest.json --clobber
-   ```
-   The `--newer` check (a small new flag, or a separate few-line helper) stops an older run that finishes late from overwriting a newer manifest. Compare the semver parts as integers, not as strings.
+   create the `beta` prerelease if it's missing, download its current `latest.json`, and upload the new one with `--clobber` only when `desktop/scripts/semver_newer.py NEW CURRENT` says it's newer. That check stops an older run that finishes late from overwriting a newer manifest. It compares the semver parts as integers, not as strings.
 3. Add `concurrency: { group: release-publish, cancel-in-progress: false }` to the publish job, so two publishes never upload at the same time.
 4. Docker job: replace the `:latest` tag with `:beta`.
 
@@ -84,7 +77,7 @@ Beta always holds the newest build, because every build is a beta first. So prom
    - the release exists, is a prerelease, and has `latest.json`, the `.exe` and the `.dmg`;
    - Docker Hub has `astrocat-{backend,frontend}:${VERSION}`;
    - the tag is newer than the current stable (`gh release view --json tagName` with no tag gives latest), unless `force` is set (a deliberate rollback).
-2. **Notes:** generate release notes from the previous stable tag to this one (`gh api repos/{repo}/releases/generate-notes -f tag_name=… -f previous_tag_name=…`), so the stable notes cover every beta since the last stable. Keep the existing "Downloads" block on top.
+2. **Notes** (only when promoting a beta; a rollback keeps the old release's notes): generate release notes from the previous stable tag to this one (`gh api repos/{repo}/releases/generate-notes -f tag_name=… -f previous_tag_name=…`), so the stable notes cover every beta since the last stable. Keep the existing "Downloads" block on top: `release.yml` puts a `<!-- notes -->` marker after it, and promotion keeps everything above the marker (minus the beta banner) and replaces everything below it.
 3. **Flip:** `gh release edit "$TAG" --prerelease=false --latest --title "AstroCat $VERSION" --notes-file notes.md`.
 4. **Docker:** `docker buildx imagetools create -t ns/astrocat-$img:latest ns/astrocat-$img:$VERSION` for both images. This retags the manifest list; it doesn't rebuild or re-push layers.
 5. **Verify:** fetch `releases/latest/download/latest.json` (follow redirects) until `.version` equals `to_semver(VERSION)`, with a timeout of about 2 minutes. Fetch Docker Hub's `tags/latest` digest and compare it with `tags/$VERSION`.

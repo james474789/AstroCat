@@ -1,8 +1,14 @@
 # Release: Docker images + Windows installer + macOS (Apple Silicon) dmg from one commit.
 # D1, docs/design/20261027-D1-desktop-apps.md.
 #
-#   git tag v$(cat VERSION) && git push origin v$(cat VERSION)   -> builds, publishes a GitHub Release
+#   git tag v$(cat VERSION) && git push origin v$(cat VERSION)   -> builds, publishes a beta (prerelease)
 #   Actions > Release > Run workflow                             -> dry run: builds everything, publishes nothing
+#   Actions > Promote > Run workflow (tag)                       -> owner only: makes a tested beta stable
+#
+# Channels (RC1, docs/design/20261101-RC1-release-channels.md): every tag is a beta, a GitHub
+# prerelease with Docker :VERSION + :beta, and its latest.json is copied to the rolling `beta`
+# prerelease, which the desktop app's "Get beta updates" reads. promote.yml later marks the same
+# release Latest and points Docker :latest at it, so stable users get exactly what QA tested.
 #
 # Secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
 # Optional variables WINDOWS_REDIS_ZIP_URL / WINDOWS_REDIS_ZIP_SHA256 override the pinned Windows
@@ -87,7 +93,7 @@ jobs:
           push: ${{ env.PUBLISH == 'true' }}
           tags: |
             ${{ env.DOCKERHUB_NAMESPACE }}/astrocat-${{ matrix.image }}:${{ needs.version.outputs.version }}
-            ${{ env.DOCKERHUB_NAMESPACE }}/astrocat-${{ matrix.image }}:latest
+            ${{ env.DOCKERHUB_NAMESPACE }}/astrocat-${{ matrix.image }}:beta
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
@@ -174,6 +180,10 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [version, docker, desktop]
     runs-on: ubuntu-latest
+    # shared with promote.yml: the beta manifest and the Latest flag are never written at once
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -189,18 +199,50 @@ jobs:
       - name: Build latest.json
         run: python3 desktop/scripts/updater_manifest.py --tag "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --dist dist
 
+      # a beta: promote.yml makes it Latest, retitles it and rewrites everything after the
+      # <!-- notes --> marker, so keep that marker below the Downloads block
       - uses: softprops/action-gh-release@v2
         with:
-          name: AstroCat ${{ needs.version.outputs.version }}
+          name: AstroCat ${{ needs.version.outputs.version }} (beta)
+          prerelease: true
+          make_latest: false
           generate_release_notes: true
           body: |
+            > **Beta build.** Stable releases are the ones marked Latest. The desktop app gets betas only with "Get beta updates" ticked in its tray menu.
+
             ## Downloads
             - **Windows**: the `.exe` installer below (per-user, no admin rights needed).
             - **macOS (Apple Silicon)**: the `.dmg` below.
             - **Docker**: `docker pull ${{ env.DOCKERHUB_NAMESPACE }}/astrocat-backend:${{ needs.version.outputs.version }}` and `astrocat-frontend`, or use the attached `docker-compose-example.yml`.
 
             The desktop builds are not code-signed yet. See `install-desktop.md` below for the one-time "open anyway" step.
+
+            <!-- notes -->
           files: |
             dist/*
             docker-compose-example.yml
             docs/install-desktop.md
+
+      # The rolling `beta` prerelease only holds the newest build's latest.json, at
+      # releases/download/beta/latest.json. Never replace a newer manifest with an older one: a
+      # rerun of an old tag can finish after a newer tag's run.
+      - name: Publish the beta channel manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SEMVER: ${{ needs.version.outputs.semver }}
+        run: |
+          if ! gh release view beta -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create beta -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Beta channel" \
+              --notes "Rolling updater manifest for beta builds, read by the desktop app's \"Get beta updates\". Not a release: download builds from the versioned releases."
+          fi
+          current=""
+          if gh release download beta -R "$GITHUB_REPOSITORY" -p latest.json -D "$RUNNER_TEMP/beta" 2>/dev/null; then
+            current=$(jq -r .version "$RUNNER_TEMP/beta/latest.json")
+          fi
+          if python3 desktop/scripts/semver_newer.py "$SEMVER" "$current"; then
+            gh release upload beta -R "$GITHUB_REPOSITORY" dist/latest.json --clobber
+            echo "beta channel: $current -> $SEMVER"
+          else
+            echo "beta channel already has $current; leaving it"
+          fi
