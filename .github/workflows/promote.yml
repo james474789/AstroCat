@@ -1,0 +1,162 @@
+# Promote: make a tested beta the stable release. Owner only; the QA dev agent never runs it.
+# RC1, docs/design/20261101-RC1-release-channels.md.
+#
+#   Actions > Promote > Run workflow, tag = v20261101.13
+#
+# Nothing is rebuilt. The beta's own GitHub Release is marked Latest (so the stable updater
+# manifest, releases/latest/download/latest.json, becomes that build's) and Docker :latest is
+# pointed at the images release.yml already pushed as :VERSION. Rerunning with the same tag is
+# safe: a release that is already the stable one only gets its Docker tags re-pointed.
+# Promoting a tag older than the current stable one is a rollback and needs `force`.
+#
+# When to promote (RC1 §6): on beta for 3+ days, its fixes retested, and no open sev:1/sev:2
+# against it in astrocat-qa. A sev:1/sev:2 fix may be promoted as soon as it passes retest.
+# Secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+name: Promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Beta release tag to make stable, e.g. v20261101.13"
+        required: true
+      force:
+        description: "Allow a tag older than the current stable release (rollback)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  DOCKERHUB_NAMESPACE: james474789
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    # shared with release.yml's publish job
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      FORCE: ${{ inputs.force }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the release
+        id: check
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]{8}\.[0-9]{1,3}$ ]] || { echo "::error::$TAG is not a vYYYYMMDD.NN tag"; exit 1; }
+          to_semver() { python3 -c "import sys; sys.path.insert(0, 'desktop/scripts'); from version import to_semver; print(to_semver(sys.argv[1]))" "$1"; }
+          version="${TAG#v}"
+          semver=$(to_semver "$version")
+          release=$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isPrerelease,isDraft,assets) \
+            || { echo "::error::No GitHub Release for $TAG"; exit 1; }
+          if [ "$(jq -r .isDraft <<<"$release")" = "true" ]; then
+            echo "::error::$TAG is a draft"; exit 1
+          fi
+          assets=$(jq -r '.assets[].name' <<<"$release")
+          for want in latest.json "AstroCat_${semver}_x64-setup.exe" AstroCat.app.tar.gz; do
+            grep -qxF "$want" <<<"$assets" || { echo "::error::$TAG has no $want"; exit 1; }
+          done
+          grep -q '\.dmg$' <<<"$assets" || { echo "::error::$TAG has no .dmg"; exit 1; }
+
+          stable=$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName 2>/dev/null || true)
+          stable_semver=""
+          if [ -n "$stable" ]; then
+            stable_semver=$(to_semver "${stable#v}")
+          fi
+          flip=true
+          if [ "$stable" = "$TAG" ]; then
+            echo "$TAG is already the stable release; only re-pointing Docker :latest"
+            flip=false
+          elif ! python3 desktop/scripts/semver_newer.py "$semver" "$stable_semver"; then
+            if [ "$FORCE" != "true" ]; then
+              echo "::error::$TAG is not newer than the current stable $stable. Rerun with force to roll back."
+              exit 1
+            fi
+            echo "Rolling stable back from $stable to $TAG (force)"
+          fi
+          {
+            echo "version=$version"
+            echo "semver=$semver"
+            echo "stable=$stable"
+            echo "flip=$flip"
+            # a beta gets stable notes; a rollback to an earlier stable release keeps its own
+            echo "beta=$(jq -r .isPrerelease <<<"$release")"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Check the Docker images
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          for img in backend frontend; do
+            docker buildx imagetools inspect "$DOCKERHUB_NAMESPACE/astrocat-$img:$VERSION" >/dev/null \
+              || { echo "::error::Docker Hub has no astrocat-$img:$VERSION"; exit 1; }
+          done
+
+      # The stable notes cover every beta since the last stable release: keep the Downloads
+      # block (everything above release.yml's <!-- notes --> marker) minus the beta banner, and
+      # replace what follows with GitHub's notes from the previous stable tag.
+      - name: Mark the release stable
+        if: steps.check.outputs.flip == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          STABLE: ${{ steps.check.outputs.stable }}
+          BETA: ${{ steps.check.outputs.beta }}
+        run: |
+          set -euo pipefail
+          if [ "$BETA" != "true" ]; then
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --latest
+            exit 0
+          fi
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json body -q .body > body.md
+          grep -q '<!-- notes -->' body.md || { echo "::error::$TAG's notes have no <!-- notes --> marker"; exit 1; }
+          sed '/<!-- notes -->/,$d' body.md | { grep -v '^> \*\*Beta build\.\*\*' || true; } > notes.md
+          args=(-f tag_name="$TAG")
+          if [ -n "$STABLE" ]; then args+=(-f previous_tag_name="$STABLE"); fi
+          {
+            echo '<!-- notes -->'
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" "${args[@]}" -q .body
+          } >> notes.md
+          gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --prerelease=false --latest \
+            --title "AstroCat $VERSION" --notes-file notes.md
+
+      - name: Point Docker :latest at it
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          for img in backend frontend; do
+            docker buildx imagetools create -t "$DOCKERHUB_NAMESPACE/astrocat-$img:latest" \
+              "$DOCKERHUB_NAMESPACE/astrocat-$img:$VERSION"
+          done
+
+      - name: Verify
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+          SEMVER: ${{ steps.check.outputs.semver }}
+        run: |
+          url="https://github.com/$GITHUB_REPOSITORY/releases/latest/download/latest.json"
+          for i in $(seq 1 12); do
+            got=$(curl -fsSL "$url" | jq -r .version || true)
+            echo "stable manifest: ${got:-none}"
+            [ "$got" = "$SEMVER" ] && break
+            [ "$i" = 12 ] && { echo "::error::$url still says ${got:-nothing}, expected $SEMVER"; exit 1; }
+            sleep 10
+          done
+          for img in backend frontend; do
+            digest() { docker buildx imagetools inspect "$DOCKERHUB_NAMESPACE/astrocat-$img:$1" | awk '/^Digest:/ {print $2; exit}'; }
+            a=$(digest latest); b=$(digest "$VERSION")
+            echo "astrocat-$img :latest $a, :$VERSION $b"
+            [ -n "$a" ] && [ "$a" = "$b" ] || { echo "::error::astrocat-$img:latest is not $VERSION"; exit 1; }
+          done
+          echo "### Stable is now $TAG" >> "$GITHUB_STEP_SUMMARY"

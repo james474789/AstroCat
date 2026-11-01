@@ -53,7 +53,7 @@ jobs:
       - run: python -m pytest tests -q -p no:warnings --tb=short -rf
       - name: Desktop runtime build helpers
         working-directory: desktop/runtime
-        run: python -m pytest test_build_runtime.py test_updater_manifest.py -q -p no:warnings
+        run: python -m pytest test_build_runtime.py test_updater_manifest.py test_semver_newer.py -q -p no:warnings
 
   frontend:
     runs-on: ubuntu-latest
