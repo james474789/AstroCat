@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs'
@@ -30,9 +30,22 @@ for (const vp of versionPaths) {
   }
 }
 
+// index.html uses %VITE_LOGO_TITLE%; Vite leaves it literal when the variable is unset
+// (desktop builds), so fill in the default here.
+function logoTitle(mode) {
+  const env = loadEnv(mode, envDir, 'VITE_');
+  return {
+    name: 'logo-title-default',
+    transformIndexHtml: {
+      order: 'pre',
+      handler: (html) => html.replace(/%VITE_LOGO_TITLE%/g, env.VITE_LOGO_TITLE || process.env.VITE_LOGO_TITLE || 'AstroCat'),
+    },
+  };
+}
+
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react()],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), logoTitle(mode)],
   envDir: envDir,
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
@@ -52,4 +65,4 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
-})
+}))
