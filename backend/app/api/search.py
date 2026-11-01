@@ -24,9 +24,9 @@ limiter = Limiter(key_func=get_remote_address)
 @limiter.limit("30/minute")
 async def search_by_coordinates(
     request: Request,
-    ra: float = Query(..., description="Right Ascension in degrees (0-360)"),
-    dec: float = Query(..., description="Declination in degrees (-90 to +90)"),
-    radius: float = Query(1.0, description="Search radius in degrees"),
+    ra: float = Query(..., ge=0, le=360, description="Right Ascension in degrees (0-360)"),
+    dec: float = Query(..., ge=-90, le=90, description="Declination in degrees (-90 to +90)"),
+    radius: float = Query(1.0, ge=0, le=180, description="Search radius in degrees (0-180)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
