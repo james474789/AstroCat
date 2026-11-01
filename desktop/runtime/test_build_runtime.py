@@ -22,6 +22,7 @@ NATIVE_WHEELS = {
     "sqlalchemy": "2.0.25", "asyncpg": "0.29.0", "psycopg2-binary": "2.9.9", "astropy": "6.0.0",
     "pillow": "11.0.0", "rawpy": "0.19.1", "numpy": "1.26.4", "sep": "1.4.1", "scipy": "1.13.1",
     "opencv-python-headless": "4.10.0.84", "bcrypt": "4.0.1",
+    "imagecodecs": "2024.6.1",
 }
 
 

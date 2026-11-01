@@ -33,7 +33,7 @@ file in `licenses/`, or with that component's Python package (`*.dist-info`).
 |---|---|
 | CPython 3.12 | PSF-2.0 |
 | libvips 8.18, pyvips | LGPL-2.1-or-later, MIT |
-| NumPy, SciPy, Astropy, SEP, OpenCV (headless), Pillow, tifffile, rawpy (LibRaw) | BSD / Apache-2.0 / MIT / HPND / LGPL-2.1 or CDDL-1.0 (LibRaw) |
+| NumPy, SciPy, Astropy, SEP, OpenCV (headless), Pillow, tifffile, imagecodecs, rawpy (LibRaw) | BSD / Apache-2.0 / MIT / HPND / LGPL-2.1 or CDDL-1.0 (LibRaw) |
 | FastAPI, Starlette, Uvicorn, SQLAlchemy, Alembic, GeoAlchemy2, asyncpg, psycopg2, Celery, kombu, redis-py, pydantic, httpx and the other packages in `backend/requirements.txt` | MIT / BSD / Apache-2.0 / LGPL-3.0 (psycopg2) |
 
 ## Desktop shell
