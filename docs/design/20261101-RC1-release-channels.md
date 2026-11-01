@@ -1,6 +1,6 @@
 # RC1: Beta and stable release channels
 
-**Status:** proposed · **Created:** 2026-11-01 · **Base commit:** `a6c11d2` (`main`, tag `v20261101.13`)
+**Status:** ready to implement (decisions in §6 answered) · **Created:** 2026-11-01 · **Base commit:** `a6c11d2` (`main`, tag `v20261101.13`)
 **Builds on:** [D2](20261028-D2-desktop-parity-and-release.md) §7 (first release) and §9 E1 (auto-updater).
 
 This is a handover document. It says what to build, in what order, how to check it, and where to stop and ask the user. If something on the ground contradicts it, stop and ask; don't improvise.
@@ -138,9 +138,9 @@ The tester's installed app has no channel setting, and the moment tags become pr
 - The first real run of `promote.yml` is step 4 of the rollout, with the owner watching.
 - No UI testing by the agent: the tester and owner check the tray toggle and dialogs.
 
-## 6. Decisions needed from the user
+## 6. Decisions (answered by the owner, 2026-11-01)
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 |---|---|---|
 | Q1 | When does a beta become stable? | Owner-triggered, roughly weekly. Criteria: the build has been on beta for ≥ 3 days, the tester has retested its fixes, and there's no open `sev:1`/`sev:2` against it in astrocat-qa. A `sev:1`/`sev:2` fix may be promoted as soon as it passes retest. |
 | Q2 | Does prod (Portainer stack 6) run beta or stable? | Beta (`:beta` or a pinned `:VERSION`): the owner dogfoods ahead of users. |
@@ -163,7 +163,7 @@ The tester's installed app has no channel setting, and the moment tags become pr
 | 3.2 `promote.yml` | 2 h | 60k | Opus 5.5 | rerun-safety, Docker retag |
 | 3.4 docs | 30 min | 15k | Sonnet 5.5 | |
 | CI round(s) and dry runs (rollout steps 1–4) | 1–2 h wall | 30k | same session | mostly waiting on Release runs |
-| 3.5 QA protocol, memories, prod runbook | 30 min | 15k | Sonnet 5.5 | after the owner answers Q1–Q4 |
+| 3.5 QA protocol, memories, prod runbook | 30 min | 15k | Sonnet 5.5 | apply the §6 decisions |
 | **Total** | **≈1 day** | **≈270k** | one Opus 5.5 session; Sonnet 5.5 for 3.4/3.5 if it can switch | |
 
 **Single-model recommendation:** Opus 5.5. Most of the risk is in workflow ordering and the updater, where one mistake costs a broken release for real users.
