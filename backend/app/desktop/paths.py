@@ -97,7 +97,7 @@ def load_config(paths: DesktopPaths) -> dict:
     paths.root.mkdir(parents=True, exist_ok=True)
     cfg = {}
     if paths.config_file.exists():
-        cfg = json.loads(paths.config_file.read_text(encoding="utf-8"))
+        cfg = json.loads(paths.config_file.read_text(encoding="utf-8-sig"))
     merged = {**_defaults(), **cfg}
     if merged != cfg:
         save_config(paths, merged)

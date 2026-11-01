@@ -422,7 +422,7 @@ class Launcher:
     def _config_differs(self) -> bool:
         """Does config.json on disk differ from the running config in a way that needs a restart?"""
         try:
-            disk = json.loads(self.paths.config_file.read_text(encoding="utf-8"))
+            disk = json.loads(self.paths.config_file.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError):
             return False
         return any((disk.get(k) or empty) != (self.cfg.get(k) or empty)

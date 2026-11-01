@@ -164,7 +164,7 @@ def _desktop_config_path() -> Path:
 
 def _read_desktop_config(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as e:
         raise HTTPException(status_code=500, detail=f"Could not read config.json: {e}")
 
