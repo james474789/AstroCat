@@ -62,3 +62,36 @@ def test_garbage_file_yields_nothing(tmp_path):
     f = tmp_path / "bad.cr3"
     f.write_bytes(b"not a cr3 at all")
     assert read_cr3_exif(str(f)) == {}
+
+
+def test_backfill_cr3_exif_fills_only_empty_fields(tmp_path):
+    """QA-42: CR3 rows indexed before the reader existed get their EXIF; real values stay."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from app.scripts.backfill_cr3_exif import backfill_cr3_exif
+
+    cr3 = tmp_path / "a.CR3"
+    make_cr3(cr3)
+    row = SimpleNamespace(
+        id=7, file_path=str(cr3), raw_header=None, file_last_modified=datetime(2026, 11, 1, 10, 0, 0),
+        camera_name=None, exposure_time_seconds=None, iso_speed=800, capture_date=datetime(2026, 11, 1, 10, 0, 0),
+        lens_model=None, aperture=None, focal_length=None, capture_time_source="FILE_MTIME",
+    )
+    session = MagicMock()
+    first, second = MagicMock(), MagicMock()
+    first.scalars.return_value.all.return_value = [row]
+    second.scalars.return_value.all.return_value = []
+    session.execute.side_effect = [first, MagicMock(), second]
+
+    summary = backfill_cr3_exif(session=session)
+
+    assert summary == {"processed": 1, "updated": 1, "unreadable": 0}
+    batch = session.execute.call_args_list[1].args[1]
+    assert len(batch) == 1
+    values = batch[0]
+    assert values["camera_name"] == "Canon EOS R8"
+    assert values["exposure_time_seconds"] == 1 / 50
+    assert values["capture_date"] == datetime(2024, 10, 17, 20, 39, 57)  # replaces mtime placeholder
+    assert "iso_speed" not in values  # existing value kept
+    assert values["capture_time_source"] != "FILE_MTIME"
