@@ -91,6 +91,17 @@ def remove_tracked(thumb_paths) -> int:
     return removed
 
 
+def schedule_recount(countdown: int = 30) -> None:
+    """Queue a full recount shortly after bulk removals (QA-51), which absorbs any drift the
+    incremental deltas picked up. Rare callers only: the walk is slow on large caches.
+    Never raises."""
+    try:
+        from app.tasks.indexer import update_thumbnail_stats
+        update_thumbnail_stats.apply_async(countdown=countdown)
+    except Exception as e:
+        logger.warning(f"Could not queue thumbnail recount: {e}")
+
+
 def generate_tracked(source_path: str, output_dir: str, **kwargs) -> Optional[str]:
     """ThumbnailGenerator.generate plus the stats delta for whatever it wrote."""
     from app.services.thumbnails import ThumbnailGenerator
