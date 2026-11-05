@@ -157,6 +157,11 @@ def _repair_qhy5lii_exposure():
     return repair_qhy5lii_exposure()
 
 
+def _backfill_cr3_exif():
+    from app.scripts.backfill_cr3_exif import backfill_cr3_exif
+    return backfill_cr3_exif()
+
+
 REGISTRY: List[DataMigrationSpec] = [
     DataMigrationSpec(
         "0001_backfill_frame_types",
@@ -253,6 +258,11 @@ REGISTRY: List[DataMigrationSpec] = [
         "0019_repair_qhy5lii_exposure",
         "Fix exposure_time_seconds for the QHY5LII-C capture software (identified by its 'Presion Time' header card) that writes EXPOSURE in milliseconds instead of seconds, inflating per-target integration totals 1000x (e.g. NGC6888).",
         _repair_qhy5lii_exposure,
+    ),
+    DataMigrationSpec(
+        "0020_backfill_cr3_exif",
+        "Fill camera, exposure, ISO, lens and capture date for Canon CR3 files indexed before the CR3 EXIF reader existed (only empty fields are filled).",
+        _backfill_cr3_exif,
     ),
 ]
 
