@@ -133,3 +133,15 @@ def test_regenerate_queues_a_recount(monkeypatch):
     result = indexer.regenerate_thumbnails.run()
     assert result["images_queued"] == 2
     assert [q[0] for q in queued] == ["gen", "gen", "recount", "recount"]
+
+
+def test_schedule_recount_queues_task_and_never_raises():
+    """QA-51: bulk removals queue a recount; a broker failure must not break the caller."""
+    from unittest.mock import patch
+    from app.services.thumbnail_stats import schedule_recount
+
+    with patch("app.tasks.indexer.update_thumbnail_stats") as task:
+        schedule_recount(countdown=5)
+        task.apply_async.assert_called_once_with(countdown=5)
+        task.apply_async.side_effect = RuntimeError("broker down")
+        schedule_recount()  # swallowed

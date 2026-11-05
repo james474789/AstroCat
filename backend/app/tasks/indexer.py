@@ -147,8 +147,9 @@ def _scan_directory(directory_path: str):
                 session.commit()
 
                 # The rows are gone, so their cached thumbnails would never be cleaned up
-                from app.services.thumbnail_stats import remove_tracked
-                remove_tracked(orphan_thumbnails)
+                from app.services.thumbnail_stats import remove_tracked, schedule_recount
+                if remove_tracked(orphan_thumbnails):
+                    schedule_recount()
 
     except Exception as e:
         logger.error(f"Error scanning directory {directory_path}: {e}", exc_info=True)
@@ -202,8 +203,9 @@ def _remove_orphaned_images(roots: list) -> int:
             removed += len(batch)
         session.commit()
 
-    from app.services.thumbnail_stats import remove_tracked
-    remove_tracked(thumbnails)
+    from app.services.thumbnail_stats import remove_tracked, schedule_recount
+    if remove_tracked(thumbnails):
+        schedule_recount()
 
     logger.warning(
         f"Removed {removed} of {total_rows} indexed images that are outside the configured "
