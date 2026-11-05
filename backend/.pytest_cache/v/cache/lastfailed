@@ -1,5 +1,0 @@
-{
-  "tests/test_fullres_render.py::test_unlinked_equalises_channel_medians": true,
-  "tests/test_fullres_render.py::test_render_matches_thumbnail_orientation[tiff]": true,
-  "tests/test_fullres_render.py::test_xisf_mono_cfa_is_debayered_from_header_keywords": true
-}
