@@ -11,7 +11,7 @@ REQUIREMENTS = Path(__file__).resolve().parents[2] / "backend" / "requirements.t
 # Every package build_runtime.py pip-installs into the desktop runtime, checked by hand.
 # Pure-Python packages (any version installs anywhere):
 PURE_PYTHON = {
-    "fastapi", "uvicorn", "python-multipart", "alembic", "geoalchemy2", "celery", "redis",
+    "fastapi", "uvicorn", "python-multipart", "alembic", "geoalchemy2", "celery", "kombu", "redis",
     "exifread", "xisf", "tifffile", "tzdata", "concurrent-log-handler", "python-dotenv",
     "pydantic", "pydantic-settings", "pyjwt", "passlib", "slowapi", "httpx", "pytest",
     "pytest-asyncio",
