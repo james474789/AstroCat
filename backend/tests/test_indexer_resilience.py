@@ -80,6 +80,24 @@ class TestProcessImageImplTransient:
             mock_record.assert_called_once()
 
 
+class TestUnreadableImageReported:
+    def test_no_thumbnail_is_recorded_as_failure(self, tmp_path):
+        """QA-49: a corrupt JPG/CR2 whose thumbnail can't be generated shows up in failed_files."""
+        target = tmp_path / "corrupt.jpg"
+        target.write_bytes(b"corrupt" * 250)
+        extractor = MagicMock()
+        extractor.extract.return_value = {}
+        extractor.get_file_stats.return_value = {
+            "file_size_bytes": 2000, "created_at": 0, "modified_at": 0}
+
+        with patch("app.tasks.indexer.get_extractor", return_value=extractor),              patch("app.services.thumbnail_stats.generate_tracked", return_value=None),              patch("app.tasks.indexer._record_process_failure") as mock_record,              patch("app.tasks.indexer.SessionLocal") as mock_sl,              patch("app.tasks.indexer.SyncCatalogMatcher"):
+            mock_sl.return_value.__enter__.return_value = MagicMock()
+            _process_image_impl(str(target))
+
+        mock_record.assert_called_once()
+        assert "Unreadable image" in mock_record.call_args.args[1]
+
+
 class _FakeRedis:
     """Minimal redis client stub for the watchdog tests."""
 

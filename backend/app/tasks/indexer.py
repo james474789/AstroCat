@@ -432,6 +432,10 @@ def _process_image_impl(file_path: str, generate_thumbnail: bool = True):
         except Exception as e:
             logger.error(f"Failed to generate thumbnail for {file_path}: {e}")
             thumbnail_path = None
+        if not thumbnail_path and not extraction_error:
+            # The generator logs and returns None for files it cannot decode (corrupt JPG/RAW),
+            # which used to leave a broken record with no failure shown (QA-49).
+            _record_process_failure(file_path, "Unreadable image: no thumbnail could be generated")
     
     # 2. Save to Database
     with SessionLocal() as session:
