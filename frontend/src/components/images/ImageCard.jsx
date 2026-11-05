@@ -5,6 +5,7 @@ import { MoreHorizontal, Orbit } from 'lucide-react';
 import RatingStars from './RatingStars';
 import './ImageCard.css';
 import QualityValue from '../quality/QualityValue';
+import { normalizeFilterName } from '../../utils/filterNames';
 
 // Subtype pill labels
 const subtypeBadges = {
@@ -33,7 +34,7 @@ export default function ImageCard({ image, onContextMenu, showQuality = false })
     // One subhead line: exposure · filter · camera model · FWHM (parts skipped when missing).
     const subhead = [];
     if (image.exposure_time_seconds != null) subhead.push(formatExposure(image.exposure_time_seconds));
-    if (image.filter_name) subhead.push(image.filter_name);
+    if (image.filter_name) subhead.push(normalizeFilterName(image.filter_name));
     if (image.camera_name) subhead.push(image.camera_name);
     if (showQuality && image.star_metrics_status === 'OK' && image.fwhm_px != null) {
         subhead.push(
